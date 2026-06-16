@@ -27,6 +27,9 @@ const overlayTitle = document.getElementById("overlay-title");
 const overlayText = document.getElementById("overlay-text");
 const overlayBtn = document.getElementById("overlay-btn");
 const soundEl = document.getElementById("sound");
+const hintEl = document.getElementById("overlay-hint");
+const overlayRestart = document.getElementById("overlay-restart");
+const overlayMenu = document.getElementById("overlay-menu");
 
 /* ---------------------------------------------------------------- */
 /* Ljud (Web Audio – syntade effekter, inga ljudfiler)              */
@@ -221,11 +224,13 @@ function resetPlayer() {
 /* Spelstatus                                                        */
 /* ---------------------------------------------------------------- */
 
-let state = "start";  // 'start' | 'playing' | 'dead' | 'levelcomplete' | 'won'
+let state = "start";  // 'start' | 'playing' | 'paused' | 'dead' | 'levelcomplete' | 'won'
 let lives = START_LIVES;
 let score = 0;
 let currentLevel = 0;
 let scoreAtLevelStart = 0;
+let paused = false;
+let pauseAt = 0;
 
 function newGame() {
   score = 0;
@@ -235,7 +240,8 @@ function newGame() {
 function updateHud() {
   livesEl.textContent = "♥ ".repeat(lives).trim() || "—";
   scoreEl.textContent = String(score);
-  if (levelEl) levelEl.textContent = LEVELS[currentLevel] ? LEVELS[currentLevel].name : "";
+  // kort bannamn i HUD:en (t.ex. "Bana 2") så liv/poäng alltid får plats
+  if (levelEl) levelEl.textContent = LEVELS[currentLevel] ? LEVELS[currentLevel].name.split(":")[0] : "";
   if (soundEl) soundEl.textContent = muted ? "🔇" : "🔊";
 }
 
@@ -281,6 +287,9 @@ window.addEventListener("keydown", (e) => {
   } else if (e.key === "m" || e.key === "M") {
     muted = !muted;
     updateHud();
+  } else if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+    if (state === "playing") pause();
+    else if (state === "paused") resume();
   }
 });
 
@@ -326,12 +335,23 @@ if (jumpBtn) {
   });
 }
 
+/* ---- Spelknappar i HUD:en + overlay: paus, börja om, meny ---- */
+const pauseBtn = document.getElementById("pause-btn");
+const restartBtn = document.getElementById("restart-btn");
+const menuBtn = document.getElementById("menu-btn");
+if (pauseBtn) pauseBtn.addEventListener("click", () => { resumeAudio(); state === "paused" ? resume() : pause(); });
+if (restartBtn) restartBtn.addEventListener("click", restartLevel);
+if (menuBtn) menuBtn.addEventListener("click", goToMenu);
+if (overlayRestart) overlayRestart.addEventListener("click", restartLevel);
+if (overlayMenu) overlayMenu.addEventListener("click", goToMenu);
+
 // hindra sid-scroll och pinch-zoom på pekskärm
 document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturestart", (e) => e.preventDefault());
 
 // Knappen gör olika saker beroende på läge
 function startBtnAction() {
+  if (state === "paused") { resume(); return; }
   if (state === "levelcomplete") {
     loadLevel(currentLevel + 1);
   } else if (state === "dead") {
@@ -340,6 +360,37 @@ function startBtnAction() {
   } else {
     newGame();                      // 'start' eller 'won'
   }
+}
+
+/* ---- Paus / meny / börja om ---- */
+function pause() {
+  if (state !== "playing") return;
+  paused = true;
+  pauseAt = performance.now();
+  state = "paused";
+  showOverlay("⏸ Pausat", "", "Fortsätt", { restart: true, menu: true });
+}
+
+function resume() {
+  if (state !== "paused") return;
+  const delta = performance.now() - pauseAt;     // skjut fram animationer så de inte hoppar
+  for (const o of [player, ...stones, ...snakes]) {
+    if (o && o.moving) o.moveStart += delta;
+  }
+  if (player && player.invuln) player.invuln += delta;
+  paused = false;
+  state = "playing";
+  hideOverlay();
+}
+
+function restartLevel() {
+  score = scoreAtLevelStart;
+  paused = false;
+  loadLevel(currentLevel);
+}
+
+function goToMenu() {
+  window.location.href = "../";   // tillbaka till arkad-menyn
 }
 
 /* ---------------------------------------------------------------- */
@@ -368,7 +419,8 @@ function tryStep(d, now) {
   if (stone) {
     const sc = nc + d.dc;
     const sr = nr + d.dr;
-    if (isSolid(sc, sr) || stoneAt(sc, sr)) return false;
+    // får ej knuffas in i vägg, annan sten – eller över stjärnan (skulle låsa banan)
+    if (isSolid(sc, sr) || stoneAt(sc, sr) || tileAt(sc, sr) === "goal") return false;
     if (tileAt(sc, sr) === "hole") {
       grid[sr][sc] = "floor";
       stones.splice(stones.indexOf(stone), 1);
@@ -448,7 +500,7 @@ function hit() {
 function gameOver() {
   state = "dead";
   sfxGameOver();
-  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen");
+  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen", { menu: true });
 }
 
 function win() {
@@ -459,12 +511,12 @@ function win() {
     sfxLevel();
     const next = LEVELS[currentLevel + 1].name;
     showOverlay(`⭐ ${LEVELS[currentLevel].name} klar! ⭐`,
-      `Poäng: ${score}. Härnäst: ${next}`, "Nästa bana");
+      `Poäng: ${score}. Härnäst: ${next}`, "Nästa bana", { menu: true });
   } else {
     state = "won";
     sfxWin();
     showOverlay("🏆 Du klarade alla banor! 🏆",
-      `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen");
+      `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen", { menu: true });
   }
 }
 
@@ -472,10 +524,13 @@ function win() {
 /* Overlay                                                           */
 /* ---------------------------------------------------------------- */
 
-function showOverlay(title, text, btn) {
+function showOverlay(title, text, btn, opts = {}) {
   overlayTitle.textContent = title;
   overlayText.textContent = text;
   overlayBtn.textContent = btn;
+  if (hintEl) hintEl.style.display = opts.hint ? "" : "none";
+  if (overlayRestart) overlayRestart.style.display = opts.restart ? "" : "none";
+  if (overlayMenu) overlayMenu.style.display = (opts.menu === false) ? "none" : "";
   overlay.classList.remove("hidden");
 }
 function hideOverlay() {
@@ -580,7 +635,7 @@ function draw(now) {
   }
   for (const sn of snakes) drawSnake(sn, now);
 
-  if (state === "playing" || state === "won" || state === "levelcomplete") drawPlayer(now);
+  if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
 }
 
 function drawTile(c, r) {
@@ -836,8 +891,8 @@ function drawStar(cx, cy, radius, color) {
 /* ---------------------------------------------------------------- */
 
 function loop(now) {
-  update(now);
-  draw(now);
+  if (!paused) update(now);
+  draw(paused ? pauseAt : now);   // frys bilden medan pausad
   requestAnimationFrame(loop);
 }
 
@@ -845,4 +900,5 @@ function loop(now) {
 buildLevel1();
 resetPlayer();
 updateHud();
+showOverlay("Pixelgubben", "", "Starta", { hint: true, menu: true });
 requestAnimationFrame(loop);

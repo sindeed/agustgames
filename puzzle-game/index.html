@@ -15,10 +15,15 @@
 <body>
   <div id="game-wrap">
     <div id="hud">
-      <div id="lives">Liv: <span id="lives-val"></span></div>
+      <div id="lives"><span id="lives-val"></span></div>
       <div id="level"></div>
-      <div id="sound" title="Tryck M för att stänga av/på ljud">🔊</div>
-      <div id="score">Poäng: <span id="score-val">0</span></div>
+      <div id="score">★ <span id="score-val">0</span></div>
+      <div id="hud-buttons">
+        <button class="iconbtn" id="pause-btn" title="Paus" aria-label="Paus">⏸</button>
+        <button class="iconbtn" id="restart-btn" title="Börja om banan" aria-label="Börja om">↻</button>
+        <button class="iconbtn" id="menu-btn" title="Till menyn" aria-label="Meny">🏠</button>
+        <button class="iconbtn" id="sound" title="Ljud av/på" aria-label="Ljud">🔊</button>
+      </div>
     </div>
 
     <canvas id="game" width="800" height="600"></canvas>
@@ -27,12 +32,16 @@
       <div class="overlay-box">
         <h1 id="overlay-title">Pixelgubben</h1>
         <p id="overlay-text"></p>
-        <p class="hint">
+        <p class="hint" id="overlay-hint">
           Piltangenter / knapparna = gå &nbsp;•&nbsp; Mellanslag / HOPP = hoppa (över hål)<br>
           Knuffa stenar genom att gå in i dem. Akta dig för ormar och hål!<br>
           Nå <strong>stjärnan</strong> för att vinna.
         </p>
         <button id="overlay-btn">Starta</button>
+        <div id="overlay-actions">
+          <button id="overlay-restart">↻ Börja om banan</button>
+          <button id="overlay-menu">🏠 Till menyn</button>
+        </div>
       </div>
     </div>
 

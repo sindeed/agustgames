@@ -36,26 +36,57 @@ body.touch #game-wrap {
 
 #hud {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 4px;
-  font-size: 20px;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.5px;
 }
 
-#lives-val {
-  color: #ff5a5a;
-}
+#lives { flex: 0 0 auto; white-space: nowrap; }
+#lives-val { color: #ff5a5a; }
 
+/* Bannamn i mitten – krymper och får ... om det inte får plats */
 #level {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
   color: #cdd3df;
-  font-size: 17px;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#score-val {
-  color: #ffd34d;
+#score { flex: 0 0 auto; white-space: nowrap; color: #ffd34d; }
+#score-val { color: #ffd34d; }
+
+#hud-buttons {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+
+.iconbtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  color: #e8e8e8;
+  background: #3c4250;
+  border: 1px solid #565d6e;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.iconbtn:active { background: #565d6e; }
 
 canvas {
   display: block;
@@ -123,6 +154,26 @@ canvas {
   background: #ffdf73;
   transform: translateY(-1px);
 }
+
+#overlay-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+#overlay-actions button {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border: 1px solid #565d6e;
+  border-radius: 6px;
+  background: #3c4250;
+  color: #e8e8e8;
+  cursor: pointer;
+}
+#overlay-actions button:active { background: #565d6e; }
 
 /* ---- Touch-kontroller (visas bara på pekskärm) ---- */
 #touch-controls {

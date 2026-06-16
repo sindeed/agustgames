@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Pixelgubben">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="512x512" href="../apple-touch-icon.png">
   <title>Pixelgubben – ovanifrån-spel</title>
   <style>
 * {
@@ -45,26 +49,57 @@ body.touch #game-wrap {
 
 #hud {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 4px;
-  font-size: 20px;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.5px;
 }
 
-#lives-val {
-  color: #ff5a5a;
-}
+#lives { flex: 0 0 auto; white-space: nowrap; }
+#lives-val { color: #ff5a5a; }
 
+/* Bannamn i mitten – krymper och får ... om det inte får plats */
 #level {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
   color: #cdd3df;
-  font-size: 17px;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#score-val {
-  color: #ffd34d;
+#score { flex: 0 0 auto; white-space: nowrap; color: #ffd34d; }
+#score-val { color: #ffd34d; }
+
+#hud-buttons {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+
+.iconbtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  color: #e8e8e8;
+  background: #3c4250;
+  border: 1px solid #565d6e;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.iconbtn:active { background: #565d6e; }
 
 canvas {
   display: block;
@@ -133,6 +168,26 @@ canvas {
   transform: translateY(-1px);
 }
 
+#overlay-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+#overlay-actions button {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border: 1px solid #565d6e;
+  border-radius: 6px;
+  background: #3c4250;
+  color: #e8e8e8;
+  cursor: pointer;
+}
+#overlay-actions button:active { background: #565d6e; }
+
 /* ---- Touch-kontroller (visas bara på pekskärm) ---- */
 #touch-controls {
   display: none;
@@ -192,15 +247,21 @@ body.touch #touch-controls {
   background: #ffdf73;
   transform: scale(0.96);
 }
+
   </style>
 </head>
 <body>
   <div id="game-wrap">
     <div id="hud">
-      <div id="lives">Liv: <span id="lives-val"></span></div>
+      <div id="lives"><span id="lives-val"></span></div>
       <div id="level"></div>
-      <div id="sound" title="Tryck M för att stänga av/på ljud">🔊</div>
-      <div id="score">Poäng: <span id="score-val">0</span></div>
+      <div id="score">★ <span id="score-val">0</span></div>
+      <div id="hud-buttons">
+        <button class="iconbtn" id="pause-btn" title="Paus" aria-label="Paus">⏸</button>
+        <button class="iconbtn" id="restart-btn" title="Börja om banan" aria-label="Börja om">↻</button>
+        <button class="iconbtn" id="menu-btn" title="Till menyn" aria-label="Meny">🏠</button>
+        <button class="iconbtn" id="sound" title="Ljud av/på" aria-label="Ljud">🔊</button>
+      </div>
     </div>
 
     <canvas id="game" width="800" height="600"></canvas>
@@ -209,12 +270,16 @@ body.touch #touch-controls {
       <div class="overlay-box">
         <h1 id="overlay-title">Pixelgubben</h1>
         <p id="overlay-text"></p>
-        <p class="hint">
+        <p class="hint" id="overlay-hint">
           Piltangenter / knapparna = gå &nbsp;•&nbsp; Mellanslag / HOPP = hoppa (över hål)<br>
           Knuffa stenar genom att gå in i dem. Akta dig för ormar och hål!<br>
           Nå <strong>stjärnan</strong> för att vinna.
         </p>
         <button id="overlay-btn">Starta</button>
+        <div id="overlay-actions">
+          <button id="overlay-restart">↻ Börja om banan</button>
+          <button id="overlay-menu">🏠 Till menyn</button>
+        </div>
       </div>
     </div>
 
@@ -259,6 +324,9 @@ const overlayTitle = document.getElementById("overlay-title");
 const overlayText = document.getElementById("overlay-text");
 const overlayBtn = document.getElementById("overlay-btn");
 const soundEl = document.getElementById("sound");
+const hintEl = document.getElementById("overlay-hint");
+const overlayRestart = document.getElementById("overlay-restart");
+const overlayMenu = document.getElementById("overlay-menu");
 
 /* ---------------------------------------------------------------- */
 /* Ljud (Web Audio – syntade effekter, inga ljudfiler)              */
@@ -453,11 +521,13 @@ function resetPlayer() {
 /* Spelstatus                                                        */
 /* ---------------------------------------------------------------- */
 
-let state = "start";  // 'start' | 'playing' | 'dead' | 'levelcomplete' | 'won'
+let state = "start";  // 'start' | 'playing' | 'paused' | 'dead' | 'levelcomplete' | 'won'
 let lives = START_LIVES;
 let score = 0;
 let currentLevel = 0;
 let scoreAtLevelStart = 0;
+let paused = false;
+let pauseAt = 0;
 
 function newGame() {
   score = 0;
@@ -467,7 +537,8 @@ function newGame() {
 function updateHud() {
   livesEl.textContent = "♥ ".repeat(lives).trim() || "—";
   scoreEl.textContent = String(score);
-  if (levelEl) levelEl.textContent = LEVELS[currentLevel] ? LEVELS[currentLevel].name : "";
+  // kort bannamn i HUD:en (t.ex. "Bana 2") så liv/poäng alltid får plats
+  if (levelEl) levelEl.textContent = LEVELS[currentLevel] ? LEVELS[currentLevel].name.split(":")[0] : "";
   if (soundEl) soundEl.textContent = muted ? "🔇" : "🔊";
 }
 
@@ -513,6 +584,9 @@ window.addEventListener("keydown", (e) => {
   } else if (e.key === "m" || e.key === "M") {
     muted = !muted;
     updateHud();
+  } else if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+    if (state === "playing") pause();
+    else if (state === "paused") resume();
   }
 });
 
@@ -558,12 +632,23 @@ if (jumpBtn) {
   });
 }
 
+/* ---- Spelknappar i HUD:en + overlay: paus, börja om, meny ---- */
+const pauseBtn = document.getElementById("pause-btn");
+const restartBtn = document.getElementById("restart-btn");
+const menuBtn = document.getElementById("menu-btn");
+if (pauseBtn) pauseBtn.addEventListener("click", () => { resumeAudio(); state === "paused" ? resume() : pause(); });
+if (restartBtn) restartBtn.addEventListener("click", restartLevel);
+if (menuBtn) menuBtn.addEventListener("click", goToMenu);
+if (overlayRestart) overlayRestart.addEventListener("click", restartLevel);
+if (overlayMenu) overlayMenu.addEventListener("click", goToMenu);
+
 // hindra sid-scroll och pinch-zoom på pekskärm
 document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturestart", (e) => e.preventDefault());
 
 // Knappen gör olika saker beroende på läge
 function startBtnAction() {
+  if (state === "paused") { resume(); return; }
   if (state === "levelcomplete") {
     loadLevel(currentLevel + 1);
   } else if (state === "dead") {
@@ -572,6 +657,37 @@ function startBtnAction() {
   } else {
     newGame();                      // 'start' eller 'won'
   }
+}
+
+/* ---- Paus / meny / börja om ---- */
+function pause() {
+  if (state !== "playing") return;
+  paused = true;
+  pauseAt = performance.now();
+  state = "paused";
+  showOverlay("⏸ Pausat", "", "Fortsätt", { restart: true, menu: true });
+}
+
+function resume() {
+  if (state !== "paused") return;
+  const delta = performance.now() - pauseAt;     // skjut fram animationer så de inte hoppar
+  for (const o of [player, ...stones, ...snakes]) {
+    if (o && o.moving) o.moveStart += delta;
+  }
+  if (player && player.invuln) player.invuln += delta;
+  paused = false;
+  state = "playing";
+  hideOverlay();
+}
+
+function restartLevel() {
+  score = scoreAtLevelStart;
+  paused = false;
+  loadLevel(currentLevel);
+}
+
+function goToMenu() {
+  window.location.href = "../";   // tillbaka till arkad-menyn
 }
 
 /* ---------------------------------------------------------------- */
@@ -600,7 +716,8 @@ function tryStep(d, now) {
   if (stone) {
     const sc = nc + d.dc;
     const sr = nr + d.dr;
-    if (isSolid(sc, sr) || stoneAt(sc, sr)) return false;
+    // får ej knuffas in i vägg, annan sten – eller över stjärnan (skulle låsa banan)
+    if (isSolid(sc, sr) || stoneAt(sc, sr) || tileAt(sc, sr) === "goal") return false;
     if (tileAt(sc, sr) === "hole") {
       grid[sr][sc] = "floor";
       stones.splice(stones.indexOf(stone), 1);
@@ -680,7 +797,7 @@ function hit() {
 function gameOver() {
   state = "dead";
   sfxGameOver();
-  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen");
+  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen", { menu: true });
 }
 
 function win() {
@@ -691,12 +808,12 @@ function win() {
     sfxLevel();
     const next = LEVELS[currentLevel + 1].name;
     showOverlay(`⭐ ${LEVELS[currentLevel].name} klar! ⭐`,
-      `Poäng: ${score}. Härnäst: ${next}`, "Nästa bana");
+      `Poäng: ${score}. Härnäst: ${next}`, "Nästa bana", { menu: true });
   } else {
     state = "won";
     sfxWin();
     showOverlay("🏆 Du klarade alla banor! 🏆",
-      `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen");
+      `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen", { menu: true });
   }
 }
 
@@ -704,10 +821,13 @@ function win() {
 /* Overlay                                                           */
 /* ---------------------------------------------------------------- */
 
-function showOverlay(title, text, btn) {
+function showOverlay(title, text, btn, opts = {}) {
   overlayTitle.textContent = title;
   overlayText.textContent = text;
   overlayBtn.textContent = btn;
+  if (hintEl) hintEl.style.display = opts.hint ? "" : "none";
+  if (overlayRestart) overlayRestart.style.display = opts.restart ? "" : "none";
+  if (overlayMenu) overlayMenu.style.display = (opts.menu === false) ? "none" : "";
   overlay.classList.remove("hidden");
 }
 function hideOverlay() {
@@ -812,7 +932,7 @@ function draw(now) {
   }
   for (const sn of snakes) drawSnake(sn, now);
 
-  if (state === "playing" || state === "won" || state === "levelcomplete") drawPlayer(now);
+  if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
 }
 
 function drawTile(c, r) {
@@ -1068,8 +1188,8 @@ function drawStar(cx, cy, radius, color) {
 /* ---------------------------------------------------------------- */
 
 function loop(now) {
-  update(now);
-  draw(now);
+  if (!paused) update(now);
+  draw(paused ? pauseAt : now);   // frys bilden medan pausad
   requestAnimationFrame(loop);
 }
 
@@ -1077,7 +1197,9 @@ function loop(now) {
 buildLevel1();
 resetPlayer();
 updateHud();
+showOverlay("Pixelgubben", "", "Starta", { hint: true, menu: true });
 requestAnimationFrame(loop);
+
   </script>
 </body>
 </html>
