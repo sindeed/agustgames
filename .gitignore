@@ -1,0 +1,7 @@
+.DS_Store
+**/.DS_Store
+.claude/
+**/.claude/
+
+# Lokal utvecklingsmapp (dubblett av puzzle-game/) – inte med i repot
+Puzzle Game/

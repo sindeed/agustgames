@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Pixelgubben – ovanifrån-spel</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-wrap">
+    <div id="hud">
+      <div id="lives">Liv: <span id="lives-val"></span></div>
+      <div id="level"></div>
+      <div id="sound" title="Tryck M för att stänga av/på ljud">🔊</div>
+      <div id="score">Poäng: <span id="score-val">0</span></div>
+    </div>
+
+    <canvas id="game" width="800" height="600"></canvas>
+
+    <div id="overlay" class="overlay">
+      <div class="overlay-box">
+        <h1 id="overlay-title">Pixelgubben</h1>
+        <p id="overlay-text"></p>
+        <p class="hint">
+          Piltangenter / knapparna = gå &nbsp;•&nbsp; Mellanslag / HOPP = hoppa (över hål)<br>
+          Knuffa stenar genom att gå in i dem. Akta dig för ormar och hål!<br>
+          Nå <strong>stjärnan</strong> för att vinna.
+        </p>
+        <button id="overlay-btn">Starta</button>
+      </div>
+    </div>
+
+    <div id="touch-controls">
+      <div id="dpad">
+        <button class="dbtn d-up" data-dir="ArrowUp" aria-label="Upp">▲</button>
+        <button class="dbtn d-left" data-dir="ArrowLeft" aria-label="Vänster">◀</button>
+        <button class="dbtn d-right" data-dir="ArrowRight" aria-label="Höger">▶</button>
+        <button class="dbtn d-down" data-dir="ArrowDown" aria-label="Ner">▼</button>
+      </div>
+      <button id="jump-btn" aria-label="Hoppa">HOPP</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

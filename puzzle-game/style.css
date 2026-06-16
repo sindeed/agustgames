@@ -1,0 +1,185 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: #1a1d24;
+  color: #e8e8e8;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#game-wrap {
+  position: relative;
+  /* fyll skärmen men behåll 4:3 (canvas 800x600); lämna plats för HUD */
+  width: min(1000px, 100vw, calc((100vh - 70px) * 1.3333));
+  max-width: 100vw;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* På pekskärm: lämna plats för kontrollerna under spelplanen */
+body.touch #game-wrap {
+  width: min(1000px, 100vw, calc((100vh - 220px) * 1.3333));
+}
+
+#hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+#lives-val {
+  color: #ff5a5a;
+}
+
+#level {
+  color: #cdd3df;
+  font-size: 17px;
+}
+
+#score-val {
+  color: #ffd34d;
+}
+
+canvas {
+  display: block;
+  background: #2a2f3a;
+  border: 4px solid #3c4250;
+  border-radius: 6px;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 17, 22, 0.82);
+  border-radius: 6px;
+  text-align: center;
+  z-index: 10;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay-box {
+  padding: 32px 40px;
+  max-width: 560px;
+}
+
+.overlay-box h1 {
+  font-size: 42px;
+  margin-bottom: 12px;
+  color: #ffd34d;
+}
+
+#overlay-text {
+  font-size: 22px;
+  margin-bottom: 18px;
+  min-height: 1px;
+}
+
+.hint {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #aab2c0;
+  margin-bottom: 24px;
+}
+
+#overlay-btn {
+  font-size: 20px;
+  font-weight: 600;
+  padding: 12px 32px;
+  border: none;
+  border-radius: 6px;
+  background: #ffd34d;
+  color: #1a1d24;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+
+#overlay-btn:hover {
+  background: #ffdf73;
+  transform: translateY(-1px);
+}
+
+/* ---- Touch-kontroller (visas bara på pekskärm) ---- */
+#touch-controls {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 8px 8px;
+  touch-action: none;
+}
+
+body.touch #touch-controls {
+  display: flex;
+}
+
+#dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  grid-template-rows: repeat(3, 64px);
+  gap: 6px;
+}
+
+.dbtn {
+  font-size: 26px;
+  color: #e8e8e8;
+  background: #3c4250;
+  border: 2px solid #565d6e;
+  border-radius: 12px;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dbtn:active {
+  background: #565d6e;
+}
+
+.d-up { grid-column: 2; grid-row: 1; }
+.d-left { grid-column: 1; grid-row: 2; }
+.d-right { grid-column: 3; grid-row: 2; }
+.d-down { grid-column: 2; grid-row: 3; }
+
+#jump-btn {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #1a1d24;
+  background: #ffd34d;
+  border: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#jump-btn:active {
+  background: #ffdf73;
+  transform: scale(0.96);
+}

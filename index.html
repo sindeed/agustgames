@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Agust Games 🎮</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100%;
+      background: radial-gradient(circle at 50% 0%, #242a36 0%, #1a1d24 60%);
+      color: #e8e8e8;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      text-align: center;
+      padding: 48px 20px 60px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    h1 {
+      font-size: clamp(38px, 9vw, 68px);
+      color: #ffd34d;
+      letter-spacing: 1px;
+      text-shadow: 0 3px 0 #7a6320;
+    }
+    .tagline { color: #aab2c0; font-size: 18px; margin: 10px 0 40px; }
+    .games {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #2a2f3a;
+      border: 2px solid #3c4250;
+      border-radius: 16px;
+      padding: 26px 22px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.12s ease, border-color 0.15s ease;
+    }
+    .card:hover { transform: translateY(-4px); border-color: #ffd34d; }
+    .card .icon { font-size: 56px; line-height: 1; margin-bottom: 14px; }
+    .card h2 { font-size: 24px; margin-bottom: 8px; }
+    .card p { color: #aab2c0; font-size: 15px; line-height: 1.5; margin-bottom: 18px; }
+    .play {
+      margin-top: auto;
+      background: #ffd34d;
+      color: #1a1d24;
+      font-weight: 700;
+      font-size: 17px;
+      padding: 10px 28px;
+      border-radius: 8px;
+    }
+    .card.soon { opacity: 0.55; border-style: dashed; }
+    .card.soon .play { background: #3c4250; color: #aab2c0; }
+    footer { margin-top: 44px; color: #6b7384; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Agust Games</h1>
+  <p class="tagline">Spel gjorda av Agust 🎮</p>
+
+  <div class="games">
+    <a class="card" href="puzzle-game/">
+      <div class="icon">🛡️</div>
+      <h2>Pixelgubben</h2>
+      <p>Ta dig genom grottan och riddarborgen. Knuffa stenar, hoppa över hål och akta ormarna!</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
+    <div class="card soon">
+      <div class="icon">✨</div>
+      <h2>Nästa spel</h2>
+      <p>Här dyker Agusts nästa spel upp.</p>
+      <span class="play">Snart …</span>
+    </div>
+  </div>
+
+  <footer>Agust Games</footer>
+</body>
+</html>
