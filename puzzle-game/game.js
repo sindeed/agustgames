@@ -16,6 +16,8 @@ const STEP_MS = 150;    // tid för ett vanligt steg
 const JUMP_MS = 280;    // tid för ett hopp (2 rutor)
 const SNAKE_MS = 340;   // ormens steg-tid
 const INVULN_MS = 1300; // osårbarhet efter träff
+const DRAGON_FIRE_MS = 2000; // tid mellan drakens eldsputtar
+const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -68,6 +70,7 @@ const sfxHurt = () => tone(330, 0.30, "sawtooth", 0.20, 70);
 const sfxWin = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, "square", 0.16, null, i * 0.12));
 const sfxLevel = () => [523, 587, 659, 698, 784].forEach((f, i) => tone(f, 0.14, "triangle", 0.15, null, i * 0.10));
 const sfxGameOver = () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.28, "triangle", 0.18, null, i * 0.16));
+const sfxFire = () => tone(150, 0.26, "sawtooth", 0.16, 40);
 
 /* ---------------------------------------------------------------- */
 /* Banor                                                             */
@@ -98,9 +101,35 @@ const LEVEL2_MAP = [
   "####################",
 ];
 
+// Bana 3 – Drakhålan. Ritad av Agust (sedd i liggande format).
+// Tre lodräta sektioner: höger rum (start nere till höger + orm i övre delen),
+// en trång mörk mittenkorridor som man klättrar igenom, och vänster rum med
+// boss-DRAKEN (X) i mitten och stjärnan (M -> *) uppe till vänster. Draken
+// sitter still men vänder sig upp/ned och sprutar eld – man måste pricka in
+// timingen mellan eldsputtarna (eller hoppa) för att korsa dess kolumn.
+// # vägg  . golv  O start  * mål(stjärna)  ~ orm  X drake  H hål  L stock  S sten
+const LEVEL3_MAP = [
+  "####################",
+  "#*......####.......#",
+  "#.......####...~...#",
+  "#..........#.......#",
+  "#..........#.......#",
+  "#.......#..#.......#",
+  "#.......#..#.......#",
+  "#...X...#..#.......#",
+  "#.......#..#.......#",
+  "#.......#..#.......#",
+  "#.......#..........#",
+  "#.......#..........#",
+  "#.......####.......#",
+  "#.......####......O#",
+  "####################",
+];
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
+  { name: "Bana 3: Drakhålan", theme: "underground", map: LEVEL3_MAP },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -109,9 +138,13 @@ let stones;      // [{col,row, ...anim}]
 let snakes;      // [{...}]
 let startCell;   // {col,row}
 let theme = "dungeon";
+let dragon = null;   // boss-draken (Bana 3) eller null
+let fireballs = [];  // drakens eldklot
 
 // Bana 1 byggs programmatiskt (samma som tidigare, väl testad)
 function buildLevel1() {
+  dragon = null;
+  fireballs = [];
   grid = [];
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -162,11 +195,24 @@ function makeSnake(c, r, dir) {
   };
 }
 
+// Boss-draken: sitter still i mitten, vänder blicken upp/ned och sprutar eld
+// med jämna mellanrum. dir växlar mellan upp och ned så att hela dess kolumn
+// täcks turvis – spelaren måste pricka in luckan mellan eldsputtarna.
+function makeDragon(c, r) {
+  return {
+    col: c, row: r,
+    dir: { dc: 0, dr: -1 },                 // börjar blicka uppåt
+    fireAt: performance.now() + 1200,       // första eldsputten dröjer lite
+  };
+}
+
 // Tolkar en ASCII-bana till grid/stones/snakes/startCell
 function parseMap(map) {
   grid = [];
   stones = [];
   snakes = [];
+  dragon = null;
+  fireballs = [];
   startCell = { col: 1, row: 1 };
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -182,6 +228,7 @@ function parseMap(map) {
         case "O": row.push("start"); startCell = { col: c, row: r }; break;
         case "S": row.push("floor"); stones.push(stoneObj(c, r)); break;
         case "~": row.push("floor"); snakes.push(makeSnake(c, r, 1)); break;
+        case "X": row.push("floor"); dragon = makeDragon(c, r); break;
         default: row.push("floor");
       }
     }
@@ -259,7 +306,9 @@ function tileAt(c, r) {
 
 function isSolid(c, r) {
   const t = tileAt(c, r);
-  return t === "wall" || t === "log";
+  if (t === "wall" || t === "log") return true;
+  if (dragon && dragon.col === c && dragon.row === r) return true;  // draken blockerar
+  return false;
 }
 
 function stoneAt(c, r) {
@@ -381,6 +430,8 @@ function resume() {
     if (o && o.moving) o.moveStart += delta;
   }
   if (player && player.invuln) player.invuln += delta;
+  for (const fb of fireballs) fb.born += delta;
+  if (dragon) dragon.fireAt += delta;
   paused = false;
   state = "playing";
   hideOverlay();
@@ -491,6 +542,8 @@ function die() {
     player.jumping = false;
     player.dir = { dc: 0, dr: 1 };
     player.invuln = performance.now() + INVULN_MS;
+    fireballs.length = 0;                          // rensa eld så respawn blir rättvis
+    if (dragon) dragon.fireAt = performance.now() + 1200;
     sfxHurt();
   }
 }
@@ -580,6 +633,8 @@ function update(now) {
   }
 
   for (const sn of snakes) updateSnake(sn, now);
+  if (dragon) updateDragon(dragon, now);
+  updateFireballs(now);
 
   const pc = playerCenter(now);
   const airborne = player.jumping && player.moving;
@@ -589,6 +644,39 @@ function update(now) {
       const sx = sc.x + TS / 2, sy = sc.y + TS / 2;
       const dist = Math.hypot(pc.x - sx, pc.y - sy);
       if (dist < TS * 0.55) { hit(); break; }
+    }
+    for (const fb of fireballs) {
+      if (Math.hypot(pc.x - fb.x, pc.y - fb.y) < TS * 0.5) { hit(); break; }
+    }
+  }
+}
+
+function updateDragon(dr, now) {
+  if (now >= dr.fireAt) {
+    spawnFire(dr, now);
+    dr.dir = { dc: 0, dr: -dr.dir.dr };   // vänd blicken (upp <-> ned) inför nästa
+    dr.fireAt = now + DRAGON_FIRE_MS;
+  }
+}
+
+function spawnFire(dr, now) {
+  const d = dr.dir;
+  const x0 = (dr.col + d.dc) * TS + TS / 2;   // starta en ruta framför munnen
+  const y0 = (dr.row + d.dr) * TS + TS / 2;
+  fireballs.push({ x0, y0, x: x0, y: y0, dc: d.dc, dr: d.dr, born: now });
+  sfxFire();
+}
+
+function updateFireballs(now) {
+  for (let i = fireballs.length - 1; i >= 0; i--) {
+    const fb = fireballs[i];
+    const t = (now - fb.born) * FIRE_SPEED;
+    fb.x = fb.x0 + fb.dc * t;
+    fb.y = fb.y0 + fb.dr * t;
+    const c = Math.floor(fb.x / TS), r = Math.floor(fb.y / TS);
+    const tile = tileAt(c, r);
+    if (c < 0 || r < 0 || c >= COLS || r >= ROWS || tile === "wall" || tile === "log") {
+      fireballs.splice(i, 1);            // slocknar mot vägg/stock eller utanför
     }
   }
 }
@@ -632,12 +720,16 @@ function draw(now) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) drawTile(c, r);
   }
+  if (theme === "underground") drawSkeletons();
   for (const s of stones) {
     const p = animPos(s, now);
     drawStone(p.x, p.y);
   }
+  if (dragon) drawDragon(now);
+  for (const fb of fireballs) drawFireball(fb, now);
   for (const sn of snakes) drawSnake(sn, now);
 
+  if (theme === "underground") drawVignette();
   if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
 }
 
@@ -645,8 +737,22 @@ function drawTile(c, r) {
   const x = c * TS, y = r * TS;
   const t = grid[r][c];
   const castle = theme === "castle";
+  const underground = theme === "underground";
 
   if (t === "wall") {
+    if (underground) {
+      ctx.fillStyle = "#241c15";
+      ctx.fillRect(x, y, TS, TS);
+      ctx.fillStyle = ((c + r) % 2 === 0) ? "#33271c" : "#2e2319";
+      ctx.fillRect(x + 2, y + 2, TS - 4, TS - 4);
+      // grus-/jordkorn
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fillRect(x + 6 + ((c * 7) % 10), y + 8 + ((r * 5) % 9), 3, 3);
+      ctx.fillRect(x + 22 + ((r * 3) % 8), y + 24 + ((c * 3) % 7), 3, 3);
+      // kedjor hänger vid vissa väggar (dekorativt)
+      if ((c * 5 + r * 3) % 9 === 0) drawChain(x + TS / 2, y);
+      return;
+    }
     if (castle) {
       ctx.fillStyle = "#6f6357";
       ctx.fillRect(x, y, TS, TS);
@@ -672,7 +778,9 @@ function drawTile(c, r) {
   }
 
   // Golv
-  if (castle) {
+  if (underground) {
+    ctx.fillStyle = ((c + r) % 2 === 0) ? "#211e19" : "#1b1916";
+  } else if (castle) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#46413a" : "#403b34";
   } else {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#333a47" : "#2f3540";
@@ -724,6 +832,127 @@ function drawTorch(cx, cy) {
   ctx.beginPath();
   ctx.ellipse(cx, cy - 5, 2.5, 5 * f, 0, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/* ---- Undertema (Bana 3): kedjor, skelett, drake, eld, mörker ---- */
+
+// Kedja som hänger ner från toppen av en väggruta (dekorativt)
+function drawChain(cx, topY) {
+  ctx.strokeStyle = "#605c54";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.ellipse(cx, topY + 5 + i * 8, 2.6, 4, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// Skelett/skallar i hörnen (dekorativt, ingen kollision)
+const SKELETON_CELLS = [[1, 12], [18, 2], [13, 13]];
+function drawSkeletons() {
+  for (const [c, r] of SKELETON_CELLS) drawSkull(c * TS + TS / 2, r * TS + TS / 2);
+}
+function drawSkull(cx, cy) {
+  ctx.strokeStyle = "#8f8a7e"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(cx - 8, cy + 6); ctx.lineTo(cx + 8, cy + 12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 8, cy + 6); ctx.lineTo(cx - 8, cy + 12); ctx.stroke();
+  ctx.fillStyle = "#cbc6ba";
+  ctx.beginPath(); ctx.arc(cx, cy - 2, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(cx - 4, cy + 3, 8, 4);
+  ctx.fillStyle = "#15110d";
+  ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 3, cy - 2, 1.8, 0, Math.PI * 2); ctx.fill();
+}
+
+// Boss-draken, sedd ovanifrån. Vänd mot dragon.dir, flaxar med vingarna och
+// får en glödande mun strax innan den sprutar eld.
+function drawDragon(now) {
+  const cx = dragon.col * TS + TS / 2, cy = dragon.row * TS + TS / 2;
+  const d = dragon.dir;
+  let ang = 0;
+  if (d.dr === 1) ang = Math.PI;
+  else if (d.dc === 1) ang = Math.PI / 2;
+  else if (d.dc === -1) ang = -Math.PI / 2;   // dr === -1 (upp) => 0
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.beginPath(); ctx.ellipse(0, 14, 16, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.rotate(ang);
+
+  const flap = 0.5 + 0.5 * Math.sin(now / 110);
+
+  // vingar (flaxar)
+  ctx.fillStyle = "#3a1414"; ctx.strokeStyle = "#251010"; ctx.lineWidth = 1.5;
+  for (const sgn of [-1, 1]) {
+    const spread = 12 + flap * 9;
+    ctx.beginPath();
+    ctx.moveTo(sgn * 4, -2);
+    ctx.lineTo(sgn * spread, -8 - flap * 4);
+    ctx.lineTo(sgn * (spread + 3), 6);
+    ctx.lineTo(sgn * 5, 8);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+
+  // svans
+  ctx.strokeStyle = "#5a2020"; ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(0, 20); ctx.stroke();
+  ctx.fillStyle = "#7a2b2b";
+  ctx.beginPath(); ctx.moveTo(0, 24); ctx.lineTo(-4, 18); ctx.lineTo(4, 18); ctx.closePath(); ctx.fill();
+
+  // kropp + ryggtaggar
+  ctx.fillStyle = "#7a2b2b"; roundRect(-9, -8, 18, 20, 7); ctx.fill();
+  ctx.fillStyle = "#933636"; roundRect(-5, -6, 10, 14, 5); ctx.fill();
+  ctx.fillStyle = "#c9a23a";
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-3, -4 + i * 6); ctx.lineTo(0, -8 + i * 6); ctx.lineTo(3, -4 + i * 6);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // huvud, horn, lysande ögon
+  ctx.fillStyle = "#8a3333";
+  ctx.beginPath(); ctx.arc(0, -12, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#e7dcc0";
+  ctx.beginPath(); ctx.moveTo(-6, -16); ctx.lineTo(-9, -22); ctx.lineTo(-3, -17); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(6, -16); ctx.lineTo(9, -22); ctx.lineTo(3, -17); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#ffd23a";
+  ctx.beginPath(); ctx.arc(-3, -13, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3, -13, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a0a0a";
+  ctx.beginPath(); ctx.arc(-3, -13, 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3, -13, 0.9, 0, Math.PI * 2); ctx.fill();
+
+  // glödande mun strax innan eldsput
+  const soon = Math.min(1, Math.max(0, 1 - (dragon.fireAt - now) / 500));
+  if (soon > 0) {
+    ctx.fillStyle = `rgba(255,140,30,${0.5 * soon})`;
+    ctx.beginPath(); ctx.arc(0, -20, 3 + 4 * soon, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawFireball(fb, now) {
+  const flick = 0.85 + 0.15 * Math.sin(now / 40 + fb.born);
+  ctx.fillStyle = "rgba(255,90,20,0.45)";
+  ctx.beginPath(); ctx.arc(fb.x, fb.y, 12 * flick, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ff7a1a";
+  ctx.beginPath(); ctx.arc(fb.x, fb.y, 7 * flick, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffe070";
+  ctx.beginPath(); ctx.arc(fb.x, fb.y, 3.4, 0, Math.PI * 2); ctx.fill();
+}
+
+// Mörk vinjett – ger den svaga, instängda belysningen i underjorden
+function drawVignette() {
+  const g = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.28,
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.72
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
 function drawStone(x, y) {
