@@ -74,8 +74,11 @@ const sfxGameOver = () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.28, "
 /* ---------------------------------------------------------------- */
 
 // Bana 2 – Riddarborgen. Ritad av Agust (sedd i liggande format).
-// Start uppe till höger -> vänster över salen -> hoppa ner över den
-// vågräta raden med hål -> förbi ormar och stockar -> stjärnan till höger.
+// Start uppe till höger. Gå ner till stenen (S) som ligger precis ovanför
+// klyftan med TVÅ rader hål. Putta stenen söderut så den fyller det första
+// hålet, kliv ut på den – och HOPPA sedan över det andra hålet. Ett enkelt
+// hopp räcker inte över två rader, så stenen behövs för att ta sig över!
+// Nere väntar ormar och stockar innan stjärnan till höger.
 // # vägg  . golv  O start  * mål(stjärna)  S sten  H hål  L stock  ~ orm
 const LEVEL2_MAP = [
   "####################",
@@ -83,14 +86,14 @@ const LEVEL2_MAP = [
   "###..............###",
   "###..............###",
   "###..............###",
-  "###...S..........###",
   "###..............###",
-  "#####HHHHH##########",
+  "###......S.......###",
+  "###HHHHHHHHHHHHHH###",
+  "###HHHHHHHHHHHHHH###",
   "###..............###",
-  "###.........L....###",
-  "###....~.........###",
-  "###.......~..L...###",
-  "###.....~......*.###",
+  "###....~.....L...###",
+  "###.........~....###",
+  "###.....L.......*###",
   "###..............###",
   "####################",
 ];

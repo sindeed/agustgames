@@ -234,3 +234,26 @@ body.touch #touch-controls {
   background: #ffdf73;
   transform: scale(0.96);
 }
+
+/* ---- Liggande läge (t.ex. iPad i landscape) ---- */
+/* I landscape är skärmen låg och bred. Utan detta växer spelplanen så mycket
+   att hela #game-wrap blir högre än skärmen – och eftersom body centrerar och
+   döljer överflöd klipps BÅDE HUD:en upptill (paus/börja-om/meny) OCH
+   styrkorset nedtill bort. Vi reserverar mer höjd och krymper kontrollerna
+   en aning så att allt får plats och går att använda. */
+@media (orientation: landscape) {
+  body.touch #game-wrap {
+    width: min(1000px, 100vw, calc((100vh - 280px) * 1.3333));
+  }
+  body.touch #touch-controls {
+    padding: 10px 8px 6px;
+  }
+  body.touch #dpad {
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 56px);
+  }
+  body.touch #jump-btn {
+    width: 90px;
+    height: 90px;
+  }
+}
