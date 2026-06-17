@@ -56,6 +56,13 @@
     </div>
   </div>
 
-  <script src="game.js"></script>
+  <!-- Ladda alltid senaste game.js (cache-busting) så nya banor syns direkt -->
+  <script>
+    (function () {
+      var s = document.createElement("script");
+      s.src = "game.js?v=" + Date.now();
+      document.body.appendChild(s);
+    })();
+  </script>
 </body>
 </html>

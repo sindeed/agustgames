@@ -727,7 +727,7 @@ function gameOver() {
   state = "dead";
   stopMusic();
   sfxGameOver();
-  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen", { menu: true });
+  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen", { menu: true, levelSelect: true });
 }
 
 function win() {
@@ -745,7 +745,7 @@ function win() {
     stopMusic();
     sfxWin();
     showOverlay("🏆 Du klarade alla banor! 🏆",
-      `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen", { menu: true });
+      `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen", { menu: true, levelSelect: true });
   }
 }
 
@@ -760,10 +760,41 @@ function showOverlay(title, text, btn, opts = {}) {
   if (hintEl) hintEl.style.display = opts.hint ? "" : "none";
   if (overlayRestart) overlayRestart.style.display = opts.restart ? "" : "none";
   if (overlayMenu) overlayMenu.style.display = (opts.menu === false) ? "none" : "";
+  if (levelSelectEl) levelSelectEl.style.display = opts.levelSelect ? "" : "none";
   overlay.classList.remove("hidden");
 }
 function hideOverlay() {
   overlay.classList.add("hidden");
+}
+
+// Bana-väljare i start-menyn: hoppa direkt till valfri bana (snabb provspelning)
+let levelSelectEl = null;
+function buildLevelSelect() {
+  const box = document.querySelector(".overlay-box");
+  if (!box) return;
+  levelSelectEl = document.createElement("div");
+  levelSelectEl.id = "level-select";
+  levelSelectEl.style.cssText = "display:none;margin-top:14px;";
+
+  const label = document.createElement("div");
+  label.textContent = "Eller hoppa direkt till en bana:";
+  label.style.cssText = "margin-bottom:8px;opacity:0.85;font-size:15px;";
+  levelSelectEl.appendChild(label);
+
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;justify-content:center;";
+  LEVELS.forEach((lv, i) => {
+    const b = document.createElement("button");
+    b.textContent = String(i + 1);
+    b.title = lv.name;
+    b.style.cssText =
+      "min-width:44px;padding:10px 14px;font-size:18px;font-weight:bold;cursor:pointer;" +
+      "border-radius:10px;border:2px solid #5fd6ff;background:#1d2330;color:#e8f4ff;";
+    b.addEventListener("click", () => { resumeAudio(); score = 0; loadLevel(i); });
+    row.appendChild(b);
+  });
+  levelSelectEl.appendChild(row);
+  box.appendChild(levelSelectEl);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1422,5 +1453,14 @@ function loop(now) {
 buildLevel1();
 resetPlayer();
 updateHud();
-showOverlay("Pixelgubben", "", "Starta", { hint: true, menu: true });
+buildLevelSelect();
+
+// Direktlänk: ?bana=4 hoppar rakt in i bana 4 (bra för snabb provspelning)
+const banaParam = parseInt(new URLSearchParams(location.search).get("bana"), 10);
+if (banaParam >= 1 && banaParam <= LEVELS.length) {
+  score = 0;
+  loadLevel(banaParam - 1);
+} else {
+  showOverlay("Pixelgubben", "", "Starta", { hint: true, menu: true, levelSelect: true });
+}
 requestAnimationFrame(loop);
