@@ -16,7 +16,7 @@ const STEP_MS = 150;    // tid för ett vanligt steg
 const JUMP_MS = 280;    // tid för ett hopp (2 rutor)
 const SNAKE_MS = 340;   // ormens steg-tid
 const INVULN_MS = 1300; // osårbarhet efter träff
-const DRAGON_FIRE_MS = 2000; // tid mellan drakens eldsputtar
+const DRAGON_FIRE_MS = 1200; // tid mellan drakens eldsputtar (snabbare eld)
 const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
 
 const canvas = document.getElementById("game");
@@ -112,11 +112,11 @@ const LEVEL3_MAP = [
   "####################",
   "#*......####.......#",
   "#.......####...~...#",
-  "#..........#.......#",
+  "#..X.......#.......#",
   "#..........#.......#",
   "#.......#..#.......#",
   "#.......#..#.......#",
-  "#...X...#..#.......#",
+  "#.......#..#.......#",
   "#.......#..#.......#",
   "#.......#..#.......#",
   "#.......#..........#",
@@ -651,19 +651,29 @@ function update(now) {
   }
 }
 
+// Draken sprutar eld åt alla fyra håll samtidigt (upp, ner, höger, vänster)
+// så den skyddar sig på alla sidor.
+const FIRE_DIRS = [
+  { dc: 0, dr: -1 },  // upp
+  { dc: 1, dr: 0 },   // höger
+  { dc: 0, dr: 1 },   // ner
+  { dc: -1, dr: 0 },  // vänster
+];
+
 function updateDragon(dr, now) {
   if (now >= dr.fireAt) {
     spawnFire(dr, now);
-    dr.dir = { dc: 0, dr: -dr.dir.dr };   // vänd blicken (upp <-> ned) inför nästa
+    dr.dir = { dc: -dr.dir.dr, dr: dr.dir.dc };  // vrid blicken ett kvarts varv
     dr.fireAt = now + DRAGON_FIRE_MS;
   }
 }
 
 function spawnFire(dr, now) {
-  const d = dr.dir;
-  const x0 = (dr.col + d.dc) * TS + TS / 2;   // starta en ruta framför munnen
-  const y0 = (dr.row + d.dr) * TS + TS / 2;
-  fireballs.push({ x0, y0, x: x0, y: y0, dc: d.dc, dr: d.dr, born: now });
+  for (const d of FIRE_DIRS) {
+    const x0 = (dr.col + d.dc) * TS + TS / 2;   // starta en ruta framför munnen
+    const y0 = (dr.row + d.dr) * TS + TS / 2;
+    fireballs.push({ x0, y0, x: x0, y: y0, dc: d.dc, dr: d.dr, born: now });
+  }
   sfxFire();
 }
 
