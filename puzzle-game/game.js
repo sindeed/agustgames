@@ -18,6 +18,9 @@ const SNAKE_MS = 340;   // ormens steg-tid
 const INVULN_MS = 1300; // osårbarhet efter träff
 const DRAGON_FIRE_MS = 1200; // tid mellan drakens eldsputtar (snabbare eld)
 const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
+const ROLLER_STEP_MS = 500;  // rullande stenen: 2 rutor per sekund
+const ROLLER_HEADSTART = 1000; // försprång innan stenen börjar rulla / efter ny start
+const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -71,6 +74,61 @@ const sfxWin = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, "squa
 const sfxLevel = () => [523, 587, 659, 698, 784].forEach((f, i) => tone(f, 0.14, "triangle", 0.15, null, i * 0.10));
 const sfxGameOver = () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.28, "triangle", 0.18, null, i * 0.16));
 const sfxFire = () => tone(150, 0.26, "sawtooth", 0.16, 40);
+const sfxRoll = () => tone(70, 0.16, "sawtooth", 0.05, 50);   // lågt muller från stenen
+const sfxCrumble = () => tone(120, 0.2, "sawtooth", 0.12, 40); // golvet rasar
+
+/* ---------------------------------------------------------------- */
+/* Bakgrundsmusik – mystisk, syntad slinga (ingen ljudfil)          */
+/* ---------------------------------------------------------------- */
+let musicTimer = null;
+let musicStep = 0;
+let musicGain = null;
+
+// Toner i a-moll = lite mörk, mystisk stämning (frekvenser i Hz)
+const MUSIC_NOTES = [220.00, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00, 415.30];
+// Lugn, lite olycksbådande slinga (index i MUSIC_NOTES)
+const MUSIC_SEQ = [0, 2, 4, 3, 5, 4, 2, 1, 0, 3, 5, 6, 4, 3, 1, 0];
+
+function musicNote(freq, dur, vol, type = "sine") {
+  if (!audioCtx || muted || !musicGain) return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + dur * 0.35);  // mjuk insvävning
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);      // lång utklang
+  osc.connect(g).connect(musicGain);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.05);
+}
+
+function musicTick() {
+  if (!audioCtx || muted) return;
+  const n = MUSIC_SEQ[musicStep % MUSIC_SEQ.length];
+  musicNote(MUSIC_NOTES[n], 1.8, 0.05, "triangle");           // svävande melodi
+  if (musicStep % 4 === 0) musicNote(110, 3.4, 0.045, "sine"); // dov bas-drone
+  if (musicStep % 8 === 5) musicNote(MUSIC_NOTES[6] * 2, 2.6, 0.018, "sine"); // hög, mystisk klang
+  musicStep++;
+}
+
+function startMusic() {
+  if (musicTimer) return;
+  resumeAudio();
+  if (!audioCtx) return;
+  if (!musicGain || musicGain.context !== audioCtx) {
+    musicGain = audioCtx.createGain();
+    musicGain.gain.value = 1;
+    musicGain.connect(audioCtx.destination);
+  }
+  musicTick();
+  musicTimer = setInterval(musicTick, 850);   // en ny ton ungefär var 0,85 s
+}
+
+function stopMusic() {
+  if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+}
 
 /* ---------------------------------------------------------------- */
 /* Banor                                                             */
@@ -126,10 +184,36 @@ const LEVEL3_MAP = [
   "####################",
 ];
 
+// Bana 4 – Rullande stenen. Ritad av Agust (9 år).
+// En lång, smal (1 ruta bred) korridor som ringlar fram och tillbaka. Du startar
+// vid O med den rullande stenen (R) precis bakom dig och måste springa hela vägen
+// till målet (*) innan stenen kommer ikapp. Stenen rullar 2 rutor/sekund och
+// följer korridoren. På vägen finns hål (H) att hoppa över, ormar (~) och
+// kluriga K-block som rasar om man stannar för länge på dem.
+// # vägg  . golv  O start  * mål  R rullande sten  ~ orm  H hål  K klurigt (rasar)
+const LEVEL4_MAP = [
+  "####################",
+  "#RO.......H........#",
+  "##################.#",
+  "#........~.........#",
+  "#.##################",
+  "#........KKK.......#",
+  "##################.#",
+  "#........H.........#",
+  "#.##################",
+  "#.........~........#",
+  "##################.#",
+  "#.......KK.........#",
+  "#.##################",
+  "#...........H.....*#",
+  "####################",
+];
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
   { name: "Bana 3: Drakhålan", theme: "underground", map: LEVEL3_MAP },
+  { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: 300, snakeRange: 1 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -140,11 +224,18 @@ let startCell;   // {col,row}
 let theme = "dungeon";
 let dragon = null;   // boss-draken (Bana 3) eller null
 let fireballs = [];  // drakens eldklot
+let roller = null;       // rullande stenen (Bana 4) eller null
+let crumbleCells = [];   // alla K-block (för att kunna återställa vid omstart)
+let activeCrumbles = []; // K-block som börjat rasa: {c, r, dieAt}
+let playerStepMs = STEP_MS; // tid för ett spelar-steg (kan sättas per bana)
 
 // Bana 1 byggs programmatiskt (samma som tidigare, väl testad)
 function buildLevel1() {
   dragon = null;
   fireballs = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
   grid = [];
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -189,6 +280,7 @@ function stoneObj(c, r) {
 function makeSnake(c, r, dir) {
   return {
     col: c, row: r, dc: dir, dr: 0,
+    homeCol: c, homeRow: r, range: Infinity,   // range = hur långt den vandrar från start
     fromX: c * TS, fromY: r * TS, toX: c * TS, toY: r * TS,
     moveStart: 0, moveDur: 0, moving: false,
     trail: [{ x: c * TS + TS / 2, y: r * TS + TS / 2 }],
@@ -206,6 +298,47 @@ function makeDragon(c, r) {
   };
 }
 
+// Rullande stenen (Bana 4): rullar längs korridoren, en ruta i taget. Den har
+// "fart" i en riktning och fortsätter rakt fram så länge det går – krockar den
+// med en vägg svänger den ditåt korridoren öppnar sig. Den jagar därför aldrig
+// "smart", den följer bara samma väg som spelaren måste ta.
+function makeRoller(c, r) {
+  return {
+    col: c, row: r,
+    startCol: c, startRow: r,
+    dir: { dc: 1, dr: 0 },                  // börjar rulla åt höger
+    fromX: c * TS, fromY: r * TS, toX: c * TS, toY: r * TS,
+    moveStart: 0, moveDur: 0, moving: false,
+    spin: 0,                                // hur långt den rullat (för snurr-effekt)
+    nextAt: performance.now() + ROLLER_HEADSTART,
+  };
+}
+
+function resetRoller(now) {
+  roller.col = roller.startCol;
+  roller.row = roller.startRow;
+  roller.fromX = roller.toX = roller.startCol * TS;
+  roller.fromY = roller.toY = roller.startRow * TS;
+  roller.moving = false;
+  roller.dir = { dc: 1, dr: 0 };
+  roller.nextAt = now + ROLLER_HEADSTART;
+}
+
+// Linjär position (jämn rullning, inte easeInOut som hoppar mellan rutorna)
+function rollerCenter(now) {
+  if (!roller.moving) return { x: roller.col * TS + TS / 2, y: roller.row * TS + TS / 2 };
+  let p = (now - roller.moveStart) / roller.moveDur;
+  if (p > 1) p = 1;
+  return {
+    x: roller.fromX + (roller.toX - roller.fromX) * p + TS / 2,
+    y: roller.fromY + (roller.toY - roller.fromY) * p + TS / 2,
+  };
+}
+
+function rollerCanGo(c, r) {
+  return tileAt(c, r) !== "wall";   // stenen rullar över allt utom väggar
+}
+
 // Tolkar en ASCII-bana till grid/stones/snakes/startCell
 function parseMap(map) {
   grid = [];
@@ -213,6 +346,9 @@ function parseMap(map) {
   snakes = [];
   dragon = null;
   fireballs = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
   startCell = { col: 1, row: 1 };
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -229,6 +365,8 @@ function parseMap(map) {
         case "S": row.push("floor"); stones.push(stoneObj(c, r)); break;
         case "~": row.push("floor"); snakes.push(makeSnake(c, r, 1)); break;
         case "X": row.push("floor"); dragon = makeDragon(c, r); break;
+        case "R": row.push("floor"); roller = makeRoller(c, r); break;
+        case "K": row.push("crumble"); crumbleCells.push({ c, r }); break;
         default: row.push("floor");
       }
     }
@@ -241,8 +379,10 @@ function loadLevel(index) {
   currentLevel = index;
   const def = LEVELS[index];
   theme = def.theme;
+  playerStepMs = def.stepMs || STEP_MS;
   if (def.build) def.build();
   else parseMap(def.map);
+  if (def.snakeRange != null) for (const sn of snakes) sn.range = def.snakeRange;
   resetPlayer();
   heldDirs.length = 0;          // rensa ev. kvarhängande tangenter/knappar
   lives = START_LIVES;
@@ -250,6 +390,7 @@ function loadLevel(index) {
   state = "playing";
   hideOverlay();
   updateHud();
+  startMusic();
 }
 
 /* ---------------------------------------------------------------- */
@@ -420,6 +561,7 @@ function pause() {
   paused = true;
   pauseAt = performance.now();
   state = "paused";
+  stopMusic();
   showOverlay("⏸ Pausat", "", "Fortsätt", { restart: true, menu: true });
 }
 
@@ -432,9 +574,12 @@ function resume() {
   if (player && player.invuln) player.invuln += delta;
   for (const fb of fireballs) fb.born += delta;
   if (dragon) dragon.fireAt += delta;
+  if (roller) { if (roller.moving) roller.moveStart += delta; roller.nextAt += delta; }
+  for (const cb of activeCrumbles) cb.dieAt += delta;
   paused = false;
   state = "playing";
   hideOverlay();
+  startMusic();
 }
 
 function restartLevel() {
@@ -490,7 +635,7 @@ function tryStep(d, now) {
   }
 
   player.jumping = false;
-  beginMove(player, nc, nr, STEP_MS, now);
+  beginMove(player, nc, nr, playerStepMs, now);
   return true;
 }
 
@@ -521,6 +666,11 @@ function onPlayerArrived() {
   const t = tileAt(player.col, player.row);
   if (t === "goal") { win(); return; }
   if (t === "hole" && !player.jumping) { die(); return; }
+  if (t === "crumble") {
+    // golvet börjar rasa – kom igång igen innan det blir ett hål!
+    grid[player.row][player.col] = "crumbling";
+    activeCrumbles.push({ c: player.col, r: player.row, dieAt: performance.now() + CRUMBLE_MS });
+  }
   player.jumping = false;
 }
 
@@ -544,8 +694,28 @@ function die() {
     player.invuln = performance.now() + INVULN_MS;
     fireballs.length = 0;                          // rensa eld så respawn blir rättvis
     if (dragon) dragon.fireAt = performance.now() + 1200;
+    if (roller) resetRoller(performance.now());    // stenen tillbaka till start
+    restoreCrumbles();                             // laga rasade K-block inför nytt försök
     sfxHurt();
   }
+}
+
+// Lägg tillbaka alla K-block som rasat, så ett nytt försök börjar likadant
+function restoreCrumbles() {
+  for (const { c, r } of crumbleCells) grid[r][c] = "crumble";
+  activeCrumbles = [];
+}
+
+// Mjuk träff: kostar ett liv men flyttar dig INTE tillbaka till start. Används i
+// jakt-banor (rullande stenen) så att en orm inte slänger dig hela vägen tillbaka –
+// där är det stenen, hålen och de rasande golven som är de riktiga farorna.
+function softHit() {
+  if (performance.now() < player.invuln) return;
+  lives -= 1;
+  updateHud();
+  if (lives <= 0) { gameOver(); return; }
+  player.invuln = performance.now() + INVULN_MS;
+  sfxHurt();
 }
 
 function hit() {
@@ -555,6 +725,7 @@ function hit() {
 
 function gameOver() {
   state = "dead";
+  stopMusic();
   sfxGameOver();
   showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen", { menu: true });
 }
@@ -564,12 +735,14 @@ function win() {
   updateHud();
   if (currentLevel < LEVELS.length - 1) {
     state = "levelcomplete";
+    stopMusic();
     sfxLevel();
     const next = LEVELS[currentLevel + 1].name;
     showOverlay(`⭐ ${LEVELS[currentLevel].name} klar! ⭐`,
       `Poäng: ${score}. Härnäst: ${next}`, "Nästa bana", { menu: true });
   } else {
     state = "won";
+    stopMusic();
     sfxWin();
     showOverlay("🏆 Du klarade alla banor! 🏆",
       `Slutpoäng: ${score}. Bra kämpat, riddare!`, "Spela igen", { menu: true });
@@ -634,20 +807,72 @@ function update(now) {
 
   for (const sn of snakes) updateSnake(sn, now);
   if (dragon) updateDragon(dragon, now);
+  if (roller) updateRoller(now);
+  updateCrumbles(now);
   updateFireballs(now);
+  if (state !== "playing") return;        // kan ha dött av ett rasande golv
 
   const pc = playerCenter(now);
   const airborne = player.jumping && player.moving;
   if (!airborne) {
+    const onHit = roller ? softHit : hit;   // i jakt-banan kastas man inte tillbaka till start
     for (const sn of snakes) {
       const sc = animPos(sn, now);
       const sx = sc.x + TS / 2, sy = sc.y + TS / 2;
       const dist = Math.hypot(pc.x - sx, pc.y - sy);
-      if (dist < TS * 0.55) { hit(); break; }
+      if (dist < TS * 0.55) { onHit(); break; }
     }
     for (const fb of fireballs) {
-      if (Math.hypot(pc.x - fb.x, pc.y - fb.y) < TS * 0.5) { hit(); break; }
+      if (Math.hypot(pc.x - fb.x, pc.y - fb.y) < TS * 0.5) { onHit(); break; }
     }
+  }
+  // Rullande stenen krossar dig oavsett osårbarhet eller hopp
+  if (roller) {
+    const rcenter = rollerCenter(now);
+    if (Math.hypot(pc.x - rcenter.x, pc.y - rcenter.y) < TS * 0.7) die();
+  }
+}
+
+// Stenen rullar en ruta var ROLLER_STEP_MS. Den fortsätter rakt fram om den kan,
+// annars svänger den åt det håll korridoren öppnar sig (aldrig bakåt).
+function updateRoller(now) {
+  if (roller.moving) {
+    if ((now - roller.moveStart) / roller.moveDur >= 1) roller.moving = false;
+    else return;
+  }
+  if (now < roller.nextAt) return;
+
+  const fwd = roller.dir;
+  let nd = null;
+  if (rollerCanGo(roller.col + fwd.dc, roller.row + fwd.dr)) {
+    nd = fwd;
+  } else {
+    const perps = fwd.dc !== 0
+      ? [{ dc: 0, dr: -1 }, { dc: 0, dr: 1 }]
+      : [{ dc: -1, dr: 0 }, { dc: 1, dr: 0 }];
+    for (const p of perps) {
+      if (rollerCanGo(roller.col + p.dc, roller.row + p.dr)) { nd = p; break; }
+    }
+  }
+  if (!nd) return;   // återvändsgränd – stenen stannar
+
+  roller.dir = nd;
+  roller.spin += 1;
+  beginMove(roller, roller.col + nd.dc, roller.row + nd.dr, ROLLER_STEP_MS, now);
+  roller.nextAt = now + ROLLER_STEP_MS;
+  sfxRoll();
+}
+
+// Kluriga K-block: när spelaren landat på ett börjar det rasa, och efter
+// CRUMBLE_MS blir det ett hål. Står du kvar när det rasar ramlar du ner.
+function updateCrumbles(now) {
+  for (let i = activeCrumbles.length - 1; i >= 0; i--) {
+    const cb = activeCrumbles[i];
+    if (now < cb.dieAt) continue;
+    grid[cb.r][cb.c] = "hole";
+    activeCrumbles.splice(i, 1);
+    sfxCrumble();
+    if (player.col === cb.c && player.row === cb.r && !player.jumping) { die(); return; }
   }
 }
 
@@ -701,12 +926,18 @@ function updateSnake(sn, now) {
     return;
   }
   let nc = sn.col + sn.dc, nr = sn.row + sn.dr;
-  if (blockedForSnake(nc, nr)) {
+  // vänd om den krockar ELLER har vandrat för långt från sin hemruta
+  if (blockedForSnake(nc, nr) || strayedTooFar(sn, nc, nr)) {
     sn.dc = -sn.dc; sn.dr = -sn.dr;
     nc = sn.col + sn.dc; nr = sn.row + sn.dr;
     if (blockedForSnake(nc, nr)) return;
   }
   beginMove(sn, nc, nr, SNAKE_MS, now);
+}
+
+function strayedTooFar(sn, nc, nr) {
+  if (!isFinite(sn.range)) return false;
+  return Math.abs(nc - sn.homeCol) > sn.range || Math.abs(nr - sn.homeRow) > sn.range;
 }
 
 function blockedForSnake(c, r) {
@@ -736,6 +967,7 @@ function draw(now) {
     drawStone(p.x, p.y);
   }
   if (dragon) drawDragon(now);
+  if (roller) drawRoller(now);
   for (const fb of fireballs) drawFireball(fb, now);
   for (const sn of snakes) drawSnake(sn, now);
 
@@ -817,6 +1049,22 @@ function drawTile(c, r) {
       ctx.lineTo(x + TS - 8, y + 14 + i * 6);
       ctx.stroke();
     }
+  } else if (t === "crumble" || t === "crumbling") {
+    // sprucket golvblock som rasar om man dröjer kvar
+    const shake = t === "crumbling" ? Math.sin(frameNow / 30) * 1.5 : 0;
+    ctx.save();
+    ctx.translate(shake, 0);
+    ctx.fillStyle = t === "crumbling" ? "#6b5a3a" : "#5a5550";
+    roundRect(x + 4, y + 4, TS - 8, TS - 8, 5);
+    ctx.fill();
+    ctx.strokeStyle = "#2c2722";
+    ctx.lineWidth = 2;
+    // sprickor
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y + 6); ctx.lineTo(x + 16, y + 18); ctx.lineTo(x + 12, y + TS - 8);
+    ctx.moveTo(x + TS - 8, y + 8); ctx.lineTo(x + 22, y + 20); ctx.lineTo(x + TS - 10, y + TS - 7);
+    ctx.stroke();
+    ctx.restore();
   } else if (t === "start") {
     ctx.strokeStyle = castle ? "#ffd34d" : "#5fd6ff";
     ctx.lineWidth = 3;
@@ -976,6 +1224,38 @@ function drawStone(x, y) {
   ctx.lineWidth = 2;
   roundRect(x + 5, y + 5, TS - 10, TS - 10, 8);
   ctx.stroke();
+}
+
+// Stor rullande sten – fyller nästan hela rutan och snurrar medan den rullar.
+function drawRoller(now) {
+  const c = rollerCenter(now);
+  const rad = TS * 0.46;
+  // dammoln bakom
+  ctx.fillStyle = "rgba(120,110,95,0.25)";
+  ctx.beginPath();
+  ctx.arc(c.x - roller.dir.dc * 10, c.y - roller.dir.dr * 10, rad * 0.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // själva stenen
+  ctx.fillStyle = "#6f6a64";
+  ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#827d75";
+  ctx.beginPath(); ctx.arc(c.x - rad * 0.2, c.y - rad * 0.2, rad * 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#454039"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2); ctx.stroke();
+
+  // snurrande sprickor så man ser att den rullar
+  const spin = roller.spin + (roller.moving ? (now - roller.moveStart) / roller.moveDur : 0);
+  const ang = spin * (roller.dir.dc !== 0 ? roller.dir.dc : roller.dir.dr) * 1.2;
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(ang);
+  ctx.strokeStyle = "#3f3a34"; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(-rad * 0.5, -rad * 0.3); ctx.lineTo(rad * 0.2, rad * 0.1); ctx.lineTo(rad * 0.6, -rad * 0.2);
+  ctx.moveTo(-rad * 0.2, rad * 0.5); ctx.lineTo(rad * 0.1, -rad * 0.1);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawSnake(sn, now) {
