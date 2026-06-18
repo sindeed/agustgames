@@ -18,8 +18,9 @@ const SNAKE_MS = 340;   // ormens steg-tid
 const INVULN_MS = 1300; // osårbarhet efter träff
 const DRAGON_FIRE_MS = 1200; // tid mellan drakens eldsputtar (snabbare eld)
 const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
-const ROLLER_STEP_MS = 500;  // rullande stenen: 2 rutor per sekund
+const ROLLER_STEP_MS = STEP_MS; // samma fart som gubben och de andra banorna
 const ROLLER_HEADSTART = 2000; // två sekunders försprång innan stenen börjar rulla
+const ROLLER_HOLE_PAUSE_MS = 1000; // stenen stannar en sekund på varje hål
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
@@ -406,6 +407,7 @@ function makeRoller(c, r) {
     moveStart: 0, moveDur: 0, moving: false,
     spin: 0,                                // hur långt den rullat (för snurr-effekt)
     nextAt: performance.now() + ROLLER_HEADSTART,
+    lastPausedHole: null,
   };
 }
 
@@ -416,6 +418,7 @@ function resetRoller(now) {
   roller.fromY = roller.toY = roller.startRow * TS;
   roller.moving = false;
   roller.dir = { dc: 1, dr: 0 };
+  roller.lastPausedHole = null;
   roller.nextAt = now + ROLLER_HEADSTART;
 }
 
@@ -1113,8 +1116,18 @@ function updateArrows(now) {
 // annars svänger den åt det håll korridoren öppnar sig (aldrig bakåt).
 function updateRoller(now) {
   if (roller.moving) {
-    if ((now - roller.moveStart) / roller.moveDur >= 1) roller.moving = false;
-    else return;
+    if ((now - roller.moveStart) / roller.moveDur < 1) return;
+    roller.moving = false;
+
+    // När stenen precis har rullat ut på ett hål tar den en sekunds paus.
+    // Rutans nyckel gör att samma hål bara utlöser pausen en gång per besök.
+    const holeKey = `${roller.col},${roller.row}`;
+    if (tileAt(roller.col, roller.row) === "hole" && roller.lastPausedHole !== holeKey) {
+      roller.lastPausedHole = holeKey;
+      roller.nextAt = now + ROLLER_HOLE_PAUSE_MS;
+      return;
+    }
+    if (tileAt(roller.col, roller.row) !== "hole") roller.lastPausedHole = null;
   }
   if (now < roller.nextAt) return;
 
@@ -1796,6 +1809,9 @@ window.render_game_to_text = () => JSON.stringify({
   roller: roller ? { col: roller.col, row: roller.row, moving: roller.moving } : null,
   stepMs: roller ? { player: playerStepMs, roller: ROLLER_STEP_MS } : undefined,
   rollerHeadstartMs: roller ? ROLLER_HEADSTART : undefined,
+  rollerHolePauseMs: roller ? ROLLER_HOLE_PAUSE_MS : undefined,
+  rollerHolePauseRemainingMs: roller && !roller.moving && tileAt(roller.col, roller.row) === "hole"
+    ? Math.max(0, Math.round(roller.nextAt - performance.now())) : undefined,
   goal: (() => {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (grid[r][c] === "goal") return { col: c, row: r };
