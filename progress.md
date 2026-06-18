@@ -44,3 +44,4 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 4: gubben tar 150 ms per ruta och stenen tar 175 ms per ruta, så gubben
   är lite snabbare än stenen.
 - Bana 6: bossen slår nu en gång per sekund.
+- Bana 6: bossen har nu fem liv och måste träffas fem gånger för att besegras.
