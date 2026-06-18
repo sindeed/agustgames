@@ -25,3 +25,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   de andra banorna. När stenen rullar över ett hål stannar den i en sekund.
 - Bana 4: grupperna med tre och två spruckna rutor har ersatts med ett vanligt
   synligt hål i den vänstra rutan i varje grupp. Resten är vanligt golv.
+- Bana 5: K-rutan är nu säker. Alla flygande pilar försvinner och inga nya
+  skjuts medan spelaren läser koden. Fällorna väntar en sekund efter att K lämnats.

@@ -1077,6 +1077,16 @@ function update(now) {
 
 function updateTurrets(now) {
   if (turrets.length === 0) return;
+
+  // K-rutan är en säker plats så spelaren hinner läsa och minnas koden.
+  // Befintliga pilar försvinner och fällorna får en ny sekunds väntan när
+  // spelaren lämnar rutan.
+  if (tileAt(player.col, player.row) === "code-clue") {
+    arrows.length = 0;
+    for (const turret of turrets) turret.nextAt = now + ARROW_FIRE_MS;
+    return;
+  }
+
   const pc = playerCenter(now);
   for (const turret of turrets) {
     if (now < turret.nextAt) continue;
