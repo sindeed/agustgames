@@ -25,6 +25,9 @@ const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hå
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
 const TEMPLE_CODE = "25412541";
+const BOSS_ATTACK_MS = 1000;
+const SWORD_COOLDOWN_MS = 300;
+const BOSS_START_LIVES = 3;
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -39,6 +42,7 @@ const soundEl = document.getElementById("sound");
 const hintEl = document.getElementById("overlay-hint");
 const overlayRestart = document.getElementById("overlay-restart");
 const overlayMenu = document.getElementById("overlay-menu");
+const attackBtn = document.getElementById("attack-btn");
 const keypadEl = document.getElementById("keypad");
 const keypadDisplay = document.getElementById("keypad-display");
 const keypadButtons = document.getElementById("keypad-buttons");
@@ -84,6 +88,9 @@ const sfxGameOver = () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.28, "
 const sfxFire = () => tone(150, 0.26, "sawtooth", 0.16, 40);
 const sfxRoll = () => tone(70, 0.16, "sawtooth", 0.05, 50);   // lågt muller från stenen
 const sfxCrumble = () => tone(120, 0.2, "sawtooth", 0.12, 40); // golvet rasar
+const sfxSword = () => tone(620, 0.11, "triangle", 0.16, 260);
+const sfxBossHit = () => tone(110, 0.2, "square", 0.18, 55);
+const sfxBossAttack = () => tone(85, 0.18, "sawtooth", 0.15, 45);
 
 /* ---------------------------------------------------------------- */
 /* Bakgrundsmusik – mystisk, syntad slinga (ingen ljudfil)          */
@@ -246,6 +253,7 @@ const LEVEL4_MAP = [
 // teleporterar spelaren till M i det högra rummet, där en orm och målet väntar.
 // Fyra pilfällor sitter i ytterväggarna, siktar på spelaren och skjuter varje sekund.
 function buildLevel5() {
+  arenaBoss = null;
   dragon = null;
   fireballs = [];
   roller = null;
@@ -291,12 +299,45 @@ function buildLevel5() {
   turrets.push(makeTurret(13, 7), makeTurret(14, 11));
 }
 
+// Bana 6 – Bossarenan. Agusts karta är vriden 90 grader åt höger: tio
+// rutor bred och två rutor hög. Spelaren startar uppe till vänster och bossen
+// står nere till höger. Båda kan slå en ruta åt alla håll, även diagonalt.
+function buildLevel6() {
+  dragon = null;
+  fireballs = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
+  stones = [];
+  snakes = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = null;
+  codeSolved = false;
+
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill("wall"));
+  for (let r = 6; r <= 7; r++) {
+    for (let c = 5; c <= 14; c++) grid[r][c] = "floor";
+  }
+  startCell = { col: 5, row: 6 };
+  grid[6][5] = "start";
+  arenaBoss = {
+    col: 14,
+    row: 7,
+    lives: BOSS_START_LIVES,
+    nextAttackAt: performance.now() + BOSS_ATTACK_MS,
+    attackUntil: 0,
+    hurtUntil: 0,
+  };
+}
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
   { name: "Bana 3: Drakhålan", theme: "underground", map: LEVEL3_MAP },
   { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: ROLLER_STEP_MS, snakeRange: 1 },
   { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
+  { name: "Bana 6: Bossarenan", theme: "arena", build: buildLevel6 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -316,6 +357,9 @@ let arrows = [];            // flygande pilar
 let templeTeleport = null;  // M-rutan efter godkänd kod
 let codeSolved = false;
 let enteredCode = "";
+let arenaBoss = null;          // den stillastående bossen i Bana 6
+let swordSwingUntil = 0;
+let nextSwordAt = 0;
 
 function makeTurret(c, r) {
   return { col: c, row: r, nextAt: performance.now() + ARROW_FIRE_MS };
@@ -323,6 +367,7 @@ function makeTurret(c, r) {
 
 // Bana 1 byggs programmatiskt (samma som tidigare, väl testad)
 function buildLevel1() {
+  arenaBoss = null;
   dragon = null;
   fireballs = [];
   roller = null;
@@ -451,6 +496,7 @@ function parseMap(map) {
   arrows = [];
   templeTeleport = null;
   codeSolved = false;
+  arenaBoss = null;
   startCell = { col: 1, row: 1 };
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -481,6 +527,7 @@ function loadLevel(index) {
   currentLevel = index;
   const def = LEVELS[index];
   theme = def.theme;
+  document.body.classList.toggle("boss-level", theme === "arena");
   playerStepMs = def.stepMs || STEP_MS;
   if (def.build) def.build();
   else parseMap(def.map);
@@ -490,6 +537,8 @@ function loadLevel(index) {
   lives = START_LIVES;
   scoreAtLevelStart = score;
   state = "playing";
+  swordSwingUntil = 0;
+  nextSwordAt = 0;
   if (keypadEl) keypadEl.classList.add("hidden");
   hideOverlay();
   updateHud();
@@ -535,7 +584,12 @@ function updateHud() {
   livesEl.textContent = "♥ ".repeat(lives).trim() || "—";
   scoreEl.textContent = String(score);
   // kort bannamn i HUD:en (t.ex. "Bana 2") så liv/poäng alltid får plats
-  if (levelEl) levelEl.textContent = LEVELS[currentLevel] ? LEVELS[currentLevel].name.split(":")[0] : "";
+  if (levelEl) {
+    const shortName = LEVELS[currentLevel] ? LEVELS[currentLevel].name.split(":")[0] : "";
+    levelEl.textContent = arenaBoss && arenaBoss.lives > 0
+      ? `${shortName} · Boss ${"♥".repeat(arenaBoss.lives)}`
+      : shortName;
+  }
   if (soundEl) soundEl.textContent = muted ? "🔇" : "🔊";
 }
 
@@ -552,6 +606,7 @@ function isSolid(c, r) {
   const t = tileAt(c, r);
   if (t === "wall" || t === "log") return true;
   if (dragon && dragon.col === c && dragon.row === r) return true;  // draken blockerar
+  if (arenaBoss && arenaBoss.col === c && arenaBoss.row === r) return true;
   return false;
 }
 
@@ -586,6 +641,9 @@ window.addEventListener("keydown", (e) => {
   } else if (e.key === " " || e.code === "Space") {
     e.preventDefault();
     if (state === "playing") tryJump();
+  } else if (e.key === "a" || e.key === "A") {
+    e.preventDefault();
+    if (state === "playing") playerAttack();
   } else if (e.key === "Enter") {
     if (state !== "playing") startBtnAction();
   } else if (e.key === "m" || e.key === "M") {
@@ -636,6 +694,14 @@ if (jumpBtn) {
     e.preventDefault();
     resumeAudio();
     if (state === "playing") tryJump();
+  });
+}
+
+if (attackBtn) {
+  attackBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    resumeAudio();
+    if (state === "playing") playerAttack();
   });
 }
 
@@ -702,6 +768,13 @@ function resume() {
   for (const arrow of arrows) arrow.born += delta;
   for (const turret of turrets) turret.nextAt += delta;
   if (dragon) dragon.fireAt += delta;
+  if (arenaBoss) {
+    arenaBoss.nextAttackAt += delta;
+    arenaBoss.attackUntil += delta;
+    arenaBoss.hurtUntil += delta;
+  }
+  if (swordSwingUntil) swordSwingUntil += delta;
+  if (nextSwordAt) nextSwordAt += delta;
   if (roller) { if (roller.moving) roller.moveStart += delta; roller.nextAt += delta; }
   for (const cb of activeCrumbles) cb.dieAt += delta;
   paused = false;
@@ -790,6 +863,37 @@ function tryJump() {
   }
 }
 
+function isNextToBoss() {
+  if (!arenaBoss) return false;
+  const dc = Math.abs(player.col - arenaBoss.col);
+  const dr = Math.abs(player.row - arenaBoss.row);
+  return Math.max(dc, dr) === 1;
+}
+
+function playerAttack() {
+  if (theme !== "arena" || !arenaBoss || arenaBoss.lives <= 0 || player.moving) return;
+  const now = performance.now();
+  if (now < nextSwordAt) return;
+  nextSwordAt = now + SWORD_COOLDOWN_MS;
+  swordSwingUntil = now + 220;
+  sfxSword();
+
+  if (!isNextToBoss()) return;
+  arenaBoss.lives -= 1;
+  arenaBoss.hurtUntil = now + 220;
+  updateHud();
+  sfxBossHit();
+  if (arenaBoss.lives <= 0) win();
+}
+
+function updateArenaBoss(now) {
+  if (!arenaBoss || arenaBoss.lives <= 0 || now < arenaBoss.nextAttackAt) return;
+  arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
+  arenaBoss.attackUntil = now + 280;
+  sfxBossAttack();
+  if (isNextToBoss()) hit();
+}
+
 function onPlayerArrived() {
   const t = tileAt(player.col, player.row);
   if (t === "goal") { win(); return; }
@@ -827,6 +931,7 @@ function die() {
     fireballs.length = 0;                          // rensa eld så respawn blir rättvis
     resetTempleHazards(performance.now());
     if (dragon) dragon.fireAt = performance.now() + 1200;
+    if (arenaBoss) arenaBoss.nextAttackAt = performance.now() + BOSS_ATTACK_MS;
     if (roller) resetRoller(performance.now());    // stenen tillbaka till start
     restoreCrumbles();                             // laga rasade K-block inför nytt försök
     sfxHurt();
@@ -1045,6 +1150,7 @@ function update(now) {
 
   for (const sn of snakes) updateSnake(sn, now);
   if (dragon) updateDragon(dragon, now);
+  if (arenaBoss) updateArenaBoss(now);
   if (roller) updateRoller(now);
   updateTurrets(now);
   updateCrumbles(now);
@@ -1272,6 +1378,7 @@ function draw(now) {
   for (const turret of turrets) drawTurret(turret, now);
   for (const arrow of arrows) drawArrow(arrow);
   for (const sn of snakes) drawSnake(sn, now);
+  if (arenaBoss) drawArenaBoss(now);
 
   // Koden visas bara när spelaren verkligen har gått fram till K-rutan.
   if (theme === "temple" && state === "playing" &&
@@ -1287,6 +1394,7 @@ function drawTile(c, r) {
   const castle = theme === "castle";
   const underground = theme === "underground";
   const temple = theme === "temple";
+  const arena = theme === "arena";
 
   if (t === "wall") {
     if (underground) {
@@ -1302,7 +1410,15 @@ function drawTile(c, r) {
       if ((c * 5 + r * 3) % 9 === 0) drawChain(x + TS / 2, y);
       return;
     }
-    if (temple) {
+    if (arena) {
+      ctx.fillStyle = "#3d2530";
+      ctx.fillRect(x, y, TS, TS);
+      ctx.fillStyle = ((c + r) % 2 === 0) ? "#563342" : "#4b2c39";
+      ctx.fillRect(x + 2, y + 2, TS - 4, TS - 4);
+      ctx.strokeStyle = "#291820";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 2, y + 2, TS - 4, TS - 4);
+    } else if (temple) {
       ctx.fillStyle = "#6c573b";
       ctx.fillRect(x, y, TS, TS);
       ctx.fillStyle = ((c + r) % 2 === 0) ? "#8a704c" : "#7d6545";
@@ -1337,6 +1453,8 @@ function drawTile(c, r) {
   // Golv
   if (underground) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#211e19" : "#1b1916";
+  } else if (arena) {
+    ctx.fillStyle = ((c + r) % 2 === 0) ? "#9b7958" : "#8d6d50";
   } else if (temple) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#b4925f" : "#a88656";
   } else if (castle) {
@@ -1684,6 +1802,42 @@ function drawSnake(sn, now) {
   ctx.beginPath(); ctx.arc(hx + ex + 3, hy + ey + 3, 1.6, 0, 7); ctx.fill();
 }
 
+function drawArenaBoss(now) {
+  if (!arenaBoss || arenaBoss.lives <= 0) return;
+  const cx = arenaBoss.col * TS + TS / 2;
+  const cy = arenaBoss.row * TS + TS / 2;
+
+  // Den röda attackytan visar alla åtta rutor som bossen kan träffa.
+  if (now < arenaBoss.attackUntil) {
+    const pulse = 0.22 + 0.1 * Math.sin(now / 35);
+    ctx.fillStyle = `rgba(255,55,45,${pulse})`;
+    ctx.fillRect(cx - TS * 1.5, cy - TS * 1.5, TS * 3, TS * 3);
+    ctx.strokeStyle = "rgba(255,120,80,0.9)";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(cx - TS * 1.5, cy - TS * 1.5, TS * 3, TS * 3);
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = now < arenaBoss.hurtUntil ? "#fff" : "#a92727";
+  roundRect(-16, -15, 32, 31, 8); ctx.fill();
+  ctx.fillStyle = "#541212";
+  roundRect(-12, -11, 24, 22, 6); ctx.fill();
+  ctx.fillStyle = "#d9b35e";
+  ctx.beginPath();
+  ctx.moveTo(-13, -12); ctx.lineTo(-9, -24); ctx.lineTo(-3, -13);
+  ctx.moveTo(13, -12); ctx.lineTo(9, -24); ctx.lineTo(3, -13);
+  ctx.fill();
+  ctx.strokeStyle = "#ffdf7a";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-7, -6); ctx.lineTo(7, 7);
+  ctx.moveTo(7, -6); ctx.lineTo(-7, 7);
+  ctx.stroke();
+  ctx.restore();
+
+}
+
 function drawPlayer(now) {
   const p = animPos(player, now);
   const cx = p.x + TS / 2, cy = p.y + TS / 2;
@@ -1712,10 +1866,19 @@ function drawPlayer(now) {
   else if (d.dr === 1) ang = Math.PI;
   ctx.rotate(ang);
 
-  if (theme === "castle") drawKnightBody();
+  if (theme === "castle" || theme === "arena") drawKnightBody();
   else drawGubbeBody();
 
   ctx.restore();
+
+  if (theme === "arena" && now < swordSwingUntil) {
+    ctx.strokeStyle = "#fff0a8";
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(cx, cy - lift, TS * 0.62, -Math.PI * 0.85, Math.PI * 0.55);
+    ctx.stroke();
+  }
 }
 
 // Grå pixelgubbe (Bana 1) sedd ovanifrån, tittar "uppåt"
@@ -1817,6 +1980,13 @@ window.render_game_to_text = () => JSON.stringify({
   snakes: snakes.map(sn => ({ col: sn.col, row: sn.row })),
   turrets: turrets.map(t => ({ col: t.col, row: t.row })),
   arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
+  boss: arenaBoss ? {
+    col: arenaBoss.col,
+    row: arenaBoss.row,
+    lives: arenaBoss.lives,
+    attacksEveryMs: BOSS_ATTACK_MS,
+  } : null,
+  sword: theme === "arena" ? { key: "A", range: "en ruta inklusive diagonalt" } : undefined,
   roller: roller ? { col: roller.col, row: roller.row, moving: roller.moving } : null,
   stepMs: roller ? { player: playerStepMs, roller: ROLLER_STEP_MS } : undefined,
   rollerHeadstartMs: roller ? ROLLER_HEADSTART : undefined,

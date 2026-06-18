@@ -29,3 +29,9 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   skjuts medan spelaren läser koden. Fällorna väntar en sekund efter att K lämnats.
 - Game Over startar nu om hela spelet från Bana 1 med noll poäng. Bana-väljaren
   visas inte på Game Over-rutan, så man kan inte hoppa över tidigare banor.
+- Bana 6 Bossarenan byggs från Agusts karta, vriden 90 grader åt höger och
+  med spelare/boss bytta: spelaren uppe till vänster, bossen nere till höger.
+- Bossen står stilla, har tre liv och slår varje sekund på alla åtta rutor
+  runt sig. Spelaren kan slå lika långt med A eller en rund röd iPad-knapp.
+- Verifierat Bana 6: ett diagonalt slag tar ett bossliv, tre slag vinner, bossens
+  diagonala slag tar ett spelarliv, och iPad-knappen är rund/röd och dold på Bana 5.

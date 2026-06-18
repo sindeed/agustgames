@@ -264,6 +264,12 @@ body.touch #touch-controls {
 .d-right { grid-column: 3; grid-row: 2; }
 .d-down { grid-column: 2; grid-row: 3; }
 
+#action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 #jump-btn {
   width: 104px;
   height: 104px;
@@ -284,6 +290,29 @@ body.touch #touch-controls {
   transform: scale(0.96);
 }
 
+/* Svärdsknappen visas bara på iPad/mobil i Bana 6. */
+#attack-btn {
+  display: none;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 3px solid #ff8a82;
+  background: #d92f2f;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  touch-action: none;
+  box-shadow: 0 4px 0 #7d1717;
+}
+
+#attack-btn span { font-size: 30px; line-height: 1; }
+body.touch.boss-level #attack-btn { display: flex; }
+#attack-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #7d1717; }
+
 /* ---- Liggande läge (t.ex. iPad i landscape) ---- */
 /* I landscape är skärmen låg och bred. Utan detta växer spelplanen så mycket
    att hela #game-wrap blir högre än skärmen – och eftersom body centrerar och
@@ -302,6 +331,10 @@ body.touch #touch-controls {
     grid-template-rows: repeat(3, 56px);
   }
   body.touch #jump-btn {
+    width: 90px;
+    height: 90px;
+  }
+  body.touch #attack-btn {
     width: 90px;
     height: 90px;
   }

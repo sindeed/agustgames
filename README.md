@@ -14,7 +14,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
-| Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Fem banor: grottan, riddarborgen, drakhålan, den rullande stenen och Kodtemplet. Kodtemplet har en egen lugn melodi. |
+| Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sex banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet och Bossarenan. |
 
 ## Struktur
 
