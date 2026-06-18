@@ -13,3 +13,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Kodtemplet har nu en egen långsammare, ljusare och lugnare musik utan den
   mystiska musikens mörka bas-drone. Övriga banors musik är oförändrad.
 - Bana 2 Riddarborgen har fått en egen medeltida riddarmarsch med stadig rytm.
+- Koden på K-rutan göms medan knappsatsen vid L är öppen, så spelaren
+  måste komma ihåg 25412541.

@@ -1249,7 +1249,8 @@ function draw(now) {
   for (const arrow of arrows) drawArrow(arrow);
   for (const sn of snakes) drawSnake(sn, now);
 
-  if (theme === "temple") drawTempleCode();
+  // När knappsatsen är öppen måste spelaren minnas koden från K.
+  if (theme === "temple" && state !== "code" && state !== "code-wrong") drawTempleCode();
 
   if (theme === "underground") drawVignette();
   if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
