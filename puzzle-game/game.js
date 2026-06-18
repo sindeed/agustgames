@@ -28,6 +28,7 @@ const TEMPLE_CODE = "25412541";
 const BOSS_ATTACK_MS = 1000;
 const SWORD_COOLDOWN_MS = 300;
 const BOSS_START_LIVES = 5;
+const DRAGON_START_LIVES = 3;
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -213,13 +214,12 @@ const LEVEL2_MAP = [
 // Bana 3 – Drakhålan. Ritad av Agust (sedd i liggande format).
 // Tre lodräta sektioner: höger rum (start nere till höger + orm i övre delen),
 // en trång mörk mittenkorridor som man klättrar igenom, och vänster rum med
-// boss-DRAKEN (X) i mitten och stjärnan (M -> *) uppe till vänster. Draken
-// sitter still men vänder sig upp/ned och sprutar eld – man måste pricka in
-// timingen mellan eldsputtarna (eller hoppa) för att korsa dess kolumn.
-// # vägg  . golv  O start  * mål(stjärna)  ~ orm  X drake  H hål  L stock  S sten
+// boss-DRAKEN (X) i mitten. Draken sitter still och sprutar eld. Spelaren får
+// ett svärd och måste ta drakens tre liv för att klara banan.
+// # vägg  . golv  O start  ~ orm  X drake  H hål  L stock  S sten
 const LEVEL3_MAP = [
   "####################",
-  "#*......####.......#",
+  "#.......####.......#",
   "#.......####...~...#",
   "#..X.......#.......#",
   "#..........#.......#",
@@ -448,6 +448,8 @@ function makeDragon(c, r) {
     col: c, row: r,
     dir: { dc: 0, dr: -1 },                 // börjar blicka uppåt
     fireAt: performance.now() + 1200,       // första eldsputten dröjer lite
+    lives: DRAGON_START_LIVES,
+    hurtUntil: 0,
   };
 }
 
@@ -539,10 +541,10 @@ function loadLevel(index) {
   currentLevel = index;
   const def = LEVELS[index];
   theme = def.theme;
-  document.body.classList.toggle("boss-level", theme === "arena");
   playerStepMs = def.stepMs || STEP_MS;
   if (def.build) def.build();
   else parseMap(def.map);
+  document.body.classList.toggle("sword-level", !!(dragon || arenaBoss));
   if (def.snakeRange != null) for (const sn of snakes) sn.range = def.snakeRange;
   resetPlayer();
   heldDirs.length = 0;          // rensa ev. kvarhängande tangenter/knappar
@@ -599,8 +601,10 @@ function updateHud() {
   // kort bannamn i HUD:en (t.ex. "Bana 2") så liv/poäng alltid får plats
   if (levelEl) {
     const shortName = LEVELS[currentLevel] ? LEVELS[currentLevel].name.split(":")[0] : "";
-    levelEl.textContent = arenaBoss && arenaBoss.lives > 0
-      ? `${shortName} · Boss ${"♥".repeat(arenaBoss.lives)}`
+    const enemy = arenaBoss || dragon;
+    const enemyName = arenaBoss ? "Boss" : "Drake";
+    levelEl.textContent = enemy && enemy.lives > 0
+      ? `${shortName} · ${enemyName} ${"♥".repeat(enemy.lives)}`
       : shortName;
   }
   if (soundEl) soundEl.textContent = muted ? "🔇" : "🔊";
@@ -618,7 +622,7 @@ function tileAt(c, r) {
 function isSolid(c, r) {
   const t = tileAt(c, r);
   if (t === "wall" || t === "log") return true;
-  if (dragon && dragon.col === c && dragon.row === r) return true;  // draken blockerar
+  if (dragon && dragon.lives > 0 && dragon.col === c && dragon.row === r) return true;
   if (arenaBoss && arenaBoss.col === c && arenaBoss.row === r) return true;
   return false;
 }
@@ -780,7 +784,10 @@ function resume() {
   for (const fb of fireballs) fb.born += delta;
   for (const arrow of arrows) arrow.born += delta;
   for (const turret of turrets) turret.nextAt += delta;
-  if (dragon) dragon.fireAt += delta;
+  if (dragon) {
+    dragon.fireAt += delta;
+    dragon.hurtUntil += delta;
+  }
   if (arenaBoss) {
     arenaBoss.nextAttackAt += delta;
     arenaBoss.attackUntil += delta;
@@ -853,26 +860,40 @@ function tryStep(d, now) {
   return true;
 }
 
-function tryJump() {
-  if (player.moving) {
-    // Bara Bana 4: ett hopp som trycks medan gubben springer köas och
-    // startar direkt när det vanliga steget är klart.
-    if (roller && !player.jumping) player.jumpQueued = true;
-    return;
+function snakeAheadDistance(d) {
+  if (!roller || (d.dc === 0 && d.dr === 0)) return 0;
+  for (let distance = 1; distance <= 3; distance++) {
+    const c = player.col + distance * d.dc;
+    const r = player.row + distance * d.dr;
+    if (snakes.some(sn => sn.col === c && sn.row === r)) return distance;
   }
+  return 0;
+}
+
+function performJump() {
   const now = performance.now();
   const d = player.dir;
-  const mc = player.col + d.dc, mr = player.row + d.dr;
-  const lc = player.col + 2 * d.dc, lr = player.row + 2 * d.dr;
+  const snakeDistance = snakeAheadDistance(d);
+  // På Bana 4 landar det vanliga hoppet precis efter en orm som står högst
+  // tre rutor framför spelaren (alltså högst två tomma rutor emellan).
+  const distance = snakeDistance > 0 ? snakeDistance + 1 : 2;
+  const lc = player.col + distance * d.dc;
+  const lr = player.row + distance * d.dr;
 
+  let pathBlocked = false;
+  for (let step = 1; step < distance; step++) {
+    if (isSolid(player.col + step * d.dc, player.row + step * d.dr)) {
+      pathBlocked = true;
+      break;
+    }
+  }
   const canLand =
     !isSolid(lc, lr) && !stoneAt(lc, lr) &&
     tileAt(lc, lr) !== "hole" &&
     !(d.dc === 0 && d.dr === 0);
-  const midBlocked = isSolid(mc, mr);
 
   sfxJump();
-  if (canLand && !midBlocked) {
+  if (canLand && !pathBlocked) {
     player.jumping = true;
     beginMove(player, lc, lr, JUMP_MS, now);
   } else {
@@ -881,27 +902,53 @@ function tryJump() {
   }
 }
 
-function isNextToBoss() {
-  if (!arenaBoss) return false;
-  const dc = Math.abs(player.col - arenaBoss.col);
-  const dr = Math.abs(player.row - arenaBoss.row);
+function tryJump() {
+  if (player.moving) {
+    // Bara Bana 4: ett hopp som trycks medan gubben springer köas och
+    // startar direkt när det vanliga steget är klart.
+    if (roller && !player.jumping) player.jumpQueued = true;
+    return;
+  }
+
+  // Om pil och HOPP trycks nästan samtidigt på iPad startar först ett steg och
+  // sedan hoppet. Tidigare hann riktningen ibland inte registreras.
+  if (roller && heldDirs.length > 0) {
+    const d = DIR_KEYS[heldDirs[0]];
+    player.dir = d;
+    if (tryStep(d, performance.now())) {
+      player.jumpQueued = true;
+      return;
+    }
+  }
+
+  performJump();
+}
+
+function isNextToEnemy(enemy) {
+  if (!enemy) return false;
+  const dc = Math.abs(player.col - enemy.col);
+  const dr = Math.abs(player.row - enemy.row);
   return Math.max(dc, dr) === 1;
 }
 
 function playerAttack() {
-  if (theme !== "arena" || !arenaBoss || arenaBoss.lives <= 0 || player.moving) return;
+  const enemy = arenaBoss || dragon;
+  if (!enemy || enemy.lives <= 0 || player.moving) return;
   const now = performance.now();
   if (now < nextSwordAt) return;
   nextSwordAt = now + SWORD_COOLDOWN_MS;
   swordSwingUntil = now + 220;
   sfxSword();
 
-  if (!isNextToBoss()) return;
-  arenaBoss.lives -= 1;
-  arenaBoss.hurtUntil = now + 220;
+  if (!isNextToEnemy(enemy)) return;
+  enemy.lives -= 1;
+  enemy.hurtUntil = now + 220;
   updateHud();
   sfxBossHit();
-  if (arenaBoss.lives <= 0) win();
+  if (enemy.lives <= 0) {
+    if (enemy === dragon) fireballs.length = 0;
+    win();
+  }
 }
 
 function updateArenaBoss(now) {
@@ -909,7 +956,7 @@ function updateArenaBoss(now) {
   arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
   arenaBoss.attackUntil = now + 280;
   sfxBossAttack();
-  if (isNextToBoss()) hit();
+  if (isNextToEnemy(arenaBoss)) hit();
 }
 
 function onPlayerArrived() {
@@ -925,7 +972,7 @@ function onPlayerArrived() {
     activeCrumbles.push({ c: player.col, r: player.row, dieAt: performance.now() + CRUMBLE_MS });
   }
   player.jumping = false;
-  if (queuedJump && roller && state === "playing") tryJump();
+  if (queuedJump && roller && state === "playing") performJump();
 }
 
 /* ---------------------------------------------------------------- */
@@ -1314,6 +1361,7 @@ const FIRE_DIRS = [
 ];
 
 function updateDragon(dr, now) {
+  if (dr.lives <= 0) return;
   if (now >= dr.fireAt) {
     spawnFire(dr, now);
     dr.dir = { dc: -dr.dir.dr, dr: dr.dir.dc };  // vrid blicken ett kvarts varv
@@ -1661,6 +1709,7 @@ function drawSkull(cx, cy) {
 // Boss-draken, sedd ovanifrån. Vänd mot dragon.dir, flaxar med vingarna och
 // får en glödande mun strax innan den sprutar eld.
 function drawDragon(now) {
+  if (dragon.lives <= 0) return;
   const cx = dragon.col * TS + TS / 2, cy = dragon.row * TS + TS / 2;
   const d = dragon.dir;
   let ang = 0;
@@ -1888,12 +1937,12 @@ function drawPlayer(now) {
   else if (d.dr === 1) ang = Math.PI;
   ctx.rotate(ang);
 
-  if (theme === "castle" || theme === "arena") drawKnightBody();
+  if (theme === "castle" || theme === "arena" || theme === "underground") drawKnightBody();
   else drawGubbeBody();
 
   ctx.restore();
 
-  if (theme === "arena" && now < swordSwingUntil) {
+  if ((dragon || arenaBoss) && now < swordSwingUntil) {
     ctx.strokeStyle = "#fff0a8";
     ctx.lineWidth = 5;
     ctx.lineCap = "round";
@@ -2014,7 +2063,17 @@ window.render_game_to_text = () => JSON.stringify({
     lives: arenaBoss.lives,
     attacksEveryMs: BOSS_ATTACK_MS,
   } : null,
-  sword: theme === "arena" ? { key: "A", range: "en ruta inklusive diagonalt" } : undefined,
+  dragon: dragon ? {
+    col: dragon.col,
+    row: dragon.row,
+    lives: dragon.lives,
+  } : null,
+  sword: (dragon || arenaBoss) ? { key: "A", range: "en ruta inklusive diagonalt" } : undefined,
+  jump: roller && player ? {
+    snakeAhead: snakeAheadDistance(player.dir),
+    landsAfterNearbySnake: true,
+    runningJump: true,
+  } : undefined,
   roller: roller ? { col: roller.col, row: roller.row, moving: roller.moving } : null,
   stepMs: roller ? { player: playerStepMs, roller: ROLLER_STEP_MS } : undefined,
   rollerHeadstartMs: roller ? ROLLER_HEADSTART : undefined,

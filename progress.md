@@ -45,3 +45,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   är lite snabbare än stenen.
 - Bana 6: bossen slår nu en gång per sekund.
 - Bana 6: bossen har nu fem liv och måste träffas fem gånger för att besegras.
+- Bana 4: springhoppet registrerar nu pil + HOPP även när knapparna trycks nästan
+  samtidigt på iPad. Ett vanligt hopp landar efter en orm som är 1–3 rutor framför.
+- Bana 3: draken har tre liv och spelaren får samma svärd och röda slagknapp som
+  på Bana 6. Målet är borttaget; draken måste besegras för att klara banan.

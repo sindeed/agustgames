@@ -290,7 +290,7 @@ body.touch #touch-controls {
   transform: scale(0.96);
 }
 
-/* Svärdsknappen visas bara på iPad/mobil i Bana 6. */
+/* Svärdsknappen visas bara på iPad/mobil på banor där spelaren har svärd. */
 #attack-btn {
   display: none;
   width: 104px;
@@ -310,7 +310,7 @@ body.touch #touch-controls {
 }
 
 #attack-btn span { font-size: 30px; line-height: 1; }
-body.touch.boss-level #attack-btn { display: flex; }
+body.touch.sword-level #attack-btn { display: flex; }
 #attack-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #7d1717; }
 
 /* ---- Liggande läge (t.ex. iPad i landscape) ---- */
