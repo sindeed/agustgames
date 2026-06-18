@@ -571,6 +571,7 @@ function resetPlayer() {
     moveStart: 0, moveDur: 0, moving: false,
     dir: { dc: 0, dr: 1 },
     jumping: false,
+    jumpQueued: false,
     invuln: 0,
   };
 }
@@ -853,7 +854,12 @@ function tryStep(d, now) {
 }
 
 function tryJump() {
-  if (player.moving) return;
+  if (player.moving) {
+    // Bara Bana 4: ett hopp som trycks medan gubben springer köas och
+    // startar direkt när det vanliga steget är klart.
+    if (roller && !player.jumping) player.jumpQueued = true;
+    return;
+  }
   const now = performance.now();
   const d = player.dir;
   const mc = player.col + d.dc, mr = player.row + d.dr;
@@ -907,6 +913,8 @@ function updateArenaBoss(now) {
 }
 
 function onPlayerArrived() {
+  const queuedJump = player.jumpQueued;
+  player.jumpQueued = false;
   const t = tileAt(player.col, player.row);
   if (t === "goal") { win(); return; }
   if (t === "hole" && !player.jumping) { die(); return; }
@@ -917,6 +925,7 @@ function onPlayerArrived() {
     activeCrumbles.push({ c: player.col, r: player.row, dieAt: performance.now() + CRUMBLE_MS });
   }
   player.jumping = false;
+  if (queuedJump && roller && state === "playing") tryJump();
 }
 
 /* ---------------------------------------------------------------- */
@@ -938,6 +947,7 @@ function die() {
     player.toY = player.fromY = respawn.row * TS;
     player.moving = false;
     player.jumping = false;
+    player.jumpQueued = false;
     player.dir = { dc: 0, dr: 1 };
     player.invuln = performance.now() + INVULN_MS;
     fireballs.length = 0;                          // rensa eld så respawn blir rättvis
@@ -1984,7 +1994,13 @@ window.render_game_to_text = () => JSON.stringify({
   coordinates: "rutnät, (0,0) uppe till vänster; kolumn ökar åt höger, rad nedåt",
   state,
   level: currentLevel + 1,
-  player: player ? { col: player.col, row: player.row, moving: player.moving, jumping: player.jumping } : null,
+  player: player ? {
+    col: player.col,
+    row: player.row,
+    moving: player.moving,
+    jumping: player.jumping,
+    jumpQueued: player.jumpQueued,
+  } : null,
   lives,
   score,
   codeSolved,

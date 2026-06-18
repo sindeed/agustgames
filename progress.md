@@ -39,3 +39,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   av arenatemat och påverkar inte någon av de andra fem banorna.
 - Bossen på Bana 6 slår nu en gång var 1,5 sekund. Spelarens svärdshastighet
   är oförändrad.
+- Bara Bana 4 har springhopp: trycker spelaren HOPP under ett vanligt steg köas
+  hoppet och startar vid nästa ruta, med landning två rutor fram. Bana 1 är oförändrad.
