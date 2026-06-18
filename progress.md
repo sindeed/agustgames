@@ -17,3 +17,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   måste komma ihåg 25412541.
 - Bana 4: spelarens vanliga steg tar nu 500 ms, exakt lika lång tid som den
   rullande stenens steg. Stenens försprång på en sekund är kvar.
+- Bana 5: koden är dold tills spelaren står på K-rutan. Den försvinner igen
+  när spelaren lämnar K och är fortfarande dold vid knappsatsen.
+- Bana 4: stenen väntar nu två sekunder efter start eller omstart innan den
+  börjar rulla. Därefter har spelaren och stenen samma hastighet.

@@ -19,7 +19,7 @@ const INVULN_MS = 1300; // osårbarhet efter träff
 const DRAGON_FIRE_MS = 1200; // tid mellan drakens eldsputtar (snabbare eld)
 const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
 const ROLLER_STEP_MS = 500;  // rullande stenen: 2 rutor per sekund
-const ROLLER_HEADSTART = 1000; // försprång innan stenen börjar rulla / efter ny start
+const ROLLER_HEADSTART = 2000; // två sekunders försprång innan stenen börjar rulla
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
@@ -1249,8 +1249,9 @@ function draw(now) {
   for (const arrow of arrows) drawArrow(arrow);
   for (const sn of snakes) drawSnake(sn, now);
 
-  // När knappsatsen är öppen måste spelaren minnas koden från K.
-  if (theme === "temple" && state !== "code" && state !== "code-wrong") drawTempleCode();
+  // Koden visas bara när spelaren verkligen har gått fram till K-rutan.
+  if (theme === "temple" && state === "playing" &&
+      tileAt(player.col, player.row) === "code-clue") drawTempleCode();
 
   if (theme === "underground") drawVignette();
   if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
@@ -1403,7 +1404,7 @@ function drawTile(c, r) {
 function drawTempleCode() {
   const c = 4, r = 4;
   const x = c * TS + TS / 2;
-  const y = r * TS + TS / 2;
+  const y = (r + 1) * TS + TS / 2;
   ctx.fillStyle = "rgba(9, 30, 23, 0.94)";
   roundRect(x - 62, y - 13, 124, 26, 5); ctx.fill();
   ctx.strokeStyle = "#75d99c";
@@ -1794,6 +1795,7 @@ window.render_game_to_text = () => JSON.stringify({
   arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
   roller: roller ? { col: roller.col, row: roller.row, moving: roller.moving } : null,
   stepMs: roller ? { player: playerStepMs, roller: ROLLER_STEP_MS } : undefined,
+  rollerHeadstartMs: roller ? ROLLER_HEADSTART : undefined,
   goal: (() => {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (grid[r][c] === "goal") return { col: c, row: r };
