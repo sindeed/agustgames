@@ -18,14 +18,14 @@ const SNAKE_MS = 340;   // ormens steg-tid
 const INVULN_MS = 1300; // osårbarhet efter träff
 const DRAGON_FIRE_MS = 1200; // tid mellan drakens eldsputtar (snabbare eld)
 const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
-const ROLLER_STEP_MS = STEP_MS; // samma fart som gubben och de andra banorna
+const ROLLER_STEP_MS = 175; // stenen är lite långsammare än gubben
 const ROLLER_HEADSTART = 2000; // två sekunders försprång innan stenen börjar rulla
 const ROLLER_HOLE_PAUSE_MS = 1000; // stenen stannar en sekund på varje hål
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
 const TEMPLE_CODE = "25412541";
-const BOSS_ATTACK_MS = 1500;
+const BOSS_ATTACK_MS = 1000;
 const SWORD_COOLDOWN_MS = 300;
 const BOSS_START_LIVES = 3;
 
@@ -347,7 +347,7 @@ const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
   { name: "Bana 3: Drakhålan", theme: "underground", map: LEVEL3_MAP },
-  { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: ROLLER_STEP_MS, snakeRange: 1 },
+  { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: STEP_MS, snakeRange: 1 },
   { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
   { name: "Bana 6: Bossarenan", theme: "arena", build: buildLevel6 },
 ];

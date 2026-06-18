@@ -41,3 +41,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   är oförändrad.
 - Bara Bana 4 har springhopp: trycker spelaren HOPP under ett vanligt steg köas
   hoppet och startar vid nästa ruta, med landning två rutor fram. Bana 1 är oförändrad.
+- Bana 4: gubben tar 150 ms per ruta och stenen tar 175 ms per ruta, så gubben
+  är lite snabbare än stenen.
+- Bana 6: bossen slår nu en gång per sekund.
