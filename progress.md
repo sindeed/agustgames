@@ -23,3 +23,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   börjar rulla. Därefter har spelaren och stenen samma hastighet.
 - Bana 4: gubben och stenen tar nu 150 ms per ruta, samma vanliga fart som på
   de andra banorna. När stenen rullar över ett hål stannar den i en sekund.
+- Bana 4: grupperna med tre och två spruckna rutor har ersatts med ett vanligt
+  synligt hål i den vänstra rutan i varje grupp. Resten är vanligt golv.

@@ -219,23 +219,23 @@ const LEVEL3_MAP = [
 // Bana 4 – Rullande stenen. Ritad av Agust (9 år).
 // En lång, smal (1 ruta bred) korridor som ringlar fram och tillbaka. Du startar
 // vid O med den rullande stenen (R) precis bakom dig och måste springa hela vägen
-// till målet (*) innan stenen kommer ikapp. Stenen rullar 2 rutor/sekund och
-// följer korridoren. På vägen finns hål (H) att hoppa över, ormar (~) och
-// kluriga K-block som rasar om man stannar för länge på dem.
-// # vägg  . golv  O start  * mål  R rullande sten  ~ orm  H hål  K klurigt (rasar)
+// till målet (*) innan stenen kommer ikapp. Stenen har samma fart som gubben
+// men stannar en sekund på varje hål. På vägen finns hål (H) att hoppa över
+// och ormar (~) att undvika.
+// # vägg  . golv  O start  * mål  R rullande sten  ~ orm  H hål
 const LEVEL4_MAP = [
   "####################",
   "#RO.......H........#",
   "##################.#",
   "#........~.........#",
   "#.##################",
-  "#........KKK.......#",
+  "#........H.........#",
   "##################.#",
   "#........H.........#",
   "#.##################",
   "#.........~........#",
   "##################.#",
-  "#.......KK.........#",
+  "#.......H..........#",
   "#.##################",
   "#...........H.....*#",
   "####################",
