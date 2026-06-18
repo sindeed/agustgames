@@ -27,3 +27,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   synligt hål i den vänstra rutan i varje grupp. Resten är vanligt golv.
 - Bana 5: K-rutan är nu säker. Alla flygande pilar försvinner och inga nya
   skjuts medan spelaren läser koden. Fällorna väntar en sekund efter att K lämnats.
+- Game Over startar nu om hela spelet från Bana 1 med noll poäng. Bana-väljaren
+  visas inte på Game Over-rutan, så man kan inte hoppa över tidigare banor.

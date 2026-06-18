@@ -674,8 +674,8 @@ function startBtnAction() {
   if (state === "levelcomplete") {
     loadLevel(currentLevel + 1);
   } else if (state === "dead") {
-    score = scoreAtLevelStart;      // börja om aktuell bana
-    loadLevel(currentLevel);
+    score = 0;                      // Game Over = börja om hela spelet
+    loadLevel(0);
   } else {
     newGame();                      // 'start' eller 'won'
   }
@@ -933,7 +933,8 @@ function gameOver() {
   state = "dead";
   stopMusic();
   sfxGameOver();
-  showOverlay("Game Over", `Du fick ${score} poäng. Försök igen!`, "Försök igen", { menu: true, levelSelect: true });
+  showOverlay("Game Over", `Du fick ${score} poäng. Nu börjar du om från Bana 1!`,
+    "Börja om från Bana 1", { menu: true });
 }
 
 function win() {
