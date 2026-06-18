@@ -21,6 +21,9 @@ const FIRE_SPEED = 0.18;     // eldklotets fart (pixlar per ms)
 const ROLLER_STEP_MS = 500;  // rullande stenen: 2 rutor per sekund
 const ROLLER_HEADSTART = 1000; // försprång innan stenen börjar rulla / efter ny start
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
+const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
+const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
+const TEMPLE_CODE = "25412541";
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -35,6 +38,10 @@ const soundEl = document.getElementById("sound");
 const hintEl = document.getElementById("overlay-hint");
 const overlayRestart = document.getElementById("overlay-restart");
 const overlayMenu = document.getElementById("overlay-menu");
+const keypadEl = document.getElementById("keypad");
+const keypadDisplay = document.getElementById("keypad-display");
+const keypadButtons = document.getElementById("keypad-buttons");
+const keypadCancel = document.getElementById("keypad-cancel");
 
 /* ---------------------------------------------------------------- */
 /* Ljud (Web Audio – syntade effekter, inga ljudfiler)              */
@@ -88,6 +95,9 @@ let musicGain = null;
 const MUSIC_NOTES = [220.00, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00, 415.30];
 // Lugn, lite olycksbådande slinga (index i MUSIC_NOTES)
 const MUSIC_SEQ = [0, 2, 4, 3, 5, 4, 2, 1, 0, 3, 5, 6, 4, 3, 1, 0];
+// Kodtemplet får en egen lugn och ljus melodi utan den mörka bas-dronen.
+const TEMPLE_MUSIC_NOTES = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25];
+const TEMPLE_MUSIC_SEQ = [0, 2, 3, 2, 1, 4, 3, 1, 0, 1, 2, 4, 3, 2, 1, 0];
 
 function musicNote(freq, dur, vol, type = "sine") {
   if (!audioCtx || muted || !musicGain) return;
@@ -106,6 +116,13 @@ function musicNote(freq, dur, vol, type = "sine") {
 
 function musicTick() {
   if (!audioCtx || muted) return;
+  if (theme === "temple") {
+    const n = TEMPLE_MUSIC_SEQ[musicStep % TEMPLE_MUSIC_SEQ.length];
+    musicNote(TEMPLE_MUSIC_NOTES[n], 2.2, 0.035, "sine");
+    if (musicStep % 4 === 0) musicNote(130.81, 2.8, 0.018, "triangle");
+    musicStep++;
+    return;
+  }
   const n = MUSIC_SEQ[musicStep % MUSIC_SEQ.length];
   musicNote(MUSIC_NOTES[n], 1.8, 0.05, "triangle");           // svävande melodi
   if (musicStep % 4 === 0) musicNote(110, 3.4, 0.045, "sine"); // dov bas-drone
@@ -123,7 +140,8 @@ function startMusic() {
     musicGain.connect(audioCtx.destination);
   }
   musicTick();
-  musicTimer = setInterval(musicTick, 850);   // en ny ton ungefär var 0,85 s
+  const tempo = theme === "temple" ? 1100 : 850;
+  musicTimer = setInterval(musicTick, tempo);
 }
 
 function stopMusic() {
@@ -209,11 +227,62 @@ const LEVEL4_MAP = [
   "####################",
 ];
 
+// Bana 5 – Kodtemplet. Två separata rum från Agusts ritade karta.
+// I vänstra rummet finns starten, kodskylten K och kodlåset L. Rätt kod
+// teleporterar spelaren till M i det högra rummet, där en orm och målet väntar.
+// Fyra pilfällor sitter i ytterväggarna, siktar på spelaren och skjuter varje sekund.
+function buildLevel5() {
+  dragon = null;
+  fireballs = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
+  stones = [];
+  snakes = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = { col: 10, row: 10 };
+  codeSolved = false;
+
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill("wall"));
+
+  // Vänstra rummet: fem rutor brett och två rader högt, som på kartan.
+  for (let r = 4; r <= 5; r++) {
+    for (let c = 1; c <= 5; c++) grid[r][c] = "floor";
+  }
+  startCell = { col: 1, row: 4 };
+  grid[4][1] = "start";
+  grid[4][4] = "code-clue";
+  grid[5][6] = "code-lock";
+
+  // Högra rummet och målkammaren.
+  for (let r = 8; r <= 10; r++) {
+    for (let c = 10; c <= 18; c++) grid[r][c] = "floor";
+  }
+  for (let r = 6; r <= 7; r++) {
+    for (let c = 16; c <= 18; c++) grid[r][c] = "floor";
+  }
+  grid[10][10] = "teleport";
+  grid[8][17] = "goal";
+
+  // Ormen ovanför målstjärnan rör sig lodrätt.
+  const templeSnake = makeSnake(16, 7, 0);
+  templeSnake.dc = 0;
+  templeSnake.dr = 1;
+  templeSnake.range = 1;
+  snakes.push(templeSnake);
+
+  // Två fällor runt varje rum, inbyggda i ytterväggarna.
+  turrets.push(makeTurret(3, 3), makeTurret(3, 6));
+  turrets.push(makeTurret(13, 7), makeTurret(14, 11));
+}
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
   { name: "Bana 3: Drakhålan", theme: "underground", map: LEVEL3_MAP },
   { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: 300, snakeRange: 1 },
+  { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -228,6 +297,15 @@ let roller = null;       // rullande stenen (Bana 4) eller null
 let crumbleCells = [];   // alla K-block (för att kunna återställa vid omstart)
 let activeCrumbles = []; // K-block som börjat rasa: {c, r, dieAt}
 let playerStepMs = STEP_MS; // tid för ett spelar-steg (kan sättas per bana)
+let turrets = [];           // väggmonterade pilfällor i Bana 5
+let arrows = [];            // flygande pilar
+let templeTeleport = null;  // M-rutan efter godkänd kod
+let codeSolved = false;
+let enteredCode = "";
+
+function makeTurret(c, r) {
+  return { col: c, row: r, nextAt: performance.now() + ARROW_FIRE_MS };
+}
 
 // Bana 1 byggs programmatiskt (samma som tidigare, väl testad)
 function buildLevel1() {
@@ -236,6 +314,10 @@ function buildLevel1() {
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = null;
+  codeSolved = false;
   grid = [];
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -349,6 +431,10 @@ function parseMap(map) {
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = null;
+  codeSolved = false;
   startCell = { col: 1, row: 1 };
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -388,6 +474,7 @@ function loadLevel(index) {
   lives = START_LIVES;
   scoreAtLevelStart = score;
   state = "playing";
+  if (keypadEl) keypadEl.classList.add("hidden");
   hideOverlay();
   updateHud();
   startMusic();
@@ -415,7 +502,7 @@ function resetPlayer() {
 /* Spelstatus                                                        */
 /* ---------------------------------------------------------------- */
 
-let state = "start";  // 'start' | 'playing' | 'paused' | 'dead' | 'levelcomplete' | 'won'
+let state = "start";  // 'start' | 'playing' | 'paused' | 'code' | 'code-wrong' | 'dead' | 'levelcomplete' | 'won'
 let lives = START_LIVES;
 let score = 0;
 let currentLevel = 0;
@@ -469,6 +556,14 @@ const DIR_KEYS = {
 };
 
 window.addEventListener("keydown", (e) => {
+  if (state === "code") {
+    if (/^[0-9]$/.test(e.key)) enterCodeDigit(e.key);
+    else if (e.key === "Backspace") removeCodeDigit();
+    else if (e.key === "Enter") submitTempleCode();
+    else if (e.key === "Escape") closeKeypad();
+    e.preventDefault();
+    return;
+  }
   if (e.key in DIR_KEYS) {
     e.preventDefault();
     if (!heldDirs.includes(e.key)) heldDirs.unshift(e.key);
@@ -538,6 +633,21 @@ if (menuBtn) menuBtn.addEventListener("click", goToMenu);
 if (overlayRestart) overlayRestart.addEventListener("click", restartLevel);
 if (overlayMenu) overlayMenu.addEventListener("click", goToMenu);
 
+if (keypadButtons) {
+  for (const digit of ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "✓"]) {
+    const btn = document.createElement("button");
+    btn.textContent = digit;
+    btn.addEventListener("click", () => {
+      resumeAudio();
+      if (digit === "⌫") removeCodeDigit();
+      else if (digit === "✓") submitTempleCode();
+      else enterCodeDigit(digit);
+    });
+    keypadButtons.appendChild(btn);
+  }
+}
+if (keypadCancel) keypadCancel.addEventListener("click", closeKeypad);
+
 // hindra sid-scroll och pinch-zoom på pekskärm
 document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturestart", (e) => e.preventDefault());
@@ -573,6 +683,8 @@ function resume() {
   }
   if (player && player.invuln) player.invuln += delta;
   for (const fb of fireballs) fb.born += delta;
+  for (const arrow of arrows) arrow.born += delta;
+  for (const turret of turrets) turret.nextAt += delta;
   if (dragon) dragon.fireAt += delta;
   if (roller) { if (roller.moving) roller.moveStart += delta; roller.nextAt += delta; }
   for (const cb of activeCrumbles) cb.dieAt += delta;
@@ -666,6 +778,7 @@ function onPlayerArrived() {
   const t = tileAt(player.col, player.row);
   if (t === "goal") { win(); return; }
   if (t === "hole" && !player.jumping) { die(); return; }
+  if (t === "code-lock" && !codeSolved) { openKeypad(); return; }
   if (t === "crumble") {
     // golvet börjar rasa – kom igång igen innan det blir ett hål!
     grid[player.row][player.col] = "crumbling";
@@ -684,19 +797,96 @@ function die() {
   if (lives <= 0) {
     gameOver();
   } else {
-    player.col = startCell.col;
-    player.row = startCell.row;
-    player.toX = player.fromX = startCell.col * TS;
-    player.toY = player.fromY = startCell.row * TS;
+    // Efter avklarat kodlås är M den nya kontrollpunkten. Annars skulle en
+    // pilträff i rum två skicka spelaren till ett rum som inte längre går att lämna.
+    const respawn = codeSolved && templeTeleport ? templeTeleport : startCell;
+    player.col = respawn.col;
+    player.row = respawn.row;
+    player.toX = player.fromX = respawn.col * TS;
+    player.toY = player.fromY = respawn.row * TS;
     player.moving = false;
     player.jumping = false;
     player.dir = { dc: 0, dr: 1 };
     player.invuln = performance.now() + INVULN_MS;
     fireballs.length = 0;                          // rensa eld så respawn blir rättvis
+    resetTempleHazards(performance.now());
     if (dragon) dragon.fireAt = performance.now() + 1200;
     if (roller) resetRoller(performance.now());    // stenen tillbaka till start
     restoreCrumbles();                             // laga rasade K-block inför nytt försök
     sfxHurt();
+  }
+}
+
+function resetTempleHazards(now) {
+  arrows.length = 0;
+  for (const turret of turrets) turret.nextAt = now + ARROW_FIRE_MS;
+}
+
+function openKeypad() {
+  enteredCode = "";
+  updateKeypadDisplay();
+  state = "code";
+  heldDirs.length = 0;
+  if (keypadEl) {
+    keypadEl.classList.remove("hidden");
+    keypadEl.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeKeypad() {
+  if (state !== "code") return;
+  if (keypadEl) {
+    keypadEl.classList.add("hidden");
+    keypadEl.setAttribute("aria-hidden", "true");
+  }
+  state = "playing";
+}
+
+function enterCodeDigit(digit) {
+  if (state !== "code" || enteredCode.length >= TEMPLE_CODE.length) return;
+  enteredCode += digit;
+  updateKeypadDisplay();
+  if (enteredCode.length === TEMPLE_CODE.length) submitTempleCode();
+}
+
+function removeCodeDigit() {
+  if (state !== "code") return;
+  enteredCode = enteredCode.slice(0, -1);
+  updateKeypadDisplay();
+}
+
+function updateKeypadDisplay(message = "") {
+  if (!keypadDisplay) return;
+  keypadDisplay.textContent = message || enteredCode.padEnd(TEMPLE_CODE.length, "·");
+}
+
+function submitTempleCode() {
+  if (state !== "code" || enteredCode.length !== TEMPLE_CODE.length) return;
+  if (enteredCode === TEMPLE_CODE) {
+    codeSolved = true;
+    closeKeypad();
+    player.col = templeTeleport.col;
+    player.row = templeTeleport.row;
+    player.fromX = player.toX = player.col * TS;
+    player.fromY = player.toY = player.row * TS;
+    player.moving = false;
+    player.invuln = performance.now() + 700;
+    resetTempleHazards(performance.now());
+    sfxLevel();
+  } else {
+    state = "code-wrong";
+    updateKeypadDisplay("FEL KOD");
+    setTimeout(() => {
+      if (state !== "code-wrong") return;
+      if (keypadEl) {
+        keypadEl.classList.add("hidden");
+        keypadEl.setAttribute("aria-hidden", "true");
+      }
+      state = "playing";
+      resetPlayer();
+      resetTempleHazards(performance.now());
+      sfxHurt();
+    }, 650);
   }
 }
 
@@ -839,8 +1029,10 @@ function update(now) {
   for (const sn of snakes) updateSnake(sn, now);
   if (dragon) updateDragon(dragon, now);
   if (roller) updateRoller(now);
+  updateTurrets(now);
   updateCrumbles(now);
   updateFireballs(now);
+  updateArrows(now);
   if (state !== "playing") return;        // kan ha dött av ett rasande golv
 
   const pc = playerCenter(now);
@@ -856,11 +1048,51 @@ function update(now) {
     for (const fb of fireballs) {
       if (Math.hypot(pc.x - fb.x, pc.y - fb.y) < TS * 0.5) { onHit(); break; }
     }
+    for (const arrow of arrows) {
+      if (Math.hypot(pc.x - arrow.x, pc.y - arrow.y) < TS * 0.34) { hit(); break; }
+    }
   }
   // Rullande stenen krossar dig oavsett osårbarhet eller hopp
   if (roller) {
     const rcenter = rollerCenter(now);
     if (Math.hypot(pc.x - rcenter.x, pc.y - rcenter.y) < TS * 0.7) die();
+  }
+}
+
+function updateTurrets(now) {
+  if (turrets.length === 0) return;
+  const pc = playerCenter(now);
+  for (const turret of turrets) {
+    if (now < turret.nextAt) continue;
+    const x0 = turret.col * TS + TS / 2;
+    const y0 = turret.row * TS + TS / 2;
+    const dx = pc.x - x0;
+    const dy = pc.y - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    arrows.push({
+      x0, y0, x: x0, y: y0,
+      vx: dx / len, vy: dy / len,
+      born: now,
+      sourceCol: turret.col, sourceRow: turret.row,
+    });
+    turret.nextAt = now + ARROW_FIRE_MS;
+    sfxFire();
+  }
+}
+
+function updateArrows(now) {
+  for (let i = arrows.length - 1; i >= 0; i--) {
+    const arrow = arrows[i];
+    const distance = (now - arrow.born) * ARROW_SPEED;
+    arrow.x = arrow.x0 + arrow.vx * distance;
+    arrow.y = arrow.y0 + arrow.vy * distance;
+    const c = Math.floor(arrow.x / TS);
+    const r = Math.floor(arrow.y / TS);
+    const stillInSourceWall = c === arrow.sourceCol && r === arrow.sourceRow;
+    if (c < 0 || r < 0 || c >= COLS || r >= ROWS ||
+        (!stillInSourceWall && (tileAt(c, r) === "wall" || tileAt(c, r) === "log"))) {
+      arrows.splice(i, 1);
+    }
   }
 }
 
@@ -1000,7 +1232,11 @@ function draw(now) {
   if (dragon) drawDragon(now);
   if (roller) drawRoller(now);
   for (const fb of fireballs) drawFireball(fb, now);
+  for (const turret of turrets) drawTurret(turret, now);
+  for (const arrow of arrows) drawArrow(arrow);
   for (const sn of snakes) drawSnake(sn, now);
+
+  if (theme === "temple") drawTempleCode();
 
   if (theme === "underground") drawVignette();
   if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
@@ -1011,6 +1247,7 @@ function drawTile(c, r) {
   const t = grid[r][c];
   const castle = theme === "castle";
   const underground = theme === "underground";
+  const temple = theme === "temple";
 
   if (t === "wall") {
     if (underground) {
@@ -1026,7 +1263,15 @@ function drawTile(c, r) {
       if ((c * 5 + r * 3) % 9 === 0) drawChain(x + TS / 2, y);
       return;
     }
-    if (castle) {
+    if (temple) {
+      ctx.fillStyle = "#6c573b";
+      ctx.fillRect(x, y, TS, TS);
+      ctx.fillStyle = ((c + r) % 2 === 0) ? "#8a704c" : "#7d6545";
+      ctx.fillRect(x + 2, y + 2, TS - 4, TS - 4);
+      ctx.strokeStyle = "#51412e";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 2, y + 2, TS - 4, TS - 4);
+    } else if (castle) {
       ctx.fillStyle = "#6f6357";
       ctx.fillRect(x, y, TS, TS);
       ctx.fillStyle = "#857868";
@@ -1053,6 +1298,8 @@ function drawTile(c, r) {
   // Golv
   if (underground) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#211e19" : "#1b1916";
+  } else if (temple) {
+    ctx.fillStyle = ((c + r) % 2 === 0) ? "#b4925f" : "#a88656";
   } else if (castle) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#46413a" : "#403b34";
   } else {
@@ -1104,7 +1351,86 @@ function drawTile(c, r) {
     ctx.stroke();
   } else if (t === "goal") {
     drawStar(x + TS / 2, y + TS / 2, TS * 0.4, "#ffd34d");
+    if (temple) {
+      ctx.fillStyle = "#6f4c00";
+      ctx.font = "bold 13px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("M", x + TS / 2, y + TS / 2 + 1);
+    }
+  } else if (t === "code-clue") {
+    ctx.fillStyle = "#275e49";
+    roundRect(x + 5, y + 5, TS - 10, TS - 10, 5); ctx.fill();
+    ctx.fillStyle = "#b9ffd1";
+    ctx.font = "bold 22px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("K", x + TS / 2, y + TS / 2);
+  } else if (t === "code-lock") {
+    ctx.fillStyle = codeSolved ? "#397a4c" : "#574b68";
+    roundRect(x + 4, y + 4, TS - 8, TS - 8, 5); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 21px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("L", x + TS / 2, y + TS / 2);
+  } else if (t === "teleport") {
+    ctx.strokeStyle = "#75e7ff";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x + TS / 2, y + TS / 2, 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#d6f8ff";
+    ctx.font = "bold 18px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("M", x + TS / 2, y + TS / 2);
   }
+}
+
+function drawTempleCode() {
+  const c = 4, r = 4;
+  const x = c * TS + TS / 2;
+  const y = r * TS + TS / 2;
+  ctx.fillStyle = "rgba(9, 30, 23, 0.94)";
+  roundRect(x - 62, y - 13, 124, 26, 5); ctx.fill();
+  ctx.strokeStyle = "#75d99c";
+  ctx.lineWidth = 2;
+  roundRect(x - 62, y - 13, 124, 26, 5); ctx.stroke();
+  ctx.fillStyle = "#b9ffd1";
+  ctx.font = "bold 14px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`K: ${TEMPLE_CODE}`, x, y + 1);
+}
+
+function drawTurret(turret, now) {
+  const x = turret.col * TS + TS / 2;
+  const y = turret.row * TS + TS / 2;
+  const pc = playerCenter(now);
+  const angle = Math.atan2(pc.y - y, pc.x - x);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = "#342f2b";
+  ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#d2c2a2";
+  ctx.fillRect(0, -4, 18, 8);
+  ctx.fillStyle = "#8f2f28";
+  ctx.beginPath();
+  ctx.moveTo(18, -9); ctx.lineTo(28, 0); ctx.lineTo(18, 9); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawArrow(arrow) {
+  const angle = Math.atan2(arrow.vy, arrow.vx);
+  ctx.save();
+  ctx.translate(arrow.x, arrow.y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = "#f1dfb4";
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(10, 0); ctx.stroke();
+  ctx.fillStyle = "#c8cfd5";
+  ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(5, -5); ctx.lineTo(5, 5); ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
 
 function drawTorch(cx, cy) {
@@ -1438,6 +1764,34 @@ function drawStar(cx, cy, radius, color) {
   ctx.lineWidth = 2;
   ctx.stroke();
 }
+
+// Test-/tillgänglighetsvy: en kort textbeskrivning av det som är relevant just nu.
+window.render_game_to_text = () => JSON.stringify({
+  coordinates: "rutnät, (0,0) uppe till vänster; kolumn ökar åt höger, rad nedåt",
+  state,
+  level: currentLevel + 1,
+  player: player ? { col: player.col, row: player.row, moving: player.moving, jumping: player.jumping } : null,
+  lives,
+  score,
+  codeSolved,
+  enteredCode: state === "code" ? enteredCode : undefined,
+  snakes: snakes.map(sn => ({ col: sn.col, row: sn.row })),
+  turrets: turrets.map(t => ({ col: t.col, row: t.row })),
+  arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
+  goal: (() => {
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] === "goal") return { col: c, row: r };
+    }
+    return null;
+  })(),
+});
+
+window.advanceTime = (ms) => {
+  const start = frameNow || performance.now();
+  const steps = Math.max(1, Math.ceil(ms / (1000 / 60)));
+  for (let i = 1; i <= steps; i++) update(start + (ms * i) / steps);
+  draw(start + ms);
+};
 
 /* ---------------------------------------------------------------- */
 /* Loop                                                              */

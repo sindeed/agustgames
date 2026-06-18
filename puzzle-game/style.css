@@ -175,6 +175,55 @@ canvas {
 }
 #overlay-actions button:active { background: #565d6e; }
 
+/* ---- Kodlåset i Bana 5 ---- */
+.keypad-box {
+  width: min(360px, 92vw);
+  padding: 24px;
+  background: #202631;
+  border: 3px solid #8b7450;
+  border-radius: 14px;
+}
+
+.keypad-box h1 { font-size: 30px; }
+
+#keypad-display {
+  min-height: 54px;
+  margin: 14px 0;
+  padding: 10px;
+  border: 2px solid #657168;
+  border-radius: 8px;
+  background: #111915;
+  color: #8cff9a;
+  font: 700 26px/30px monospace;
+  letter-spacing: 5px;
+}
+
+#keypad-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+#keypad-buttons button,
+#keypad-cancel {
+  min-height: 48px;
+  border: 1px solid #697386;
+  border-radius: 8px;
+  background: #3c4656;
+  color: #fff;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+#keypad-buttons button:active,
+#keypad-cancel:active { background: #59677b; }
+
+#keypad-cancel {
+  width: 100%;
+  margin-top: 10px;
+  font-size: 16px;
+}
+
 /* ---- Touch-kontroller (visas bara på pekskärm) ---- */
 #touch-controls {
   display: none;
