@@ -37,3 +37,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   diagonala slag tar ett spelarliv, och iPad-knappen är rund/röd och dold på Bana 5.
 - Bana 6 har en egen snabb och spännande bossmusik i d-moll. Musikvalet styrs
   av arenatemat och påverkar inte någon av de andra fem banorna.
+- Bossen på Bana 6 slår nu en gång var 1,5 sekund. Spelarens svärdshastighet
+  är oförändrad.

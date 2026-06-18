@@ -25,7 +25,7 @@ const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hå
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
 const TEMPLE_CODE = "25412541";
-const BOSS_ATTACK_MS = 1000;
+const BOSS_ATTACK_MS = 1500;
 const SWORD_COOLDOWN_MS = 300;
 const BOSS_START_LIVES = 3;
 
