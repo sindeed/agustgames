@@ -106,6 +106,9 @@ const MUSIC_SEQ = [0, 2, 4, 3, 5, 4, 2, 1, 0, 3, 5, 6, 4, 3, 1, 0];
 // Riddarborgen får en stadig, medeltida marschmelodi.
 const CASTLE_MUSIC_NOTES = [293.66, 329.63, 369.99, 440.00, 493.88, 587.33];
 const CASTLE_MUSIC_SEQ = [0, 2, 3, 2, 0, 3, 4, 3, 2, 1, 2, 4, 5, 4, 3, 0];
+// Bossarenan får en snabb, spännande stridsmelodi i d-moll.
+const ARENA_MUSIC_NOTES = [146.83, 174.61, 196.00, 220.00, 233.08, 293.66, 349.23];
+const ARENA_MUSIC_SEQ = [0, 0, 3, 4, 5, 3, 2, 1, 0, 2, 3, 5, 6, 5, 4, 2];
 // Kodtemplet får en egen lugn och ljus melodi utan den mörka bas-dronen.
 const TEMPLE_MUSIC_NOTES = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25];
 const TEMPLE_MUSIC_SEQ = [0, 2, 3, 2, 1, 4, 3, 1, 0, 1, 2, 4, 3, 2, 1, 0];
@@ -127,6 +130,14 @@ function musicNote(freq, dur, vol, type = "sine") {
 
 function musicTick() {
   if (!audioCtx || muted) return;
+  if (theme === "arena") {
+    const n = ARENA_MUSIC_SEQ[musicStep % ARENA_MUSIC_SEQ.length];
+    musicNote(ARENA_MUSIC_NOTES[n], 0.48, 0.043, "square");
+    if (musicStep % 2 === 0) musicNote(73.42, 0.3, 0.035, "sawtooth");
+    if (musicStep % 8 === 7) musicNote(440, 0.65, 0.025, "triangle");
+    musicStep++;
+    return;
+  }
   if (theme === "castle") {
     const n = CASTLE_MUSIC_SEQ[musicStep % CASTLE_MUSIC_SEQ.length];
     musicNote(CASTLE_MUSIC_NOTES[n], 0.72, 0.045, "triangle");
@@ -161,7 +172,8 @@ function startMusic() {
     musicGain.connect(audioCtx.destination);
   }
   musicTick();
-  const tempo = theme === "castle" ? 650 : (theme === "temple" ? 1100 : 850);
+  const tempo = theme === "arena" ? 480
+    : (theme === "castle" ? 650 : (theme === "temple" ? 1100 : 850));
   musicTimer = setInterval(musicTick, tempo);
 }
 

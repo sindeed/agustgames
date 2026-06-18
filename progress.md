@@ -35,3 +35,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   runt sig. Spelaren kan slå lika långt med A eller en rund röd iPad-knapp.
 - Verifierat Bana 6: ett diagonalt slag tar ett bossliv, tre slag vinner, bossens
   diagonala slag tar ett spelarliv, och iPad-knappen är rund/röd och dold på Bana 5.
+- Bana 6 har en egen snabb och spännande bossmusik i d-moll. Musikvalet styrs
+  av arenatemat och påverkar inte någon av de andra fem banorna.
