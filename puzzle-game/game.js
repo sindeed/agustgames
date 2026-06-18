@@ -294,7 +294,7 @@ const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
   { name: "Bana 3: Drakhålan", theme: "underground", map: LEVEL3_MAP },
-  { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: 300, snakeRange: 1 },
+  { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: ROLLER_STEP_MS, snakeRange: 1 },
   { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
 ];
 
@@ -1792,6 +1792,8 @@ window.render_game_to_text = () => JSON.stringify({
   snakes: snakes.map(sn => ({ col: sn.col, row: sn.row })),
   turrets: turrets.map(t => ({ col: t.col, row: t.row })),
   arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
+  roller: roller ? { col: roller.col, row: roller.row, moving: roller.moving } : null,
+  stepMs: roller ? { player: playerStepMs, roller: ROLLER_STEP_MS } : undefined,
   goal: (() => {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (grid[r][c] === "goal") return { col: c, row: r };

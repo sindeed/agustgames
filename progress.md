@@ -15,3 +15,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 2 Riddarborgen har fått en egen medeltida riddarmarsch med stadig rytm.
 - Koden på K-rutan göms medan knappsatsen vid L är öppen, så spelaren
   måste komma ihåg 25412541.
+- Bana 4: spelarens vanliga steg tar nu 500 ms, exakt lika lång tid som den
+  rullande stenens steg. Stenens försprång på en sekund är kvar.
