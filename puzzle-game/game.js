@@ -34,9 +34,9 @@ const EVIL_GUY_ALERT_PAUSE_MS = 500;
 const EVIL_GUY_PATROL = [
   { dc: 0, dr: 1, steps: 2 },
   { dc: -1, dr: 0, steps: 5 },
-  { dc: 1, dr: 0, steps: 5 },
   { dc: 0, dr: 1, steps: 3 },
   { dc: -1, dr: 0, steps: 5 },
+  { dc: 1, dr: 0, steps: 5 },
   { dc: 0, dr: 1, steps: 4 },
   { dc: -1, dr: 0, steps: 6 },
   { dc: 1, dr: 0, steps: 6 },
@@ -2163,9 +2163,10 @@ function drawEvilGuy(now) {
   const cx = p.x + TS / 2;
   const cy = p.y + TS / 2;
 
-  // Visa de två farliga rutorna framför honom.
+  // Visa de två farliga rutorna framför honom, men lite mjukare så han inte ser
+  // för läskig ut.
   if (evilGuy.mode !== "stopped") {
-    ctx.fillStyle = "rgba(255,45,45,0.18)";
+    ctx.fillStyle = "rgba(255,195,75,0.18)";
     for (let i = 1; i <= 2; i++) {
       ctx.fillRect(
         (evilGuy.col + evilGuy.dir.dc * i) * TS + 4,
@@ -2184,27 +2185,26 @@ function drawEvilGuy(now) {
   else if (evilGuy.dir.dr === 1) ang = Math.PI;
   ctx.rotate(ang);
 
-  // Elak trädgårdsman: grön jacka, brun overall, hatt och ett litet verktyg.
-  ctx.strokeStyle = "#5b3518";
-  ctx.lineWidth = 4;
+  // Trädgårdsman: fortfarande en fiende, men snällare och mindre läskig.
+  ctx.strokeStyle = "#7a542d";
+  ctx.lineWidth = 3;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(13, 8);
-  ctx.lineTo(18, -12);
+  ctx.lineTo(18, -9);
   ctx.stroke();
-  ctx.strokeStyle = "#b9c9a0";
+  ctx.strokeStyle = "#d8e8bd";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(16, -13); ctx.lineTo(21, -15);
-  ctx.moveTo(16, -10); ctx.lineTo(21, -10);
-  ctx.moveTo(15, -7); ctx.lineTo(20, -5);
+  ctx.moveTo(16, -9); ctx.lineTo(22, -11);
+  ctx.moveTo(16, -7); ctx.lineTo(22, -7);
   ctx.stroke();
 
-  ctx.fillStyle = evilGuyKey ? "#6d7058" : "#2f6b28";
+  ctx.fillStyle = evilGuyKey ? "#7b8365" : "#4f9a45";
   roundRect(-13, -10, 26, 24, 7); ctx.fill();
-  ctx.fillStyle = "#6b3f1d";
+  ctx.fillStyle = "#8b5a2b";
   roundRect(-7, -5, 14, 17, 4); ctx.fill();
-  ctx.strokeStyle = "#203f1c";
+  ctx.strokeStyle = "#2f6930";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(-6, -7); ctx.lineTo(-2, 4);
@@ -2212,20 +2212,22 @@ function drawEvilGuy(now) {
   ctx.stroke();
   ctx.fillStyle = "#f0d08b";
   ctx.beginPath(); ctx.arc(0, -12, 8, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#4c6f28";
+  ctx.fillStyle = "#6fbf45";
   roundRect(-10, -23, 20, 6, 3); ctx.fill();
-  ctx.fillStyle = "#31501e";
+  ctx.fillStyle = "#4f8b34";
   roundRect(-7, -29, 14, 10, 4); ctx.fill();
   ctx.fillStyle = "#111";
-  ctx.beginPath(); ctx.arc(-3, -13, 1.6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(3, -13, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-3, -13, 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3, -13, 1.4, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = "#111";
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(-4, -8); ctx.lineTo(4, -8); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, -10, 4, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
 
   if (!evilGuyKey) {
-    ctx.fillStyle = "#c92727";
-    ctx.font = "bold 14px sans-serif";
+    ctx.fillStyle = "#fff2a8";
+    ctx.beginPath(); ctx.arc(0, 4, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#9a6a16";
+    ctx.font = "bold 11px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("!", 0, 4);
