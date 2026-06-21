@@ -37,7 +37,6 @@ const EVIL_GUY_PATROL = [
   { dc: 0, dr: 1, steps: 3 },
   { dc: -1, dr: 0, steps: 5 },
   { dc: 1, dr: 0, steps: 5 },
-  { dc: -1, dr: 0, steps: 5 },
   { dc: 0, dr: 1, steps: 4 },
   { dc: -1, dr: 0, steps: 6 },
   { dc: 1, dr: 0, steps: 6 },
