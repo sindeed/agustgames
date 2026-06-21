@@ -32,7 +32,6 @@ const DRAGON_START_LIVES = 3;
 const EVIL_GUY_STEP_MS = 500;
 const EVIL_GUY_ALERT_PAUSE_MS = 500;
 const EVIL_GUY_PATROL = [
-  { dc: 0, dr: 1, steps: 2 },
   { dc: -1, dr: 0, steps: 5 },
   { dc: 0, dr: 1, steps: 3 },
   { dc: -1, dr: 0, steps: 5 },
@@ -447,11 +446,12 @@ function makeTurret(c, r) {
 }
 
 function makeEvilGuy(c, r) {
+  const firstPatrolStep = EVIL_GUY_PATROL[0];
   return {
     col: c, row: r,
     fromX: c * TS, fromY: r * TS, toX: c * TS, toY: r * TS,
     moveStart: 0, moveDur: 0, moving: false,
-    dir: { dc: 0, dr: 1 },
+    dir: { dc: firstPatrolStep.dc, dr: firstPatrolStep.dr },
     nextAt: performance.now() + EVIL_GUY_STEP_MS,
     mode: "patrol",
     patrolIndex: 0,
@@ -469,7 +469,7 @@ function resetEvilGuy(now) {
   evilGuy.fromX = evilGuy.toX = evilGuy.col * TS;
   evilGuy.fromY = evilGuy.toY = evilGuy.row * TS;
   evilGuy.moving = false;
-  evilGuy.dir = { dc: 0, dr: 1 };
+  evilGuy.dir = { dc: EVIL_GUY_PATROL[0].dc, dr: EVIL_GUY_PATROL[0].dr };
   evilGuy.mode = "patrol";
   evilGuy.patrolIndex = 0;
   evilGuy.stepsLeft = EVIL_GUY_PATROL[0].steps;
