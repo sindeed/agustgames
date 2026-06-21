@@ -38,7 +38,11 @@ const EVIL_GUY_PATROL = [
   { dc: 0, dr: 1, steps: 3 },
   { dc: -1, dr: 0, steps: 5 },
   { dc: 1, dr: 0, steps: 5 },
-  { dc: 0, dr: -1, steps: 5 },
+  { dc: 0, dr: 1, steps: 2 },
+  { dc: 0, dr: 1, steps: 4 },
+  { dc: -1, dr: 0, steps: 6 },
+  { dc: 1, dr: 0, steps: 6 },
+  { dc: 0, dr: -1, steps: 9 },
 ];
 
 const canvas = document.getElementById("game");
@@ -1070,11 +1074,8 @@ function tryCollectEvilGuyKey(now) {
   const behindRow = evilGuy.row - evilGuy.dir.dr;
   if (player.col !== behindCol || player.row !== behindRow) return;
   evilGuyKey = true;
-  evilGuy.mode = "pause";
-  evilGuy.pauseUntil = now + EVIL_GUY_ALERT_PAUSE_MS;
-  evilGuy.backStepsLeft = 2;
-  evilGuy.backDir = { dc: -evilGuy.dir.dc, dr: -evilGuy.dir.dr };
-  evilGuy.nextAt = evilGuy.pauseUntil;
+  evilGuy.mode = "chase";
+  evilGuy.nextAt = now + EVIL_GUY_ALERT_PAUSE_MS;
   sfxLevel();
   updateHud();
 }
@@ -1483,6 +1484,26 @@ function nextEvilPatrolDir(guy) {
   return { dc: part.dc, dr: part.dr };
 }
 
+function chooseEvilChaseDir(guy) {
+  const options = [];
+  const dx = player.col - guy.col;
+  const dy = player.row - guy.row;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx !== 0) options.push({ dc: Math.sign(dx), dr: 0 });
+    if (dy !== 0) options.push({ dc: 0, dr: Math.sign(dy) });
+  } else {
+    if (dy !== 0) options.push({ dc: 0, dr: Math.sign(dy) });
+    if (dx !== 0) options.push({ dc: Math.sign(dx), dr: 0 });
+  }
+  options.push(
+    { dc: 0, dr: -1 },
+    { dc: 1, dr: 0 },
+    { dc: 0, dr: 1 },
+    { dc: -1, dr: 0 },
+  );
+  return options.find(d => tileAt(guy.col + d.dc, guy.row + d.dr) !== "wall") || guy.dir;
+}
+
 function updateEvilGuy(now) {
   const guy = evilGuy;
   if (guy.moving) {
@@ -1503,6 +1524,8 @@ function updateEvilGuy(now) {
   let d;
   if (guy.mode === "backing") {
     d = guy.backDir;
+  } else if (guy.mode === "chase") {
+    d = chooseEvilChaseDir(guy);
   } else {
     d = nextEvilPatrolDir(guy);
   }
@@ -1527,7 +1550,7 @@ function updateEvilGuy(now) {
 
 function evilGuyTouchesPlayer() {
   if (!evilGuy) return false;
-  if (evilGuyKey) return false;
+  if (evilGuyKey && evilGuy.mode !== "chase") return false;
   if (player.col === evilGuy.col && player.row === evilGuy.row) return true;
   for (let distance = 1; distance <= 2; distance++) {
     const c = evilGuy.col + evilGuy.dir.dc * distance;

@@ -51,12 +51,16 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   på Bana 6. Målet är borttaget; draken måste besegras för att klara banan.
 - Bana 7 Trädgården byggd från Agusts karta. Spelaren startar på S, L är en låst
   dörr och M är målet/hem. Den elaka gubben patrullerar i ordningen 2 ner, 5
-  vänster, 5 höger, 3 ner, 5 vänster, 5 höger, 5 upp, med 500 ms per steg.
+  vänster, 5 höger, 3 ner, 5 vänster, 5 höger, 2 ner, 4 ner, 6 vänster,
+  6 höger, 9 upp, med 500 ms per steg. Sedan börjar samma ordning om igen.
 - Bana 7: spelaren tappar liv om han står på elaka gubben eller 1–2 rutor framför
   den riktning gubben går. Står spelaren en ruta bakom gubben får han nyckeln,
-  L-dörren öppnas, gubben pausar 0,5 s, backar två steg och stannar tills banan
-  är klar. Verifierat lokalt utan konsolfel.
+  L-dörren öppnas, gubben står still i 0,5 sekund och börjar sedan jaga spelaren
+  där spelaren är. Spelaren ska springa in till målet. Verifierat lokalt utan
+  konsolfel.
 - Bana 7 har eget trädgårdstema: grönt gräs, häckväggar, små blommor och egen
   mjuk trädgårdsmusik. Temat används bara på Bana 7.
 - Bana 7: den elaka gubben ritas nu som en elak trädgårdsman med grön hatt,
   gröna kläder, brun overall och ett litet trädgårdsverktyg.
+- Bana 7: patrullen loopar för alltid. Efter 27 steg går trädgårdsmannen 4 ner,
+  6 vänster, 6 höger och 9 upp, sedan börjar samma patrull om igen.
