@@ -32,6 +32,7 @@ const DRAGON_START_LIVES = 3;
 const EVIL_GUY_STEP_MS = 500;
 const EVIL_GUY_ALERT_PAUSE_MS = 500;
 const EVIL_GUY_PATROL = [
+  { dc: 0, dr: 1, steps: 2 },
   { dc: -1, dr: 0, steps: 5 },
   { dc: 0, dr: 1, steps: 3 },
   { dc: -1, dr: 0, steps: 5 },
