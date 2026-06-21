@@ -29,6 +29,17 @@ const BOSS_ATTACK_MS = 1000;
 const SWORD_COOLDOWN_MS = 300;
 const BOSS_START_LIVES = 5;
 const DRAGON_START_LIVES = 3;
+const EVIL_GUY_STEP_MS = 500;
+const EVIL_GUY_ALERT_PAUSE_MS = 500;
+const EVIL_GUY_PATROL = [
+  { dc: 0, dr: 1, steps: 2 },
+  { dc: -1, dr: 0, steps: 5 },
+  { dc: 1, dr: 0, steps: 5 },
+  { dc: 0, dr: 1, steps: 3 },
+  { dc: -1, dr: 0, steps: 5 },
+  { dc: 1, dr: 0, steps: 5 },
+  { dc: 0, dr: -1, steps: 5 },
+];
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -113,6 +124,9 @@ const ARENA_MUSIC_SEQ = [0, 0, 3, 4, 5, 3, 2, 1, 0, 2, 3, 5, 6, 5, 4, 2];
 // Kodtemplet får en egen lugn och ljus melodi utan den mörka bas-dronen.
 const TEMPLE_MUSIC_NOTES = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25];
 const TEMPLE_MUSIC_SEQ = [0, 2, 3, 2, 1, 4, 3, 1, 0, 1, 2, 4, 3, 2, 1, 0];
+// Trädgården får en mjuk, glad melodi med ljusa toner.
+const GARDEN_MUSIC_NOTES = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 523.25];
+const GARDEN_MUSIC_SEQ = [0, 2, 4, 5, 4, 2, 1, 3, 5, 6, 5, 3, 2, 1, 0, 2];
 
 function musicNote(freq, dur, vol, type = "sine") {
   if (!audioCtx || muted || !musicGain) return;
@@ -156,6 +170,13 @@ function musicTick() {
     musicStep++;
     return;
   }
+  if (theme === "garden") {
+    const n = GARDEN_MUSIC_SEQ[musicStep % GARDEN_MUSIC_SEQ.length];
+    musicNote(GARDEN_MUSIC_NOTES[n], 1.15, 0.036, "sine");
+    if (musicStep % 4 === 0) musicNote(196.00, 1.5, 0.018, "triangle");
+    musicStep++;
+    return;
+  }
   const n = MUSIC_SEQ[musicStep % MUSIC_SEQ.length];
   musicNote(MUSIC_NOTES[n], 1.8, 0.05, "triangle");           // svävande melodi
   if (musicStep % 4 === 0) musicNote(110, 3.4, 0.045, "sine"); // dov bas-drone
@@ -174,7 +195,7 @@ function startMusic() {
   }
   musicTick();
   const tempo = theme === "arena" ? 480
-    : (theme === "castle" ? 650 : (theme === "temple" ? 1100 : 850));
+    : (theme === "castle" ? 650 : (theme === "temple" ? 1100 : (theme === "garden" ? 780 : 850)));
   musicTimer = setInterval(musicTick, tempo);
 }
 
@@ -267,6 +288,7 @@ const LEVEL4_MAP = [
 function buildLevel5() {
   arenaBoss = null;
   dragon = null;
+  evilGuy = null;
   fireballs = [];
   roller = null;
   crumbleCells = [];
@@ -316,6 +338,7 @@ function buildLevel5() {
 // står nere till höger. Båda kan slå en ruta åt alla håll, även diagonalt.
 function buildLevel6() {
   dragon = null;
+  evilGuy = null;
   fireballs = [];
   roller = null;
   crumbleCells = [];
@@ -343,6 +366,47 @@ function buildLevel6() {
   };
 }
 
+// Bana 7 – Trädgården. Tomma rutor från Agusts karta är golv och allt runtom är
+// vägg. Den elaka gubben (X) kan inte besegras. Stå en ruta bakom honom för att
+// få nyckeln till L-dörren. Då pausar han 0,5 sek, backar två steg och står
+// sedan still tills spelaren når M.
+function buildLevel7() {
+  arenaBoss = null;
+  dragon = null;
+  fireballs = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
+  stones = [];
+  snakes = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = null;
+  codeSolved = false;
+  evilGuyKey = false;
+
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill("wall"));
+
+  // Övre rummet och patrullvägen.
+  for (let r = 3; r <= 5; r++) {
+    for (let c = 1; c <= 12; c++) grid[r][c] = "floor";
+  }
+  for (let c = 2; c <= 7; c++) grid[6][c] = "floor";
+  for (let r = 1; r <= 13; r++) grid[r][7] = "floor";
+  grid[1][6] = "floor";
+  grid[1][7] = "floor";
+
+  // Långa vägen hem åt höger, med den låsta L-dörren före målet.
+  for (let c = 1; c <= 18; c++) grid[10][c] = "floor";
+  for (let r = 11; r <= 13; r++) grid[r][7] = "floor";
+  startCell = { col: 7, row: 13 };
+  grid[13][7] = "start";
+  grid[10][17] = "locked-door";
+  grid[10][18] = "goal";
+
+  evilGuy = makeEvilGuy(7, 1);
+}
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
@@ -350,6 +414,7 @@ const LEVELS = [
   { name: "Bana 4: Rullande stenen", theme: "dungeon", map: LEVEL4_MAP, stepMs: STEP_MS, snakeRange: 1 },
   { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
   { name: "Bana 6: Bossarenan", theme: "arena", build: buildLevel6 },
+  { name: "Bana 7: Trädgården", theme: "garden", build: buildLevel7 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -372,15 +437,51 @@ let enteredCode = "";
 let arenaBoss = null;          // den stillastående bossen i Bana 6
 let swordSwingUntil = 0;
 let nextSwordAt = 0;
+let evilGuy = null;            // den elaka gubben i Bana 7
+let evilGuyKey = false;
 
 function makeTurret(c, r) {
   return { col: c, row: r, nextAt: performance.now() + ARROW_FIRE_MS };
+}
+
+function makeEvilGuy(c, r) {
+  return {
+    col: c, row: r,
+    fromX: c * TS, fromY: r * TS, toX: c * TS, toY: r * TS,
+    moveStart: 0, moveDur: 0, moving: false,
+    dir: { dc: 0, dr: 1 },
+    nextAt: performance.now() + EVIL_GUY_STEP_MS,
+    mode: "patrol",
+    patrolIndex: 0,
+    stepsLeft: EVIL_GUY_PATROL[0].steps,
+    pauseUntil: 0,
+    backStepsLeft: 0,
+    backDir: { dc: 0, dr: -1 },
+  };
+}
+
+function resetEvilGuy(now) {
+  if (!evilGuy) return;
+  evilGuy.col = 7;
+  evilGuy.row = 1;
+  evilGuy.fromX = evilGuy.toX = evilGuy.col * TS;
+  evilGuy.fromY = evilGuy.toY = evilGuy.row * TS;
+  evilGuy.moving = false;
+  evilGuy.dir = { dc: 0, dr: 1 };
+  evilGuy.mode = "patrol";
+  evilGuy.patrolIndex = 0;
+  evilGuy.stepsLeft = EVIL_GUY_PATROL[0].steps;
+  evilGuy.pauseUntil = 0;
+  evilGuy.backStepsLeft = 0;
+  evilGuy.backDir = { dc: 0, dr: -1 };
+  evilGuy.nextAt = now + EVIL_GUY_STEP_MS;
 }
 
 // Bana 1 byggs programmatiskt (samma som tidigare, väl testad)
 function buildLevel1() {
   arenaBoss = null;
   dragon = null;
+  evilGuy = null;
   fireballs = [];
   roller = null;
   crumbleCells = [];
@@ -389,6 +490,7 @@ function buildLevel1() {
   arrows = [];
   templeTeleport = null;
   codeSolved = false;
+  evilGuyKey = false;
   grid = [];
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -511,6 +613,8 @@ function parseMap(map) {
   templeTeleport = null;
   codeSolved = false;
   arenaBoss = null;
+  evilGuy = null;
+  evilGuyKey = false;
   startCell = { col: 1, row: 1 };
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -622,6 +726,7 @@ function tileAt(c, r) {
 function isSolid(c, r) {
   const t = tileAt(c, r);
   if (t === "wall" || t === "log") return true;
+  if (t === "locked-door" && !evilGuyKey) return true;
   if (dragon && dragon.lives > 0 && dragon.col === c && dragon.row === r) return true;
   if (arenaBoss && arenaBoss.col === c && arenaBoss.row === r) return true;
   return false;
@@ -959,6 +1064,21 @@ function updateArenaBoss(now) {
   if (isNextToEnemy(arenaBoss)) hit();
 }
 
+function tryCollectEvilGuyKey(now) {
+  if (!evilGuy || evilGuyKey || evilGuy.moving) return;
+  const behindCol = evilGuy.col - evilGuy.dir.dc;
+  const behindRow = evilGuy.row - evilGuy.dir.dr;
+  if (player.col !== behindCol || player.row !== behindRow) return;
+  evilGuyKey = true;
+  evilGuy.mode = "pause";
+  evilGuy.pauseUntil = now + EVIL_GUY_ALERT_PAUSE_MS;
+  evilGuy.backStepsLeft = 2;
+  evilGuy.backDir = { dc: -evilGuy.dir.dc, dr: -evilGuy.dir.dr };
+  evilGuy.nextAt = evilGuy.pauseUntil;
+  sfxLevel();
+  updateHud();
+}
+
 function onPlayerArrived() {
   const queuedJump = player.jumpQueued;
   player.jumpQueued = false;
@@ -1002,6 +1122,7 @@ function die() {
     if (dragon) dragon.fireAt = performance.now() + 1200;
     if (arenaBoss) arenaBoss.nextAttackAt = performance.now() + BOSS_ATTACK_MS;
     if (roller) resetRoller(performance.now());    // stenen tillbaka till start
+    if (evilGuy) resetEvilGuy(performance.now());
     restoreCrumbles();                             // laga rasade K-block inför nytt försök
     sfxHurt();
   }
@@ -1221,6 +1342,7 @@ function update(now) {
   if (dragon) updateDragon(dragon, now);
   if (arenaBoss) updateArenaBoss(now);
   if (roller) updateRoller(now);
+  if (evilGuy) updateEvilGuy(now);
   updateTurrets(now);
   updateCrumbles(now);
   updateFireballs(now);
@@ -1243,6 +1365,7 @@ function update(now) {
     for (const arrow of arrows) {
       if (Math.hypot(pc.x - arrow.x, pc.y - arrow.y) < TS * 0.34) { hit(); break; }
     }
+    if (state === "playing" && evilGuy && evilGuyTouchesPlayer()) hit();
   }
   // Rullande stenen krossar dig oavsett osårbarhet eller hopp
   if (roller) {
@@ -1351,6 +1474,69 @@ function updateCrumbles(now) {
   }
 }
 
+function nextEvilPatrolDir(guy) {
+  while (guy.stepsLeft <= 0) {
+    guy.patrolIndex = (guy.patrolIndex + 1) % EVIL_GUY_PATROL.length;
+    guy.stepsLeft = EVIL_GUY_PATROL[guy.patrolIndex].steps;
+  }
+  const part = EVIL_GUY_PATROL[guy.patrolIndex];
+  return { dc: part.dc, dr: part.dr };
+}
+
+function updateEvilGuy(now) {
+  const guy = evilGuy;
+  if (guy.moving) {
+    if ((now - guy.moveStart) / guy.moveDur < 1) return;
+    guy.moving = false;
+  }
+
+  tryCollectEvilGuyKey(now);
+
+  if (guy.mode === "pause") {
+    if (now < guy.pauseUntil) return;
+    guy.mode = "backing";
+    guy.nextAt = now;
+  }
+  if (guy.mode === "stopped") return;
+  if (now < guy.nextAt) return;
+
+  let d;
+  if (guy.mode === "backing") {
+    d = guy.backDir;
+  } else {
+    d = nextEvilPatrolDir(guy);
+  }
+
+  const nc = guy.col + d.dc;
+  const nr = guy.row + d.dr;
+  if (tileAt(nc, nr) === "wall") {
+    guy.nextAt = now + EVIL_GUY_STEP_MS;
+    if (guy.mode === "patrol") guy.stepsLeft = 0;
+    return;
+  }
+
+  guy.dir = d;
+  if (guy.mode === "patrol") guy.stepsLeft -= 1;
+  else if (guy.mode === "backing") guy.backStepsLeft -= 1;
+  beginMove(guy, nc, nr, EVIL_GUY_STEP_MS, now);
+  guy.nextAt = now + EVIL_GUY_STEP_MS;
+  if (guy.mode === "backing" && guy.backStepsLeft <= 0) {
+    guy.mode = "stopped";
+  }
+}
+
+function evilGuyTouchesPlayer() {
+  if (!evilGuy) return false;
+  if (evilGuyKey) return false;
+  if (player.col === evilGuy.col && player.row === evilGuy.row) return true;
+  for (let distance = 1; distance <= 2; distance++) {
+    const c = evilGuy.col + evilGuy.dir.dc * distance;
+    const r = evilGuy.row + evilGuy.dir.dr * distance;
+    if (player.col === c && player.row === r) return true;
+  }
+  return false;
+}
+
 // Draken sprutar eld åt alla fyra håll samtidigt (upp, ner, höger, vänster)
 // så den skyddar sig på alla sidor.
 const FIRE_DIRS = [
@@ -1449,6 +1635,7 @@ function draw(now) {
   for (const arrow of arrows) drawArrow(arrow);
   for (const sn of snakes) drawSnake(sn, now);
   if (arenaBoss) drawArenaBoss(now);
+  if (evilGuy) drawEvilGuy(now);
 
   // Koden visas bara när spelaren verkligen har gått fram till K-rutan.
   if (theme === "temple" && state === "playing" &&
@@ -1465,6 +1652,7 @@ function drawTile(c, r) {
   const underground = theme === "underground";
   const temple = theme === "temple";
   const arena = theme === "arena";
+  const garden = theme === "garden";
 
   if (t === "wall") {
     if (underground) {
@@ -1480,7 +1668,23 @@ function drawTile(c, r) {
       if ((c * 5 + r * 3) % 9 === 0) drawChain(x + TS / 2, y);
       return;
     }
-    if (arena) {
+    if (garden) {
+      ctx.fillStyle = "#234d28";
+      ctx.fillRect(x, y, TS, TS);
+      ctx.fillStyle = ((c + r) % 2 === 0) ? "#2f6b35" : "#285f30";
+      ctx.fillRect(x + 2, y + 2, TS - 4, TS - 4);
+      ctx.fillStyle = "#58a94a";
+      ctx.beginPath();
+      ctx.arc(x + 9, y + 11, 5, 0, Math.PI * 2);
+      ctx.arc(x + 20, y + 7, 5, 0, Math.PI * 2);
+      ctx.arc(x + 31, y + 13, 5, 0, Math.PI * 2);
+      ctx.arc(x + 13, y + 29, 5, 0, Math.PI * 2);
+      ctx.arc(x + 28, y + 28, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#18351e";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 2, y + 2, TS - 4, TS - 4);
+    } else if (arena) {
       ctx.fillStyle = "#3d2530";
       ctx.fillRect(x, y, TS, TS);
       ctx.fillStyle = ((c + r) % 2 === 0) ? "#563342" : "#4b2c39";
@@ -1523,6 +1727,8 @@ function drawTile(c, r) {
   // Golv
   if (underground) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#211e19" : "#1b1916";
+  } else if (garden) {
+    ctx.fillStyle = ((c + r) % 2 === 0) ? "#4e8f3d" : "#478438";
   } else if (arena) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#9b7958" : "#8d6d50";
   } else if (temple) {
@@ -1533,6 +1739,17 @@ function drawTile(c, r) {
     ctx.fillStyle = ((c + r) % 2 === 0) ? "#333a47" : "#2f3540";
   }
   ctx.fillRect(x, y, TS, TS);
+  if (garden) {
+    ctx.fillStyle = "rgba(230,255,190,0.18)";
+    ctx.fillRect(x + 8 + ((c * 7) % 17), y + 7 + ((r * 5) % 19), 3, 8);
+    ctx.fillRect(x + 24 + ((r * 4) % 8), y + 22 + ((c * 3) % 9), 2, 7);
+    if ((c * 11 + r * 5) % 17 === 0) {
+      ctx.fillStyle = (c + r) % 2 === 0 ? "#ffd1dc" : "#ffe36e";
+      ctx.beginPath();
+      ctx.arc(x + TS / 2, y + TS / 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   if (t === "hole") {
     ctx.fillStyle = "#0c0e12";
@@ -1578,7 +1795,7 @@ function drawTile(c, r) {
     ctx.stroke();
   } else if (t === "goal") {
     drawStar(x + TS / 2, y + TS / 2, TS * 0.4, "#ffd34d");
-    if (temple) {
+    if (temple || evilGuy) {
       ctx.fillStyle = "#6f4c00";
       ctx.font = "bold 13px sans-serif";
       ctx.textAlign = "center";
@@ -1597,6 +1814,17 @@ function drawTile(c, r) {
     ctx.fillStyle = codeSolved ? "#397a4c" : "#574b68";
     roundRect(x + 4, y + 4, TS - 8, TS - 8, 5); ctx.fill();
     ctx.fillStyle = "#fff";
+    ctx.font = "bold 21px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("L", x + TS / 2, y + TS / 2);
+  } else if (t === "locked-door") {
+    ctx.fillStyle = evilGuyKey ? "#496e45" : "#5b3c2d";
+    roundRect(x + 4, y + 4, TS - 8, TS - 8, 5); ctx.fill();
+    ctx.strokeStyle = evilGuyKey ? "#94e48d" : "#d1a45b";
+    ctx.lineWidth = 2;
+    roundRect(x + 4, y + 4, TS - 8, TS - 8, 5); ctx.stroke();
+    ctx.fillStyle = "#fff5c8";
     ctx.font = "bold 21px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1909,6 +2137,95 @@ function drawArenaBoss(now) {
 
 }
 
+function drawEvilGuy(now) {
+  const p = animPos(evilGuy, now);
+  const cx = p.x + TS / 2;
+  const cy = p.y + TS / 2;
+
+  // Visa de två farliga rutorna framför honom.
+  if (evilGuy.mode !== "stopped") {
+    ctx.fillStyle = "rgba(255,45,45,0.18)";
+    for (let i = 1; i <= 2; i++) {
+      ctx.fillRect(
+        (evilGuy.col + evilGuy.dir.dc * i) * TS + 4,
+        (evilGuy.row + evilGuy.dir.dr * i) * TS + 4,
+        TS - 8,
+        TS - 8,
+      );
+    }
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  let ang = 0;
+  if (evilGuy.dir.dc === 1) ang = Math.PI / 2;
+  else if (evilGuy.dir.dc === -1) ang = -Math.PI / 2;
+  else if (evilGuy.dir.dr === 1) ang = Math.PI;
+  ctx.rotate(ang);
+
+  // Elak trädgårdsman: grön jacka, brun overall, hatt och ett litet verktyg.
+  ctx.strokeStyle = "#5b3518";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(13, 8);
+  ctx.lineTo(18, -12);
+  ctx.stroke();
+  ctx.strokeStyle = "#b9c9a0";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(16, -13); ctx.lineTo(21, -15);
+  ctx.moveTo(16, -10); ctx.lineTo(21, -10);
+  ctx.moveTo(15, -7); ctx.lineTo(20, -5);
+  ctx.stroke();
+
+  ctx.fillStyle = evilGuyKey ? "#6d7058" : "#2f6b28";
+  roundRect(-13, -10, 26, 24, 7); ctx.fill();
+  ctx.fillStyle = "#6b3f1d";
+  roundRect(-7, -5, 14, 17, 4); ctx.fill();
+  ctx.strokeStyle = "#203f1c";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-6, -7); ctx.lineTo(-2, 4);
+  ctx.moveTo(6, -7); ctx.lineTo(2, 4);
+  ctx.stroke();
+  ctx.fillStyle = "#f0d08b";
+  ctx.beginPath(); ctx.arc(0, -12, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#4c6f28";
+  roundRect(-10, -23, 20, 6, 3); ctx.fill();
+  ctx.fillStyle = "#31501e";
+  roundRect(-7, -29, 14, 10, 4); ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath(); ctx.arc(-3, -13, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3, -13, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-4, -8); ctx.lineTo(4, -8); ctx.stroke();
+
+  if (!evilGuyKey) {
+    ctx.fillStyle = "#c92727";
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("!", 0, 4);
+  } else {
+    ctx.fillStyle = "#ffd34d";
+    ctx.font = "bold 16px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("✓", 0, 2);
+  }
+  ctx.restore();
+
+  if (evilGuyKey) {
+    ctx.fillStyle = "#ffd34d";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("🔑", 8, 42);
+  }
+}
+
 function drawPlayer(now) {
   const p = animPos(player, now);
   const cx = p.x + TS / 2, cy = p.y + TS / 2;
@@ -2057,6 +2374,23 @@ window.render_game_to_text = () => JSON.stringify({
   snakes: snakes.map(sn => ({ col: sn.col, row: sn.row })),
   turrets: turrets.map(t => ({ col: t.col, row: t.row })),
   arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
+  evilGuy: evilGuy ? {
+    col: evilGuy.col,
+    row: evilGuy.row,
+    dir: evilGuy.dir,
+    mode: evilGuy.mode,
+    key: evilGuyKey,
+    dangerous: [1, 2].map(distance => ({
+      col: evilGuy.col + evilGuy.dir.dc * distance,
+      row: evilGuy.row + evilGuy.dir.dr * distance,
+    })),
+  } : null,
+  lockedDoor: (() => {
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] === "locked-door") return { col: c, row: r, open: evilGuyKey };
+    }
+    return null;
+  })(),
   boss: arenaBoss ? {
     col: arenaBoss.col,
     row: arenaBoss.row,
