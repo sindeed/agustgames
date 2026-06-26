@@ -1078,7 +1078,7 @@ function tryStep(d, now) {
 }
 
 function tryStepFor(who, d, now, allowPush, playSound) {
-  if (secondPlayer && tileAt(who.col, who.row) === "goal") return false;
+  if (secondPlayer && tileAt(who.col, who.row) === "goal" && !canLeaveSharedGoal(who)) return false;
   const nc = who.col + d.dc;
   const nr = who.row + d.dr;
 
@@ -1129,7 +1129,7 @@ function performJump() {
 }
 
 function performJumpFor(who) {
-  if (secondPlayer && tileAt(who.col, who.row) === "goal") return;
+  if (secondPlayer && tileAt(who.col, who.row) === "goal" && !canLeaveSharedGoal(who)) return;
   const now = performance.now();
   const d = who.dir;
   const snakeDistance = snakeAheadDistance(d, who);
@@ -1235,6 +1235,14 @@ function checkDualGoalWin() {
   return dualGoals.every(goal =>
     activePlayers().some(p => p.col === goal.col && p.row === goal.row)
   );
+}
+
+function canLeaveSharedGoal(who) {
+  return who === secondPlayer &&
+    player &&
+    player.col === who.col &&
+    player.row === who.row &&
+    tileAt(who.col, who.row) === "goal";
 }
 
 function onPlayerArrivedFor(who) {

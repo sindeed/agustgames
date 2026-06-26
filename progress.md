@@ -104,3 +104,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 8: väggen diagonalt höger från det nedersta V:et är borttagen, så gubbe 2
   kan gå in mot sitt mål.
 - Bana 8: pilfällorna skjuter nu varannan sekund.
+- Bana 8: om båda gubbarna hamnar på samma mål stannar gubbe 1 kvar, men gubbe 2
+  får gå ut igen och fortsätta till det andra målet.
