@@ -82,3 +82,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Verifierat lokalt: Bana 8 laddar, båda gubbarna rör sig samtidigt, målvillkoret
   kräver båda M-rutorna, M-gubben stannar kvar, hopp går över stock men inte sten,
   och inga konsolfel hittades i Chrome-testet.
+- Bana 8: ormen väntar nu en halv sekund i O-rutan istället för en sekund.
+- Bana 8: den övre gången är en ruta längre åt höger. Efter sex steg åt höger
+  har väggen framför flyttats ett steg åt höger.

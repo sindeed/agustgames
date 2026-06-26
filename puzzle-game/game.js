@@ -24,7 +24,7 @@ const ROLLER_HOLE_PAUSE_MS = 1000; // stenen stannar en sekund på varje hål
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
-const SNAKE_GATE_WAIT_MS = 1000; // ormen väntar en sekund i O-rutan
+const SNAKE_GATE_WAIT_MS = 500;  // ormen väntar en halv sekund i O-rutan
 const TEMPLE_CODE = "25412541";
 const BOSS_ATTACK_MS = 1000;
 const SWORD_COOLDOWN_MS = 300;
@@ -433,7 +433,7 @@ function buildLevel8() {
   grid = Array.from({ length: ROWS }, () => Array(COLS).fill("wall"));
 
   // Vänstra delen: två smala gångar, en för varje gubbe.
-  for (let c = 1; c <= 7; c++) grid[7][c] = "floor";
+  for (let c = 1; c <= 8; c++) grid[7][c] = "floor";
   for (let c = 1; c <= 8; c++) grid[11][c] = "floor";
 
   // Två smala uppgångar mot rummet till höger.
