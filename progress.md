@@ -87,3 +87,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   har väggen framför flyttats ett steg åt höger.
 - Bana 8: för gubbe 2 är väggen direkt höger efter sju steg flyttad tre rutor
   upp. Rutan nere blir golv och den nya väggrutan sitter tre steg högre upp.
+- Bana 8: för gubbe 1 är väggen direkt höger efter sju steg flyttad tre rutor
+  ned. Rutan uppe blir golv och den nya väggrutan sitter tre steg längre ned.
