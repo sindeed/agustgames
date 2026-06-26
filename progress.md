@@ -101,3 +101,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 8: ormen fortsätter nu två steg nedåt efter O-rutan.
 - Bana 8: den översta pilfällan är flyttad två rutor upp in i väggen. Väggarna
   direkt vänster och höger om pilfällan är borttagna.
+- Bana 8: väggen diagonalt höger från det nedersta V:et är borttagen, så gubbe 2
+  kan gå in mot sitt mål.
+- Bana 8: pilfällorna skjuter nu varannan sekund.

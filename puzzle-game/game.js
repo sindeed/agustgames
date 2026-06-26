@@ -22,7 +22,7 @@ const ROLLER_STEP_MS = 175; // stenen är lite långsammare än gubben
 const ROLLER_HEADSTART = 2000; // två sekunders försprång innan stenen börjar rulla
 const ROLLER_HOLE_PAUSE_MS = 1000; // stenen stannar en sekund på varje hål
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
-const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
+const ARROW_FIRE_MS = 2000;   // pilfällorna skjuter varannan sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
 const SNAKE_GATE_WAIT_MS = 500;  // ormen väntar en halv sekund i O-rutan
 const TEMPLE_CODE = "25412541";
@@ -488,6 +488,8 @@ function buildLevel8() {
   // V-rutor är väggar inne i rummet.
   grid[5][16] = "v-wall";
   grid[6][16] = "v-wall";
+  // Diagonalt höger från det nedersta V:et är öppet, så gubbe 2 kan gå mot sitt mål.
+  grid[7][17] = "floor";
 
   // Översta pilfällan sitter två rutor högre upp, inne i väggen.
   // Väggarna direkt vänster och höger om den är borttagna.
