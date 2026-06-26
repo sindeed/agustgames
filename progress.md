@@ -71,3 +71,14 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 7: trädgårdsmannen ser nu mindre läskig ut med mjukare färger, snällare
   ansikte och mildare varningsmarkering.
 - Bana 7: patrullen börjar med 2 ner och gubben tittar nedåt från start.
+- Alla banor: hopp kan nu gå över stockar, men inte över stenar.
+- Bana 8 Tvillinggången byggd från Agusts karta. En person styr två gubbar
+  samtidigt; de delar på tre liv. Båda måste stå på varsitt M-mål för att klara
+  banan, och en gubbe som står på M kan inte röra sig mer.
+- Bana 8: O-rutan är bara för ormar. Ormen kan gå in i O, vänta en sekund och
+  fortsätta till nästa ruta, men spelarna kan inte gå in i O.
+- Bana 8: två pilfällor skjuter en gång per sekund. Den övre siktar på den övre
+  gubben och den undre siktar på den undre gubben. V-rutor är väggar.
+- Verifierat lokalt: Bana 8 laddar, båda gubbarna rör sig samtidigt, målvillkoret
+  kräver båda M-rutorna, M-gubben stannar kvar, hopp går över stock men inte sten,
+  och inga konsolfel hittades i Chrome-testet.

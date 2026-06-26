@@ -24,6 +24,7 @@ const ROLLER_HOLE_PAUSE_MS = 1000; // stenen stannar en sekund på varje hål
 const CRUMBLE_MS = 500;      // tid innan ett klurigt K-block rasar och blir hål
 const ARROW_FIRE_MS = 1000;   // pilfällorna skjuter en gång per sekund
 const ARROW_SPEED = 0.09;     // ganska långsam pil (pixlar per ms)
+const SNAKE_GATE_WAIT_MS = 1000; // ormen väntar en sekund i O-rutan
 const TEMPLE_CODE = "25412541";
 const BOSS_ATTACK_MS = 1000;
 const SWORD_COOLDOWN_MS = 300;
@@ -410,6 +411,75 @@ function buildLevel7() {
   evilGuy = makeEvilGuy(7, 1);
 }
 
+// Bana 8 – Tvillinggången. En person styr två gubbar samtidigt: en börjar vid
+// varje S-ruta och båda måste stå på varsitt M-mål. O-rutan är bara för ormar,
+// V-rutor är väggar och X-rutorna är pilfällor som skjuter en gång per sekund.
+function buildLevel8() {
+  arenaBoss = null;
+  dragon = null;
+  evilGuy = null;
+  fireballs = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
+  stones = [];
+  snakes = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = null;
+  codeSolved = false;
+  evilGuyKey = false;
+
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill("wall"));
+
+  // Vänstra delen: två smala gångar, en för varje gubbe.
+  for (let c = 1; c <= 7; c++) grid[7][c] = "floor";
+  for (let c = 1; c <= 8; c++) grid[11][c] = "floor";
+
+  // Två smala uppgångar mot rummet till höger.
+  for (let r = 4; r <= 7; r++) grid[r][7] = "floor";
+  for (let r = 8; r <= 11; r++) grid[r][8] = "floor";
+
+  // Övre rummet och nedre vägen mot de två målen.
+  for (let c = 7; c <= 18; c++) grid[4][c] = "floor";
+  for (let c = 9; c <= 17; c++) {
+    grid[5][c] = "floor";
+    grid[6][c] = "floor";
+  }
+  for (let c = 8; c <= 19; c++) grid[8][c] = "floor";
+  for (let c = 9; c <= 12; c++) {
+    grid[9][c] = "floor";
+    grid[10][c] = "floor";
+  }
+
+  startCell = { col: 1, row: 7 };
+  secondStartCell = { col: 1, row: 11 };
+  grid[7][1] = "start";
+  grid[11][1] = "start";
+
+  dualGoals = [{ col: 18, row: 4 }, { col: 19, row: 8 }];
+  grid[4][18] = "goal";
+  grid[8][19] = "goal";
+
+  // O-rutan från kartan: bara ormen får gå in här.
+  grid[9][4] = "snake-gate";
+  grid[8][4] = "floor";
+  grid[10][4] = "floor";
+  const gateSnake = makeSnake(4, 8, 0);
+  gateSnake.dc = 0;
+  gateSnake.dr = 1;
+  gateSnake.range = 2;
+  snakes.push(gateSnake);
+
+  // V-rutor är väggar inne i rummet.
+  grid[5][16] = "v-wall";
+  grid[6][16] = "v-wall";
+
+  // Två X-rutor: den övre siktar på den övre gubben, den undre på den nedre.
+  turrets.push(makeTurret(13, 5, "player"));
+  turrets.push(makeTurret(13, 6, "second"));
+}
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
@@ -418,6 +488,7 @@ const LEVELS = [
   { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
   { name: "Bana 6: Bossarenan", theme: "arena", build: buildLevel6 },
   { name: "Bana 7: Trädgården", theme: "garden", build: buildLevel7 },
+  { name: "Bana 8: Tvillinggången", theme: "dungeon", build: buildLevel8 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -442,9 +513,12 @@ let swordSwingUntil = 0;
 let nextSwordAt = 0;
 let evilGuy = null;            // den elaka gubben i Bana 7
 let evilGuyKey = false;
+let secondStartCell = null;     // Bana 8: start för den andra gubben
+let secondPlayer = null;        // Bana 8: andra gubben, styrs av samma knappar
+let dualGoals = [];             // Bana 8: båda målen måste vara upptagna
 
-function makeTurret(c, r) {
-  return { col: c, row: r, nextAt: performance.now() + ARROW_FIRE_MS };
+function makeTurret(c, r, target = "player") {
+  return { col: c, row: r, target, nextAt: performance.now() + ARROW_FIRE_MS };
 }
 
 function makeEvilGuy(c, r) {
@@ -542,6 +616,7 @@ function makeSnake(c, r, dir) {
     homeCol: c, homeRow: r, range: Infinity,   // range = hur långt den vandrar från start
     fromX: c * TS, fromY: r * TS, toX: c * TS, toY: r * TS,
     moveStart: 0, moveDur: 0, moving: false,
+    gateWaitUntil: 0,
     trail: [{ x: c * TS + TS / 2, y: r * TS + TS / 2 }],
   };
 }
@@ -607,6 +682,9 @@ function parseMap(map) {
   grid = [];
   stones = [];
   snakes = [];
+  secondStartCell = null;
+  secondPlayer = null;
+  dualGoals = [];
   dragon = null;
   fireballs = [];
   roller = null;
@@ -650,6 +728,9 @@ function loadLevel(index) {
   const def = LEVELS[index];
   theme = def.theme;
   playerStepMs = def.stepMs || STEP_MS;
+  secondStartCell = null;
+  secondPlayer = null;
+  dualGoals = [];
   if (def.build) def.build();
   else parseMap(def.map);
   document.body.classList.toggle("sword-level", !!(dragon || arenaBoss));
@@ -673,17 +754,30 @@ function loadLevel(index) {
 
 let player;
 
-function resetPlayer() {
-  player = {
-    col: startCell.col, row: startCell.row,
-    fromX: startCell.col * TS, fromY: startCell.row * TS,
-    toX: startCell.col * TS, toY: startCell.row * TS,
+function makePlayerAt(cell) {
+  return {
+    col: cell.col, row: cell.row,
+    fromX: cell.col * TS, fromY: cell.row * TS,
+    toX: cell.col * TS, toY: cell.row * TS,
     moveStart: 0, moveDur: 0, moving: false,
     dir: { dc: 0, dr: 1 },
     jumping: false,
     jumpQueued: false,
     invuln: 0,
   };
+}
+
+function resetPlayer() {
+  player = makePlayerAt(startCell);
+  secondPlayer = secondStartCell ? makePlayerAt(secondStartCell) : null;
+}
+
+function activePlayers() {
+  return secondPlayer ? [player, secondPlayer] : [player];
+}
+
+function anyPlayerMoving() {
+  return activePlayers().some(p => p.moving);
 }
 
 /* ---------------------------------------------------------------- */
@@ -729,7 +823,7 @@ function tileAt(c, r) {
 
 function isSolid(c, r) {
   const t = tileAt(c, r);
-  if (t === "wall" || t === "log") return true;
+  if (t === "wall" || t === "v-wall" || t === "log" || t === "snake-gate") return true;
   if (t === "locked-door" && !evilGuyKey) return true;
   if (dragon && dragon.lives > 0 && dragon.col === c && dragon.row === r) return true;
   if (arenaBoss && arenaBoss.col === c && arenaBoss.row === r) return true;
@@ -738,6 +832,16 @@ function isSolid(c, r) {
 
 function stoneAt(c, r) {
   return stones.find(s => s.col === c && s.row === r) || null;
+}
+
+function blocksJumpPath(c, r) {
+  const t = tileAt(c, r);
+  if (t === "wall" || t === "v-wall" || t === "snake-gate") return true;
+  if (t === "locked-door" && !evilGuyKey) return true;
+  if (stoneAt(c, r)) return true;
+  if (dragon && dragon.lives > 0 && dragon.col === c && dragon.row === r) return true;
+  if (arenaBoss && arenaBoss.col === c && arenaBoss.row === r) return true;
+  return false;
 }
 
 /* ---------------------------------------------------------------- */
@@ -886,10 +990,11 @@ function pause() {
 function resume() {
   if (state !== "paused") return;
   const delta = performance.now() - pauseAt;     // skjut fram animationer så de inte hoppar
-  for (const o of [player, ...stones, ...snakes]) {
+  for (const o of [player, secondPlayer, ...stones, ...snakes]) {
     if (o && o.moving) o.moveStart += delta;
   }
   if (player && player.invuln) player.invuln += delta;
+  if (secondPlayer && secondPlayer.invuln) secondPlayer.invuln += delta;
   for (const fb of fireballs) fb.born += delta;
   for (const arrow of arrows) arrow.born += delta;
   for (const turret of turrets) turret.nextAt += delta;
@@ -939,13 +1044,28 @@ function beginMove(obj, toCol, toRow, dur, now) {
 }
 
 function tryStep(d, now) {
-  const nc = player.col + d.dc;
-  const nr = player.row + d.dr;
+  if (secondPlayer) {
+    let moved = false;
+    for (const p of activePlayers()) {
+      p.dir = d;
+      moved = tryStepFor(p, d, now, false, false) || moved;
+    }
+    if (moved) sfxStep();
+    return moved;
+  }
+  return tryStepFor(player, d, now, true, true);
+}
+
+function tryStepFor(who, d, now, allowPush, playSound) {
+  if (secondPlayer && tileAt(who.col, who.row) === "goal") return false;
+  const nc = who.col + d.dc;
+  const nr = who.row + d.dr;
 
   if (isSolid(nc, nr)) return false;
 
   const stone = stoneAt(nc, nr);
   if (stone) {
+    if (!allowPush) return false;
     const sc = nc + d.dc;
     const sr = nr + d.dr;
     // får ej knuffas in i vägg, annan sten – eller över stjärnan (skulle låsa banan)
@@ -955,43 +1075,52 @@ function tryStep(d, now) {
       stones.splice(stones.indexOf(stone), 1);
       score += 25;
       updateHud();
-      sfxFill();
+      if (playSound) sfxFill();
     } else {
       beginMove(stone, sc, sr, STEP_MS, now);
-      sfxPush();
+      if (playSound) sfxPush();
     }
-  } else {
+  } else if (playSound) {
     sfxStep();
   }
 
-  player.jumping = false;
-  beginMove(player, nc, nr, playerStepMs, now);
+  who.jumping = false;
+  beginMove(who, nc, nr, playerStepMs, now);
   return true;
 }
 
-function snakeAheadDistance(d) {
+function snakeAheadDistance(d, who = player) {
   if (!roller || (d.dc === 0 && d.dr === 0)) return 0;
   for (let distance = 1; distance <= 3; distance++) {
-    const c = player.col + distance * d.dc;
-    const r = player.row + distance * d.dr;
+    const c = who.col + distance * d.dc;
+    const r = who.row + distance * d.dr;
     if (snakes.some(sn => sn.col === c && sn.row === r)) return distance;
   }
   return 0;
 }
 
 function performJump() {
+  if (secondPlayer) {
+    for (const p of activePlayers()) performJumpFor(p);
+    return;
+  }
+  performJumpFor(player);
+}
+
+function performJumpFor(who) {
+  if (secondPlayer && tileAt(who.col, who.row) === "goal") return;
   const now = performance.now();
-  const d = player.dir;
-  const snakeDistance = snakeAheadDistance(d);
+  const d = who.dir;
+  const snakeDistance = snakeAheadDistance(d, who);
   // På Bana 4 landar det vanliga hoppet precis efter en orm som står högst
   // tre rutor framför spelaren (alltså högst två tomma rutor emellan).
   const distance = snakeDistance > 0 ? snakeDistance + 1 : 2;
-  const lc = player.col + distance * d.dc;
-  const lr = player.row + distance * d.dr;
+  const lc = who.col + distance * d.dc;
+  const lr = who.row + distance * d.dr;
 
   let pathBlocked = false;
   for (let step = 1; step < distance; step++) {
-    if (isSolid(player.col + step * d.dc, player.row + step * d.dr)) {
+    if (blocksJumpPath(who.col + step * d.dc, who.row + step * d.dr)) {
       pathBlocked = true;
       break;
     }
@@ -1003,16 +1132,16 @@ function performJump() {
 
   sfxJump();
   if (canLand && !pathBlocked) {
-    player.jumping = true;
-    beginMove(player, lc, lr, JUMP_MS, now);
+    who.jumping = true;
+    beginMove(who, lc, lr, JUMP_MS, now);
   } else {
-    player.jumping = true;
-    beginMove(player, player.col, player.row, JUMP_MS * 0.7, now);
+    who.jumping = true;
+    beginMove(who, who.col, who.row, JUMP_MS * 0.7, now);
   }
 }
 
 function tryJump() {
-  if (player.moving) {
+  if (anyPlayerMoving()) {
     // Bara Bana 4: ett hopp som trycks medan gubben springer köas och
     // startar direkt när det vanliga steget är klart.
     if (roller && !player.jumping) player.jumpQueued = true;
@@ -1065,7 +1194,7 @@ function updateArenaBoss(now) {
   arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
   arenaBoss.attackUntil = now + 280;
   sfxBossAttack();
-  if (isNextToEnemy(arenaBoss)) hit();
+  if (isNextToEnemy(arenaBoss)) hit(player);
 }
 
 function tryCollectEvilGuyKey(now) {
@@ -1080,20 +1209,35 @@ function tryCollectEvilGuyKey(now) {
   updateHud();
 }
 
-function onPlayerArrived() {
-  const queuedJump = player.jumpQueued;
-  player.jumpQueued = false;
-  const t = tileAt(player.col, player.row);
-  if (t === "goal") { win(); return; }
-  if (t === "hole" && !player.jumping) { die(); return; }
-  if (t === "code-lock" && !codeSolved) { openKeypad(); return; }
+function checkDualGoalWin() {
+  if (!secondPlayer || dualGoals.length < 2) return false;
+  return dualGoals.every(goal =>
+    activePlayers().some(p => p.col === goal.col && p.row === goal.row)
+  );
+}
+
+function onPlayerArrivedFor(who) {
+  const queuedJump = who.jumpQueued;
+  who.jumpQueued = false;
+  const t = tileAt(who.col, who.row);
+  if (t === "goal") {
+    who.jumping = false;
+    if (!secondPlayer || checkDualGoalWin()) win();
+    return;
+  }
+  if (t === "hole" && !who.jumping) { die(); return; }
+  if (who === player && t === "code-lock" && !codeSolved) { openKeypad(); return; }
   if (t === "crumble") {
     // golvet börjar rasa – kom igång igen innan det blir ett hål!
-    grid[player.row][player.col] = "crumbling";
-    activeCrumbles.push({ c: player.col, r: player.row, dieAt: performance.now() + CRUMBLE_MS });
+    grid[who.row][who.col] = "crumbling";
+    activeCrumbles.push({ c: who.col, r: who.row, dieAt: performance.now() + CRUMBLE_MS });
   }
-  player.jumping = false;
-  if (queuedJump && roller && state === "playing") performJump();
+  who.jumping = false;
+  if (queuedJump && roller && state === "playing" && who === player) performJump();
+}
+
+function onPlayerArrived() {
+  onPlayerArrivedFor(player);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1108,25 +1252,31 @@ function die() {
   } else {
     // Efter avklarat kodlås är M den nya kontrollpunkten. Annars skulle en
     // pilträff i rum två skicka spelaren till ett rum som inte längre går att lämna.
+    const now = performance.now();
     const respawn = codeSolved && templeTeleport ? templeTeleport : startCell;
-    player.col = respawn.col;
-    player.row = respawn.row;
-    player.toX = player.fromX = respawn.col * TS;
-    player.toY = player.fromY = respawn.row * TS;
-    player.moving = false;
-    player.jumping = false;
-    player.jumpQueued = false;
-    player.dir = { dc: 0, dr: 1 };
-    player.invuln = performance.now() + INVULN_MS;
+    placePlayerAt(player, respawn, now);
+    if (secondPlayer && secondStartCell) placePlayerAt(secondPlayer, secondStartCell, now);
     fireballs.length = 0;                          // rensa eld så respawn blir rättvis
-    resetTempleHazards(performance.now());
-    if (dragon) dragon.fireAt = performance.now() + 1200;
-    if (arenaBoss) arenaBoss.nextAttackAt = performance.now() + BOSS_ATTACK_MS;
-    if (roller) resetRoller(performance.now());    // stenen tillbaka till start
-    if (evilGuy) resetEvilGuy(performance.now());
+    resetTempleHazards(now);
+    if (dragon) dragon.fireAt = now + 1200;
+    if (arenaBoss) arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
+    if (roller) resetRoller(now);                  // stenen tillbaka till start
+    if (evilGuy) resetEvilGuy(now);
     restoreCrumbles();                             // laga rasade K-block inför nytt försök
     sfxHurt();
   }
+}
+
+function placePlayerAt(who, cell, now) {
+  who.col = cell.col;
+  who.row = cell.row;
+  who.toX = who.fromX = cell.col * TS;
+  who.toY = who.fromY = cell.row * TS;
+  who.moving = false;
+  who.jumping = false;
+  who.jumpQueued = false;
+  who.dir = { dc: 0, dr: 1 };
+  who.invuln = now + INVULN_MS;
 }
 
 function resetTempleHazards(now) {
@@ -1211,17 +1361,17 @@ function restoreCrumbles() {
 // Mjuk träff: kostar ett liv men flyttar dig INTE tillbaka till start. Används i
 // jakt-banor (rullande stenen) så att en orm inte slänger dig hela vägen tillbaka –
 // där är det stenen, hålen och de rasande golven som är de riktiga farorna.
-function softHit() {
-  if (performance.now() < player.invuln) return;
+function softHit(who = player) {
+  if (performance.now() < who.invuln) return;
   lives -= 1;
   updateHud();
   if (lives <= 0) { gameOver(); return; }
-  player.invuln = performance.now() + INVULN_MS;
+  who.invuln = performance.now() + INVULN_MS;
   sfxHurt();
 }
 
-function hit() {
-  if (performance.now() < player.invuln) return;
+function hit(who = player) {
+  if (performance.now() < who.invuln) return;
   die();
 }
 
@@ -1325,17 +1475,18 @@ function animPos(obj, now) {
 function update(now) {
   if (state !== "playing") return;
 
-  if (player.moving) {
-    if ((now - player.moveStart) / player.moveDur >= 1) {
-      player.moving = false;
-      onPlayerArrived();
+  for (const p of activePlayers()) {
+    if (p.moving && (now - p.moveStart) / p.moveDur >= 1) {
+      p.moving = false;
+      onPlayerArrivedFor(p);
+      if (state !== "playing") return;
     }
   }
   if (state !== "playing") return;
 
-  if (!player.moving && heldDirs.length > 0) {
+  if (!anyPlayerMoving() && heldDirs.length > 0) {
     const d = DIR_KEYS[heldDirs[0]];
-    player.dir = d;
+    for (const p of activePlayers()) p.dir = d;
     tryStep(d, now);
   }
 
@@ -1350,26 +1501,33 @@ function update(now) {
   updateArrows(now);
   if (state !== "playing") return;        // kan ha dött av ett rasande golv
 
-  const pc = playerCenter(now);
-  const airborne = player.jumping && player.moving;
-  if (!airborne) {
-    const onHit = roller ? softHit : hit;   // i jakt-banan kastas man inte tillbaka till start
-    for (const sn of snakes) {
-      const sc = animPos(sn, now);
-      const sx = sc.x + TS / 2, sy = sc.y + TS / 2;
-      const dist = Math.hypot(pc.x - sx, pc.y - sy);
-      if (dist < TS * 0.55) { onHit(); break; }
+  for (const p of activePlayers()) {
+    const pc = playerCenterFor(p, now);
+    const airborne = p.jumping && p.moving;
+    if (!airborne) {
+      const onHit = roller ? () => softHit(p) : () => hit(p);   // i jakt-banan kastas man inte tillbaka till start
+      for (const sn of snakes) {
+        const sc = animPos(sn, now);
+        const sx = sc.x + TS / 2, sy = sc.y + TS / 2;
+        const dist = Math.hypot(pc.x - sx, pc.y - sy);
+        if (dist < TS * 0.55) { onHit(); break; }
+      }
+      if (state !== "playing") return;
+      for (const fb of fireballs) {
+        if (Math.hypot(pc.x - fb.x, pc.y - fb.y) < TS * 0.5) { onHit(); break; }
+      }
+      if (state !== "playing") return;
+      for (const arrow of arrows) {
+        if (Math.hypot(pc.x - arrow.x, pc.y - arrow.y) < TS * 0.34) { hit(p); break; }
+      }
+      if (state !== "playing") return;
+      if (p === player && evilGuy && evilGuyTouchesPlayer()) hit();
     }
-    for (const fb of fireballs) {
-      if (Math.hypot(pc.x - fb.x, pc.y - fb.y) < TS * 0.5) { onHit(); break; }
-    }
-    for (const arrow of arrows) {
-      if (Math.hypot(pc.x - arrow.x, pc.y - arrow.y) < TS * 0.34) { hit(); break; }
-    }
-    if (state === "playing" && evilGuy && evilGuyTouchesPlayer()) hit();
+    if (state !== "playing") return;
   }
   // Rullande stenen krossar dig oavsett osårbarhet eller hopp
   if (roller) {
+    const pc = playerCenter(now);
     const rcenter = rollerCenter(now);
     if (Math.hypot(pc.x - rcenter.x, pc.y - rcenter.y) < TS * 0.7) die();
   }
@@ -1387,9 +1545,10 @@ function updateTurrets(now) {
     return;
   }
 
-  const pc = playerCenter(now);
   for (const turret of turrets) {
     if (now < turret.nextAt) continue;
+    const target = turret.target === "second" && secondPlayer ? secondPlayer : player;
+    const pc = playerCenterFor(target, now);
     const x0 = turret.col * TS + TS / 2;
     const y0 = turret.row * TS + TS / 2;
     const dx = pc.x - x0;
@@ -1415,8 +1574,9 @@ function updateArrows(now) {
     const c = Math.floor(arrow.x / TS);
     const r = Math.floor(arrow.y / TS);
     const stillInSourceWall = c === arrow.sourceCol && r === arrow.sourceRow;
+    const tile = tileAt(c, r);
     if (c < 0 || r < 0 || c >= COLS || r >= ROWS ||
-        (!stillInSourceWall && (tileAt(c, r) === "wall" || tileAt(c, r) === "log"))) {
+        (!stillInSourceWall && (tile === "wall" || tile === "v-wall" || tile === "log" || tile === "snake-gate"))) {
       arrows.splice(i, 1);
     }
   }
@@ -1471,7 +1631,9 @@ function updateCrumbles(now) {
     grid[cb.r][cb.c] = "hole";
     activeCrumbles.splice(i, 1);
     sfxCrumble();
-    if (player.col === cb.c && player.row === cb.r && !player.jumping) { die(); return; }
+    for (const p of activePlayers()) {
+      if (p.col === cb.c && p.row === cb.r && !p.jumping) { die(); return; }
+    }
   }
 }
 
@@ -1607,9 +1769,12 @@ function updateSnake(sn, now) {
       sn.moving = false;
       sn.trail.push({ x: sn.col * TS + TS / 2, y: sn.row * TS + TS / 2 });
       if (sn.trail.length > 4) sn.trail.shift();
+      if (tileAt(sn.col, sn.row) === "snake-gate") sn.gateWaitUntil = now + SNAKE_GATE_WAIT_MS;
     }
     return;
   }
+  if (sn.gateWaitUntil && now < sn.gateWaitUntil) return;
+  sn.gateWaitUntil = 0;
   let nc = sn.col + sn.dc, nr = sn.row + sn.dr;
   // vänd om den krockar ELLER har vandrat för långt från sin hemruta
   if (blockedForSnake(nc, nr) || strayedTooFar(sn, nc, nr)) {
@@ -1627,12 +1792,16 @@ function strayedTooFar(sn, nc, nr) {
 
 function blockedForSnake(c, r) {
   const t = tileAt(c, r);
-  return t === "wall" || t === "log" || t === "hole" || t === "goal" || !!stoneAt(c, r);
+  return t === "wall" || t === "v-wall" || t === "log" || t === "hole" || t === "goal" || !!stoneAt(c, r);
+}
+
+function playerCenterFor(who, now) {
+  const p = animPos(who, now);
+  return { x: p.x + TS / 2, y: p.y + TS / 2 };
 }
 
 function playerCenter(now) {
-  const p = animPos(player, now);
-  return { x: p.x + TS / 2, y: p.y + TS / 2 };
+  return playerCenterFor(player, now);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1665,7 +1834,10 @@ function draw(now) {
       tileAt(player.col, player.row) === "code-clue") drawTempleCode();
 
   if (theme === "underground") drawVignette();
-  if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") drawPlayer(now);
+  if (state === "playing" || state === "won" || state === "levelcomplete" || state === "paused") {
+    if (secondPlayer) drawPlayer(now, secondPlayer, "2");
+    drawPlayer(now, player, secondPlayer ? "1" : "");
+  }
 }
 
 function drawTile(c, r) {
@@ -1676,6 +1848,19 @@ function drawTile(c, r) {
   const temple = theme === "temple";
   const arena = theme === "arena";
   const garden = theme === "garden";
+
+  if (t === "v-wall") {
+    ctx.fillStyle = "#3c4250";
+    ctx.fillRect(x, y, TS, TS);
+    ctx.fillStyle = "#474e5e";
+    ctx.fillRect(x + 3, y + 3, TS - 6, TS - 6);
+    ctx.fillStyle = "#c6d2e5";
+    ctx.font = "bold 24px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("V", x + TS / 2, y + TS / 2 + 1);
+    return;
+  }
 
   if (t === "wall") {
     if (underground) {
@@ -1818,13 +2003,24 @@ function drawTile(c, r) {
     ctx.stroke();
   } else if (t === "goal") {
     drawStar(x + TS / 2, y + TS / 2, TS * 0.4, "#ffd34d");
-    if (temple || evilGuy) {
+    if (temple || evilGuy || secondPlayer) {
       ctx.fillStyle = "#6f4c00";
       ctx.font = "bold 13px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("M", x + TS / 2, y + TS / 2 + 1);
     }
+  } else if (t === "snake-gate") {
+    ctx.strokeStyle = "#6fffa2";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x + TS / 2, y + TS / 2, TS * 0.32, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#c8ffd8";
+    ctx.font = "bold 18px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("O", x + TS / 2, y + TS / 2 + 1);
   } else if (t === "code-clue") {
     ctx.fillStyle = "#275e49";
     roundRect(x + 5, y + 5, TS - 10, TS - 10, 5); ctx.fill();
@@ -1883,7 +2079,8 @@ function drawTempleCode() {
 function drawTurret(turret, now) {
   const x = turret.col * TS + TS / 2;
   const y = turret.row * TS + TS / 2;
-  const pc = playerCenter(now);
+  const target = turret.target === "second" && secondPlayer ? secondPlayer : player;
+  const pc = playerCenterFor(target, now);
   const angle = Math.atan2(pc.y - y, pc.x - x);
   ctx.save();
   ctx.translate(x, y);
@@ -2251,17 +2448,17 @@ function drawEvilGuy(now) {
   }
 }
 
-function drawPlayer(now) {
-  const p = animPos(player, now);
+function drawPlayer(now, who = player, label = "") {
+  const p = animPos(who, now);
   const cx = p.x + TS / 2, cy = p.y + TS / 2;
 
   let lift = 0, scale = 1;
-  if (player.jumping && player.moving) {
+  if (who.jumping && who.moving) {
     lift = Math.sin(p.p * Math.PI) * 14;
     scale = 1 + Math.sin(p.p * Math.PI) * 0.18;
   }
 
-  if (now < player.invuln && Math.floor(now / 100) % 2 === 0) return;
+  if (now < who.invuln && Math.floor(now / 100) % 2 === 0) return;
 
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
@@ -2272,7 +2469,7 @@ function drawPlayer(now) {
   ctx.translate(cx, cy - lift);
   ctx.scale(scale, scale);
 
-  const d = player.dir;
+  const d = who.dir;
   let ang = 0;
   if (d.dc === 1) ang = Math.PI / 2;
   else if (d.dc === -1) ang = -Math.PI / 2;
@@ -2291,6 +2488,18 @@ function drawPlayer(now) {
     ctx.beginPath();
     ctx.arc(cx, cy - lift, TS * 0.62, -Math.PI * 0.85, Math.PI * 0.55);
     ctx.stroke();
+  }
+
+  if (label) {
+    ctx.fillStyle = label === "1" ? "#5fd6ff" : "#ff8ee6";
+    ctx.beginPath();
+    ctx.arc(cx + 11, cy - 12 - lift, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#12202a";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, cx + 11, cy - 12 - lift + 1);
   }
 }
 
@@ -2392,12 +2601,26 @@ window.render_game_to_text = () => JSON.stringify({
     jumping: player.jumping,
     jumpQueued: player.jumpQueued,
   } : null,
+  secondPlayer: secondPlayer ? {
+    col: secondPlayer.col,
+    row: secondPlayer.row,
+    moving: secondPlayer.moving,
+    jumping: secondPlayer.jumping,
+    jumpQueued: secondPlayer.jumpQueued,
+  } : null,
+  players: activePlayers().map((p, i) => ({
+    id: i + 1,
+    col: p.col,
+    row: p.row,
+    moving: p.moving,
+    jumping: p.jumping,
+  })),
   lives,
   score,
   codeSolved,
   enteredCode: state === "code" ? enteredCode : undefined,
-  snakes: snakes.map(sn => ({ col: sn.col, row: sn.row })),
-  turrets: turrets.map(t => ({ col: t.col, row: t.row })),
+  snakes: snakes.map(sn => ({ col: sn.col, row: sn.row, gateWaitMs: Math.max(0, Math.round(sn.gateWaitUntil - performance.now())) })),
+  turrets: turrets.map(t => ({ col: t.col, row: t.row, target: t.target })),
   arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
   evilGuy: evilGuy ? {
     col: evilGuy.col,
@@ -2439,6 +2662,20 @@ window.render_game_to_text = () => JSON.stringify({
   rollerHolePauseMs: roller ? ROLLER_HOLE_PAUSE_MS : undefined,
   rollerHolePauseRemainingMs: roller && !roller.moving && tileAt(roller.col, roller.row) === "hole"
     ? Math.max(0, Math.round(roller.nextAt - performance.now())) : undefined,
+  goals: (() => {
+    const found = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] === "goal") found.push({ col: c, row: r });
+    }
+    return found;
+  })(),
+  snakeGates: (() => {
+    const found = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] === "snake-gate") found.push({ col: c, row: r });
+    }
+    return found;
+  })(),
   goal: (() => {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (grid[r][c] === "goal") return { col: c, row: r };
