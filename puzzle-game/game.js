@@ -439,6 +439,10 @@ function buildLevel8() {
   // Två smala uppgångar mot rummet till höger.
   for (let r = 4; r <= 7; r++) grid[r][7] = "floor";
   for (let r = 8; r <= 11; r++) grid[r][8] = "floor";
+  // Gubbe 2 kan gå sju steg åt höger. Väggen som var direkt till höger
+  // är flyttad tre rutor upp, så öppningen där nere blir golv.
+  grid[11][9] = "floor";
+  grid[8][9] = "wall";
 
   // Övre rummet och nedre vägen mot de två målen.
   for (let c = 7; c <= 18; c++) grid[4][c] = "floor";
@@ -446,7 +450,7 @@ function buildLevel8() {
     grid[5][c] = "floor";
     grid[6][c] = "floor";
   }
-  for (let c = 8; c <= 19; c++) grid[8][c] = "floor";
+  for (let c = 8; c <= 19; c++) if (c !== 9) grid[8][c] = "floor";
   for (let c = 9; c <= 12; c++) {
     grid[9][c] = "floor";
     grid[10][c] = "floor";
