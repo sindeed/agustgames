@@ -99,3 +99,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   väggen fortsätter tre rutor nedåt. Rutan ovanför gubbe 1 efter åtta steg åt
   höger är golv igen.
 - Bana 8: ormen fortsätter nu två steg nedåt efter O-rutan.
+- Bana 8: den översta pilfällan är flyttad två rutor upp in i väggen. Väggarna
+  direkt vänster och höger om pilfällan är borttagna.

@@ -489,8 +489,13 @@ function buildLevel8() {
   grid[5][16] = "v-wall";
   grid[6][16] = "v-wall";
 
+  // Översta pilfällan sitter två rutor högre upp, inne i väggen.
+  // Väggarna direkt vänster och höger om den är borttagna.
+  grid[3][12] = "floor";
+  grid[3][14] = "floor";
+
   // Två X-rutor: den övre siktar på den övre gubben, den undre på den nedre.
-  turrets.push(makeTurret(13, 5, "player"));
+  turrets.push(makeTurret(13, 3, "player"));
   turrets.push(makeTurret(13, 6, "second"));
 }
 
