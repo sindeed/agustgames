@@ -458,6 +458,7 @@ function buildLevel8() {
     grid[9][c] = "floor";
     grid[10][c] = "floor";
   }
+  grid[9][9] = "wall";
   grid[10][9] = "wall";
 
   startCell = { col: 1, row: 7 };
