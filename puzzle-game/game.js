@@ -440,9 +440,9 @@ function buildLevel8() {
   for (let r = 4; r <= 7; r++) grid[r][7] = "floor";
   for (let r = 8; r <= 11; r++) grid[r][8] = "floor";
   // Gubbe 2 kan gå sju steg åt höger. Väggen som var direkt till höger
-  // är flyttad tre rutor upp, så öppningen där nere blir golv.
+  // är flyttad tre rutor upp och sedan ett steg åt höger.
   grid[11][9] = "floor";
-  grid[8][9] = "wall";
+  grid[8][10] = "wall";
   // Gubbe 1 kan också gå sju steg åt höger. Väggen som var direkt till höger
   // är flyttad tre rutor ned, så öppningen där uppe blir golv.
   grid[7][9] = "floor";
@@ -455,13 +455,13 @@ function buildLevel8() {
   }
   // När gubbe 1 har gått åtta steg åt höger blir rutan ovanför honom vägg.
   grid[6][9] = "wall";
-  for (let c = 8; c <= 19; c++) if (c !== 9) grid[8][c] = "floor";
+  for (let c = 8; c <= 19; c++) if (c !== 10) grid[8][c] = "floor";
   for (let c = 9; c <= 12; c++) {
     grid[9][c] = "floor";
     grid[10][c] = "floor";
   }
-  grid[9][9] = "wall";
-  grid[10][9] = "wall";
+  grid[9][10] = "wall";
+  grid[10][10] = "wall";
 
   startCell = { col: 1, row: 7 };
   secondStartCell = { col: 1, row: 11 };
