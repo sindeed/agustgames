@@ -453,8 +453,8 @@ function buildLevel8() {
     grid[5][c] = "floor";
     grid[6][c] = "floor";
   }
-  // När gubbe 1 har gått åtta steg åt höger blir rutan ovanför honom vägg.
-  grid[6][9] = "wall";
+  // Rutan ovanför gubbe 1 efter åtta steg åt höger är golv igen.
+  grid[6][9] = "floor";
   for (let c = 8; c <= 19; c++) if (c !== 10) grid[8][c] = "floor";
   for (let c = 9; c <= 12; c++) {
     grid[9][c] = "floor";
@@ -462,6 +462,9 @@ function buildLevel8() {
   }
   grid[9][10] = "wall";
   grid[10][10] = "wall";
+  // Efter sex steg åt höger har gubbe 1 en vägg framför sig. Den väggen
+  // fortsätter tre rutor nedåt.
+  for (let r = 7; r <= 10; r++) grid[r][8] = "wall";
 
   startCell = { col: 1, row: 7 };
   secondStartCell = { col: 1, row: 11 };
@@ -479,7 +482,7 @@ function buildLevel8() {
   const gateSnake = makeSnake(4, 8, 0);
   gateSnake.dc = 0;
   gateSnake.dr = 1;
-  gateSnake.range = 2;
+  gateSnake.range = 3;
   snakes.push(gateSnake);
 
   // V-rutor är väggar inne i rummet.

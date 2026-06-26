@@ -95,3 +95,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   nu vägg.
 - Bana 8: de tre ihopkopplade väggarna mellan gubbarna efter åtta steg åt höger
   är flyttade ett steg åt höger.
+- Bana 8: efter sex steg åt höger för gubbe 1 är rutan framför honom vägg, och
+  väggen fortsätter tre rutor nedåt. Rutan ovanför gubbe 1 efter åtta steg åt
+  höger är golv igen.
+- Bana 8: ormen fortsätter nu två steg nedåt efter O-rutan.
