@@ -72,7 +72,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   ansikte och mildare varningsmarkering.
 - Bana 7: patrullen börjar med 2 ner och gubben tittar nedåt från start.
 - Alla banor: hopp kan nu gå över stockar, men inte över stenar.
-- Bana 8 Spegelvänt byggd från Agusts karta. En person styr två gubbar
+- Bana 8 Spegeltemplet byggd från Agusts karta. En person styr två gubbar
   samtidigt; de delar på tre liv. Båda måste stå på varsitt M-mål för att klara
   banan, och en gubbe som står på M kan inte röra sig mer.
 - Bana 8: O-rutan är bara för ormar. Ormen kan gå in i O, vänta en sekund och
@@ -106,5 +106,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 8: pilfällorna skjuter nu varannan sekund.
 - Bana 8: om båda gubbarna hamnar på samma mål stannar gubbe 1 kvar, men gubbe 2
   får gå ut igen och fortsätta till det andra målet.
-- Bana 8 heter nu Spegelvänt.
+- Bana 8 heter nu Spegeltemplet.
 - Bana 8: om båda gubbarna hamnar på exakt samma ruta tappar laget ett liv.

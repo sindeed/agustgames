@@ -411,7 +411,7 @@ function buildLevel7() {
   evilGuy = makeEvilGuy(7, 1);
 }
 
-// Bana 8 – Spegelvänt. En person styr två gubbar samtidigt: en börjar vid
+// Bana 8 – Spegeltemplet. En person styr två gubbar samtidigt: en börjar vid
 // varje S-ruta och båda måste stå på varsitt M-mål. O-rutan är bara för ormar,
 // V-rutor är väggar och X-rutorna är pilfällor som skjuter en gång per sekund.
 function buildLevel8() {
@@ -509,7 +509,7 @@ const LEVELS = [
   { name: "Bana 5: Kodtemplet", theme: "temple", build: buildLevel5 },
   { name: "Bana 6: Bossarenan", theme: "arena", build: buildLevel6 },
   { name: "Bana 7: Trädgården", theme: "garden", build: buildLevel7 },
-  { name: "Bana 8: Spegelvänt", theme: "dungeon", build: buildLevel8 },
+  { name: "Bana 8: Spegeltemplet", theme: "dungeon", build: buildLevel8 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
