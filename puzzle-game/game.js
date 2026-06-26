@@ -453,6 +453,8 @@ function buildLevel8() {
     grid[5][c] = "floor";
     grid[6][c] = "floor";
   }
+  // När gubbe 1 har gått åtta steg åt höger blir rutan ovanför honom vägg.
+  grid[6][9] = "wall";
   for (let c = 8; c <= 19; c++) if (c !== 9) grid[8][c] = "floor";
   for (let c = 9; c <= 12; c++) {
     grid[9][c] = "floor";
