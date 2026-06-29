@@ -1758,13 +1758,17 @@ function evilGuyTouchesPlayer() {
   return false;
 }
 
-// Draken sprutar eld åt alla fyra håll samtidigt (upp, ner, höger, vänster)
-// så den skyddar sig på alla sidor.
+// Draken sprutar eld åt åtta håll samtidigt: upp, ner, höger, vänster
+// och de fyra diagonalerna.
 const FIRE_DIRS = [
   { dc: 0, dr: -1 },  // upp
+  { dc: 1, dr: -1 },  // upp-höger
   { dc: 1, dr: 0 },   // höger
+  { dc: 1, dr: 1 },   // ner-höger
   { dc: 0, dr: 1 },   // ner
+  { dc: -1, dr: 1 },  // ner-vänster
   { dc: -1, dr: 0 },  // vänster
+  { dc: -1, dr: -1 }, // upp-vänster
 ];
 
 function updateDragon(dr, now) {
@@ -2658,6 +2662,12 @@ window.render_game_to_text = () => JSON.stringify({
   snakes: snakes.map(sn => ({ col: sn.col, row: sn.row, gateWaitMs: Math.max(0, Math.round(sn.gateWaitUntil - performance.now())) })),
   turrets: turrets.map(t => ({ col: t.col, row: t.row, target: t.target })),
   arrows: arrows.map(a => ({ x: Math.round(a.x), y: Math.round(a.y) })),
+  fireballs: fireballs.map(fb => ({
+    x: Math.round(fb.x),
+    y: Math.round(fb.y),
+    dc: fb.dc,
+    dr: fb.dr,
+  })),
   evilGuy: evilGuy ? {
     col: evilGuy.col,
     row: evilGuy.row,

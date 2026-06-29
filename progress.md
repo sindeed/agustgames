@@ -108,3 +108,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   får gå ut igen och fortsätta till det andra målet.
 - Bana 8 heter nu Spegeltemplet.
 - Bana 8: om båda gubbarna hamnar på exakt samma ruta tappar laget ett liv.
+- Bana 3: draken skjuter nu även diagonalt. Elden går i åtta riktningar:
+  upp, ner, höger, vänster och alla fyra diagonaler.
