@@ -110,3 +110,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 8: om båda gubbarna hamnar på exakt samma ruta tappar laget ett liv.
 - Bana 3: draken skjuter nu även diagonalt. Elden går i åtta riktningar:
   upp, ner, höger, vänster och alla fyra diagonaler.
+- Bana 9 Strålbossen: 7x7-arena med vägg runtom. Spelaren startar uppe till
+  vänster, bossen står i mitten, har tio liv och måste besegras med samma
+  svärd/SLÅ-knapp som Bana 6. Bossen loopar för alltid: ett medsols laservarv
+  på fyra sekunder, sedan två meteorer som siktar på spelaren. Meteorerna visar
+  skugga i en sekund innan de landar, så spelaren hinner gå bort.

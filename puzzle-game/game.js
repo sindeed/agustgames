@@ -30,6 +30,11 @@ const BOSS_ATTACK_MS = 1000;
 const SWORD_COOLDOWN_MS = 300;
 const BOSS_START_LIVES = 5;
 const DRAGON_START_LIVES = 3;
+const LASER_BOSS_START_LIVES = 10;
+const LASER_BOSS_SPIN_MS = 4000;      // ett helt laservarv
+const LASER_HIT_WIDTH = 9;            // hur nära strålen man får stå
+const METEOR_WARNING_MS = 1000;       // skuggan syns innan meteor landar
+const METEOR_AFTER_MS = 260;          // liten paus efter nedslag
 const EVIL_GUY_STEP_MS = 500;
 const EVIL_GUY_ALERT_PAUSE_MS = 500;
 const EVIL_GUY_PATROL = [
@@ -294,6 +299,7 @@ function buildLevel5() {
   dragon = null;
   evilGuy = null;
   fireballs = [];
+  meteors = [];
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
@@ -344,6 +350,7 @@ function buildLevel6() {
   dragon = null;
   evilGuy = null;
   fireballs = [];
+  meteors = [];
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
@@ -378,6 +385,7 @@ function buildLevel7() {
   arenaBoss = null;
   dragon = null;
   fireballs = [];
+  meteors = [];
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
@@ -419,6 +427,7 @@ function buildLevel8() {
   dragon = null;
   evilGuy = null;
   fireballs = [];
+  meteors = [];
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
@@ -501,6 +510,48 @@ function buildLevel8() {
   turrets.push(makeTurret(13, 6, "second"));
 }
 
+// Bana 9 – Strålbossen. 7x7 golv med vägg runtom. Bossen i mitten gör:
+// laser ett helt varv → två meteorer med skuggvarning → börja om för alltid.
+function buildLevel9() {
+  dragon = null;
+  evilGuy = null;
+  fireballs = [];
+  meteors = [];
+  roller = null;
+  crumbleCells = [];
+  activeCrumbles = [];
+  stones = [];
+  snakes = [];
+  turrets = [];
+  arrows = [];
+  templeTeleport = null;
+  codeSolved = false;
+  evilGuyKey = false;
+
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill("wall"));
+  const area = { left: 6, top: 4, right: 12, bottom: 10 };
+  for (let r = area.top; r <= area.bottom; r++) {
+    for (let c = area.left; c <= area.right; c++) grid[r][c] = "floor";
+  }
+
+  startCell = { col: area.left, row: area.top };
+  grid[startCell.row][startCell.col] = "start";
+  const now = frameNow || performance.now();
+  arenaBoss = {
+    col: 9,
+    row: 7,
+    lives: LASER_BOSS_START_LIVES,
+    nextAttackAt: Infinity,
+    attackUntil: 0,
+    hurtUntil: 0,
+    kind: "laser",
+    phase: "laser",
+    area,
+    beamStartAt: now,
+    phaseEndsAt: now + LASER_BOSS_SPIN_MS,
+  };
+}
+
 const LEVELS = [
   { name: "Bana 1: Grottan", theme: "dungeon", build: buildLevel1 },
   { name: "Bana 2: Riddarborgen", theme: "castle", map: LEVEL2_MAP },
@@ -510,6 +561,7 @@ const LEVELS = [
   { name: "Bana 6: Bossarenan", theme: "arena", build: buildLevel6 },
   { name: "Bana 7: Trädgården", theme: "garden", build: buildLevel7 },
   { name: "Bana 8: Spegeltemplet", theme: "dungeon", build: buildLevel8 },
+  { name: "Bana 9: Strålbossen", theme: "arena", build: buildLevel9 },
 ];
 
 // Aktuell bana – fylls i av loadLevel()
@@ -520,6 +572,7 @@ let startCell;   // {col,row}
 let theme = "dungeon";
 let dragon = null;   // boss-draken (Bana 3) eller null
 let fireballs = [];  // drakens eldklot
+let meteors = [];    // meteorer i Bana 9
 let roller = null;       // rullande stenen (Bana 4) eller null
 let crumbleCells = [];   // alla K-block (för att kunna återställa vid omstart)
 let activeCrumbles = []; // K-block som börjat rasa: {c, r, dieAt}
@@ -582,6 +635,7 @@ function buildLevel1() {
   dragon = null;
   evilGuy = null;
   fireballs = [];
+  meteors = [];
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
@@ -708,6 +762,7 @@ function parseMap(map) {
   dualGoals = [];
   dragon = null;
   fireballs = [];
+  meteors = [];
   roller = null;
   crumbleCells = [];
   activeCrumbles = [];
@@ -1190,6 +1245,98 @@ function isNextToEnemy(enemy) {
   return Math.max(dc, dr) === 1;
 }
 
+function isLaserBoss(enemy) {
+  return enemy && enemy.kind === "laser";
+}
+
+function laserBossAngle(boss, now) {
+  const elapsed = ((now - boss.beamStartAt) % LASER_BOSS_SPIN_MS + LASER_BOSS_SPIN_MS) % LASER_BOSS_SPIN_MS;
+  return -Math.PI / 2 + (elapsed / LASER_BOSS_SPIN_MS) * Math.PI * 2;
+}
+
+function laserBossBeamSegment(boss, now) {
+  const cx = boss.col * TS + TS / 2;
+  const cy = boss.row * TS + TS / 2;
+  const angle = laserBossAngle(boss, now);
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const area = boss.area;
+  const minX = area.left * TS;
+  const maxX = (area.right + 1) * TS;
+  const minY = area.top * TS;
+  const maxY = (area.bottom + 1) * TS;
+  let length = Infinity;
+  if (dx > 0) length = Math.min(length, (maxX - cx) / dx);
+  if (dx < 0) length = Math.min(length, (minX - cx) / dx);
+  if (dy > 0) length = Math.min(length, (maxY - cy) / dy);
+  if (dy < 0) length = Math.min(length, (minY - cy) / dy);
+  if (!Number.isFinite(length)) length = TS * 3.5;
+  return { cx, cy, dx, dy, angle, length, ex: cx + dx * length, ey: cy + dy * length };
+}
+
+function laserBossHitsPlayer(boss, who, now) {
+  if (!isLaserBoss(boss) || boss.phase !== "laser" || boss.lives <= 0 || !who) return false;
+  const beam = laserBossBeamSegment(boss, now);
+  const pc = playerCenterFor(who, now);
+  const px = pc.x - beam.cx;
+  const py = pc.y - beam.cy;
+  const along = px * beam.dx + py * beam.dy;
+  if (along < TS * 0.35 || along > beam.length) return false;
+  const distanceFromBeam = Math.abs(px * beam.dy - py * beam.dx);
+  return distanceFromBeam <= LASER_HIT_WIDTH;
+}
+
+function clampToLaserArena(boss, c, r) {
+  return {
+    col: Math.max(boss.area.left, Math.min(boss.area.right, c)),
+    row: Math.max(boss.area.top, Math.min(boss.area.bottom, r)),
+  };
+}
+
+function makeMeteorTarget(boss, base, index) {
+  if (index === 0) return clampToLaserArena(boss, base.col, base.row);
+  const options = [
+    { col: base.col + player.dir.dc, row: base.row + player.dir.dr },
+    { col: base.col + 1, row: base.row },
+    { col: base.col - 1, row: base.row },
+    { col: base.col, row: base.row + 1 },
+    { col: base.col, row: base.row - 1 },
+    { col: base.col, row: base.row },
+  ];
+  for (const option of options) {
+    const target = clampToLaserArena(boss, option.col, option.row);
+    const sameAsFirst = target.col === base.col && target.row === base.row;
+    const bossCell = target.col === boss.col && target.row === boss.row;
+    const walkable = tileAt(target.col, target.row) === "floor" || tileAt(target.col, target.row) === "start";
+    if (!sameAsFirst && !bossCell && walkable) return target;
+  }
+  return clampToLaserArena(boss, base.col, base.row);
+}
+
+function spawnLaserBossMeteors(boss, now) {
+  const base = { col: player.col, row: player.row };
+  for (let i = 0; i < 2; i++) {
+    const target = makeMeteorTarget(boss, base, i);
+    meteors.push({
+      col: target.col,
+      row: target.row,
+      warnAt: now,
+      landAt: now + METEOR_WARNING_MS + i * 140,
+      doneAt: now + METEOR_WARNING_MS + METEOR_AFTER_MS + i * 140,
+      hit: false,
+    });
+  }
+  sfxFire();
+}
+
+function resetLaserBossPhase(now) {
+  if (!isLaserBoss(arenaBoss)) return;
+  meteors = [];
+  arenaBoss.phase = "laser";
+  arenaBoss.beamStartAt = now;
+  arenaBoss.phaseEndsAt = now + LASER_BOSS_SPIN_MS;
+}
+
 function playerAttack() {
   const enemy = arenaBoss || dragon;
   if (!enemy || enemy.lives <= 0 || player.moving) return;
@@ -1206,16 +1353,66 @@ function playerAttack() {
   sfxBossHit();
   if (enemy.lives <= 0) {
     if (enemy === dragon) fireballs.length = 0;
+    if (isLaserBoss(enemy)) meteors.length = 0;
     win();
   }
 }
 
 function updateArenaBoss(now) {
-  if (!arenaBoss || arenaBoss.lives <= 0 || now < arenaBoss.nextAttackAt) return;
+  if (!arenaBoss || arenaBoss.lives <= 0) return;
+  if (isLaserBoss(arenaBoss)) {
+    updateLaserBoss(now);
+    return;
+  }
+  if (now < arenaBoss.nextAttackAt) return;
   arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
   arenaBoss.attackUntil = now + 280;
   sfxBossAttack();
   if (isNextToEnemy(arenaBoss)) hit(player);
+}
+
+function updateLaserBoss(now) {
+  if (arenaBoss.phase === "laser") {
+    for (const p of activePlayers()) {
+      if (laserBossHitsPlayer(arenaBoss, p, now)) {
+        hit(p);
+        if (state !== "playing") return;
+      }
+    }
+    if (now >= arenaBoss.phaseEndsAt) {
+      arenaBoss.phase = "meteors";
+      spawnLaserBossMeteors(arenaBoss, now);
+      arenaBoss.phaseEndsAt = now + METEOR_WARNING_MS + METEOR_AFTER_MS + 180;
+    }
+    return;
+  }
+
+  updateMeteors(now);
+  if (state !== "playing") return;
+  if (now >= arenaBoss.phaseEndsAt && meteors.length === 0) {
+    resetLaserBossPhase(now);
+  }
+}
+
+function updateMeteors(now) {
+  for (let i = meteors.length - 1; i >= 0; i--) {
+    const meteor = meteors[i];
+    if (!meteor.hit && now >= meteor.landAt) {
+      meteor.hit = true;
+      sfxBossAttack();
+      for (const p of activePlayers()) {
+        const pc = playerCenterFor(p, now);
+        const mx = meteor.col * TS + TS / 2;
+        const my = meteor.row * TS + TS / 2;
+        if (Math.hypot(pc.x - mx, pc.y - my) < TS * 0.52) {
+          hit(p);
+          if (state !== "playing") return;
+          break;
+        }
+      }
+    }
+    if (now >= meteor.doneAt) meteors.splice(i, 1);
+  }
 }
 
 function tryCollectEvilGuyKey(now) {
@@ -1288,7 +1485,8 @@ function die() {
     fireballs.length = 0;                          // rensa eld så respawn blir rättvis
     resetTempleHazards(now);
     if (dragon) dragon.fireAt = now + 1200;
-    if (arenaBoss) arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
+    if (isLaserBoss(arenaBoss)) resetLaserBossPhase(now);
+    else if (arenaBoss) arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
     if (roller) resetRoller(now);                  // stenen tillbaka till start
     if (evilGuy) resetEvilGuy(now);
     restoreCrumbles();                             // laga rasade K-block inför nytt försök
@@ -1522,6 +1720,7 @@ function update(now) {
   for (const sn of snakes) updateSnake(sn, now);
   if (dragon) updateDragon(dragon, now);
   if (arenaBoss) updateArenaBoss(now);
+  if (state !== "playing") return;
   if (roller) updateRoller(now);
   if (evilGuy) updateEvilGuy(now);
   updateTurrets(now);
@@ -1866,6 +2065,8 @@ function draw(now) {
   for (const turret of turrets) drawTurret(turret, now);
   for (const arrow of arrows) drawArrow(arrow);
   for (const sn of snakes) drawSnake(sn, now);
+  if (isLaserBoss(arenaBoss)) drawLaserBossBeam(now);
+  for (const meteor of meteors) drawMeteor(meteor, now);
   if (arenaBoss) drawArenaBoss(now);
   if (evilGuy) drawEvilGuy(now);
 
@@ -2361,6 +2562,77 @@ function drawSnake(sn, now) {
   ctx.beginPath(); ctx.arc(hx + ex + 3, hy + ey + 3, 1.6, 0, 7); ctx.fill();
 }
 
+function drawLaserBossBeam(now) {
+  if (!isLaserBoss(arenaBoss) || arenaBoss.phase !== "laser" || arenaBoss.lives <= 0) return;
+  const beam = laserBossBeamSegment(arenaBoss, now);
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(255, 45, 40, 0.24)";
+  ctx.lineWidth = 22;
+  ctx.beginPath();
+  ctx.moveTo(beam.cx, beam.cy);
+  ctx.lineTo(beam.ex, beam.ey);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(255, 185, 70, 0.72)";
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.moveTo(beam.cx, beam.cy);
+  ctx.lineTo(beam.ex, beam.ey);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#fff4a8";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(beam.cx, beam.cy);
+  ctx.lineTo(beam.ex, beam.ey);
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffe15c";
+  ctx.beginPath();
+  ctx.arc(beam.ex, beam.ey, 6 + Math.sin(now / 70) * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMeteor(meteor, now) {
+  const cx = meteor.col * TS + TS / 2;
+  const cy = meteor.row * TS + TS / 2;
+  const warnP = Math.min(1, Math.max(0, (now - meteor.warnAt) / (meteor.landAt - meteor.warnAt)));
+  const landed = now >= meteor.landAt;
+
+  // Skuggan visar exakt var meteoren ska landa.
+  ctx.save();
+  ctx.fillStyle = landed ? "rgba(255,80,40,0.28)" : `rgba(20, 10, 8, ${0.20 + warnP * 0.35})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 5, 14 + warnP * 7, 8 + warnP * 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (!landed) {
+    const y = cy - 110 + warnP * 95;
+    ctx.fillStyle = "#6e4a34";
+    ctx.beginPath();
+    ctx.arc(cx, y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ff8a2a";
+    ctx.beginPath();
+    ctx.arc(cx - 2, y - 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const boomP = Math.min(1, (now - meteor.landAt) / METEOR_AFTER_MS);
+    ctx.fillStyle = `rgba(255, 120, 30, ${0.8 * (1 - boomP)})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18 + boomP * 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#5d3b2a";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawArenaBoss(now) {
   if (!arenaBoss || arenaBoss.lives <= 0) return;
   const cx = arenaBoss.col * TS + TS / 2;
@@ -2668,6 +2940,12 @@ window.render_game_to_text = () => JSON.stringify({
     dc: fb.dc,
     dr: fb.dr,
   })),
+  meteors: meteors.map(m => ({
+    col: m.col,
+    row: m.row,
+    landed: m.hit,
+    landInMs: Math.max(0, Math.round(m.landAt - (frameNow || performance.now()))),
+  })),
   evilGuy: evilGuy ? {
     col: evilGuy.col,
     row: evilGuy.row,
@@ -2690,6 +2968,14 @@ window.render_game_to_text = () => JSON.stringify({
     row: arenaBoss.row,
     lives: arenaBoss.lives,
     attacksEveryMs: BOSS_ATTACK_MS,
+    kind: arenaBoss.kind || "melee",
+    phase: arenaBoss.phase,
+    beam: isLaserBoss(arenaBoss) ? {
+      starts: "upp",
+      direction: "medsols",
+      spinMs: LASER_BOSS_SPIN_MS,
+      angleDeg: Math.round(((laserBossAngle(arenaBoss, frameNow || performance.now()) * 180 / Math.PI) + 360) % 360),
+    } : undefined,
   } : null,
   dragon: dragon ? {
     col: dragon.col,
