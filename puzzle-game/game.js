@@ -376,6 +376,9 @@ function buildLevel6() {
     nextAttackAt: performance.now() + BOSS_ATTACK_MS,
     attackUntil: 0,
     hurtUntil: 0,
+    kind: "melee",
+    meteorAfterAttack: true,
+    area: { left: 5, top: 6, right: 14, bottom: 7 },
   };
 }
 
@@ -1306,6 +1309,28 @@ function laserBossEdgeMeteorTargets(boss) {
   ];
 }
 
+function clampMeteorTargetToArea(boss, c, r) {
+  const area = boss.area || { left: 0, top: 0, right: COLS - 1, bottom: ROWS - 1 };
+  return {
+    col: Math.max(area.left, Math.min(area.right, c)),
+    row: Math.max(area.top, Math.min(area.bottom, r)),
+  };
+}
+
+function spawnTargetMeteor(boss, now, targetPlayer = player) {
+  const target = clampMeteorTargetToArea(boss, targetPlayer.col, targetPlayer.row);
+  meteors.push({
+    col: target.col,
+    row: target.row,
+    warnAt: now,
+    landAt: now + METEOR_WARNING_MS,
+    doneAt: now + METEOR_WARNING_MS + METEOR_AFTER_MS,
+    hit: false,
+    source: "boss",
+  });
+  sfxFire();
+}
+
 function spawnLaserBossMeteors(boss, now) {
   const targets = laserBossEdgeMeteorTargets(boss);
   for (let i = 0; i < targets.length; i++) {
@@ -1346,7 +1371,7 @@ function playerAttack() {
   sfxBossHit();
   if (enemy.lives <= 0) {
     if (enemy === dragon) fireballs.length = 0;
-    if (isLaserBoss(enemy)) meteors.length = 0;
+    if (enemy === arenaBoss) meteors.length = 0;
     win();
   }
 }
@@ -1362,6 +1387,7 @@ function updateArenaBoss(now) {
   arenaBoss.attackUntil = now + 280;
   sfxBossAttack();
   if (isNextToEnemy(arenaBoss)) hit(player);
+  if (arenaBoss.meteorAfterAttack && state === "playing") spawnTargetMeteor(arenaBoss, now);
 }
 
 function updateLaserBoss(now) {
@@ -1480,7 +1506,10 @@ function die() {
     resetTempleHazards(now);
     if (dragon) dragon.fireAt = now + 1200;
     if (isLaserBoss(arenaBoss)) resetLaserBossPhase(now);
-    else if (arenaBoss) arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
+    else if (arenaBoss) {
+      meteors.length = 0;
+      arenaBoss.nextAttackAt = now + BOSS_ATTACK_MS;
+    }
     if (roller) resetRoller(now);                  // stenen tillbaka till start
     if (evilGuy) resetEvilGuy(now);
     restoreCrumbles();                             // laga rasade K-block inför nytt försök
@@ -1714,6 +1743,8 @@ function update(now) {
   for (const sn of snakes) updateSnake(sn, now);
   if (dragon) updateDragon(dragon, now);
   if (arenaBoss) updateArenaBoss(now);
+  if (state !== "playing") return;
+  if (!isLaserBoss(arenaBoss)) updateMeteors(now);
   if (state !== "playing") return;
   if (roller) updateRoller(now);
   if (evilGuy) updateEvilGuy(now);
@@ -2983,6 +3014,7 @@ window.render_game_to_text = () => JSON.stringify({
     lives: arenaBoss.lives,
     attacksEveryMs: BOSS_ATTACK_MS,
     kind: arenaBoss.kind || "melee",
+    meteorAfterAttack: !!arenaBoss.meteorAfterAttack,
     phase: arenaBoss.phase,
     beam: isLaserBoss(arenaBoss) ? {
       starts: "upp",

@@ -117,3 +117,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   en vid nedre kanten och en vid vänstra kanten. Meteorerna visar skugga i en
   sekund innan de landar, så spelaren hinner gå bort. Varje meteor landar på
   ett 3x3-område, alltså nio rutor.
+- Bana 6 Bossarenan: efter varje vanlig bossattack släpps en meteor som siktar
+  på spelarens ruta. Det fortsätter attack → meteor hela tiden tills bossen är
+  besegrad.
