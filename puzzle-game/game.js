@@ -37,6 +37,7 @@ const METEOR_WARNING_MS = 1000;       // skuggan syns innan meteor landar
 const METEOR_AFTER_MS = 260;          // liten paus efter nedslag
 const METEOR_STAGGER_MS = 140;        // liten förskjutning mellan kantmeteorer
 const METEOR_RADIUS_TILES = 1;        // 1 runt centrum = 3x3 = nio rutor
+const METEOR_SINGLE_TILE_RADIUS = 0;  // bara centrumrutan
 const EVIL_GUY_STEP_MS = 500;
 const EVIL_GUY_ALERT_PAUSE_MS = 500;
 const EVIL_GUY_PATROL = [
@@ -1322,6 +1323,7 @@ function spawnTargetMeteor(boss, now, targetPlayer = player) {
   meteors.push({
     col: target.col,
     row: target.row,
+    radiusTiles: METEOR_SINGLE_TILE_RADIUS,
     warnAt: now,
     landAt: now + METEOR_WARNING_MS,
     doneAt: now + METEOR_WARNING_MS + METEOR_AFTER_MS,
@@ -1338,6 +1340,7 @@ function spawnLaserBossMeteors(boss, now) {
     meteors.push({
       col: target.col,
       row: target.row,
+      radiusTiles: METEOR_RADIUS_TILES,
       warnAt: now,
       landAt: now + METEOR_WARNING_MS + i * METEOR_STAGGER_MS,
       doneAt: now + METEOR_WARNING_MS + METEOR_AFTER_MS + i * METEOR_STAGGER_MS,
@@ -1416,6 +1419,7 @@ function updateLaserBoss(now) {
 function updateMeteors(now) {
   for (let i = meteors.length - 1; i >= 0; i--) {
     const meteor = meteors[i];
+    const radius = meteor.radiusTiles ?? METEOR_RADIUS_TILES;
     if (!meteor.hit && now >= meteor.landAt) {
       meteor.hit = true;
       sfxBossAttack();
@@ -1423,8 +1427,8 @@ function updateMeteors(now) {
         const pc = playerCenterFor(p, now);
         const pcCol = Math.floor(pc.x / TS);
         const pcRow = Math.floor(pc.y / TS);
-        if (Math.abs(pcCol - meteor.col) <= METEOR_RADIUS_TILES &&
-            Math.abs(pcRow - meteor.row) <= METEOR_RADIUS_TILES) {
+        if (Math.abs(pcCol - meteor.col) <= radius &&
+            Math.abs(pcRow - meteor.row) <= radius) {
           hit(p);
           if (state !== "playing") return;
           break;
@@ -2622,6 +2626,7 @@ function drawLaserBossBeam(now) {
 }
 
 function drawMeteor(meteor, now) {
+  const radius = meteor.radiusTiles ?? METEOR_RADIUS_TILES;
   const cx = meteor.col * TS + TS / 2;
   const cy = meteor.row * TS + TS / 2;
   const warnP = Math.min(1, Math.max(0, (now - meteor.warnAt) / (meteor.landAt - meteor.warnAt)));
@@ -2629,8 +2634,8 @@ function drawMeteor(meteor, now) {
 
   // Skuggan visar exakt var meteoren ska landa.
   ctx.save();
-  for (let dr = -METEOR_RADIUS_TILES; dr <= METEOR_RADIUS_TILES; dr++) {
-    for (let dc = -METEOR_RADIUS_TILES; dc <= METEOR_RADIUS_TILES; dc++) {
+  for (let dr = -radius; dr <= radius; dr++) {
+    for (let dc = -radius; dc <= radius; dc++) {
       const tx = (meteor.col + dc) * TS;
       const ty = (meteor.row + dr) * TS;
       ctx.fillStyle = landed ? "rgba(255,80,40,0.28)" : `rgba(20, 10, 8, ${0.16 + warnP * 0.32})`;
@@ -2977,6 +2982,7 @@ window.render_game_to_text = () => JSON.stringify({
   meteors: meteors.map(m => ({
     col: m.col,
     row: m.row,
+    radiusTiles: m.radiusTiles ?? METEOR_RADIUS_TILES,
     edge: arenaBoss && isLaserBoss(arenaBoss)
       ? (m.row === arenaBoss.area.top + METEOR_RADIUS_TILES ? "top"
         : m.col === arenaBoss.area.right - METEOR_RADIUS_TILES ? "right"
@@ -2986,10 +2992,14 @@ window.render_game_to_text = () => JSON.stringify({
       : undefined,
     landed: m.hit,
     landInMs: Math.max(0, Math.round(m.landAt - (frameNow || performance.now()))),
-    area: Array.from({ length: 9 }, (_, i) => ({
-      col: m.col + (i % 3) - 1,
-      row: m.row + Math.floor(i / 3) - 1,
-    })),
+    area: (() => {
+      const radius = m.radiusTiles ?? METEOR_RADIUS_TILES;
+      const size = radius * 2 + 1;
+      return Array.from({ length: size * size }, (_, i) => ({
+        col: m.col + (i % size) - radius,
+        row: m.row + Math.floor(i / size) - radius,
+      }));
+    })(),
   })),
   evilGuy: evilGuy ? {
     col: evilGuy.col,

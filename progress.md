@@ -120,3 +120,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 6 Bossarenan: efter varje vanlig bossattack släpps en meteor som siktar
   på spelarens ruta. Det fortsätter attack → meteor hela tiden tills bossen är
   besegrad.
+- Bana 6: bossens meteor träffar nu bara exakt en ruta. Bana 9 behåller sina
+  större meteorer som träffar 3x3, alltså nio rutor.
+- Verifierat lokalt i Chrome: Bana 6-meteoren har area 1 och tar ett liv när
+  spelaren står i exakt den rutan. Bana 9-meteorerna har fortfarande area 9.
