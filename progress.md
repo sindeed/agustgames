@@ -113,6 +113,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Bana 9 Strålbossen: 7x7-arena med vägg runtom. Spelaren startar uppe till
   vänster, bossen står i mitten, har tio liv och måste besegras med samma
   svärd/SLÅ-knapp som Bana 6. Bossen loopar för alltid: ett medsols laservarv
-  på två sekunder, sedan två meteorer som siktar på spelaren. Meteorerna visar
-  skugga i en sekund innan de landar, så spelaren hinner gå bort. Varje meteor
-  landar på ett 3x3-område, alltså nio rutor.
+  på två sekunder, sedan fyra meteorer: en vid övre kanten, en vid högra kanten,
+  en vid nedre kanten och en vid vänstra kanten. Meteorerna visar skugga i en
+  sekund innan de landar, så spelaren hinner gå bort. Varje meteor landar på
+  ett 3x3-område, alltså nio rutor.

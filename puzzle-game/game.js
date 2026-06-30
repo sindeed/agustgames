@@ -35,6 +35,7 @@ const LASER_BOSS_SPIN_MS = 2000;      // ett helt laservarv
 const LASER_HIT_WIDTH = 9;            // hur nära strålen man får stå
 const METEOR_WARNING_MS = 1000;       // skuggan syns innan meteor landar
 const METEOR_AFTER_MS = 260;          // liten paus efter nedslag
+const METEOR_STAGGER_MS = 140;        // liten förskjutning mellan kantmeteorer
 const METEOR_RADIUS_TILES = 1;        // 1 runt centrum = 3x3 = nio rutor
 const EVIL_GUY_STEP_MS = 500;
 const EVIL_GUY_ALERT_PAUSE_MS = 500;
@@ -1294,43 +1295,27 @@ function clampToLaserArena(boss, c, r) {
   };
 }
 
-function clampToMeteorCenter(boss, c, r) {
-  return {
-    col: Math.max(boss.area.left + METEOR_RADIUS_TILES, Math.min(boss.area.right - METEOR_RADIUS_TILES, c)),
-    row: Math.max(boss.area.top + METEOR_RADIUS_TILES, Math.min(boss.area.bottom - METEOR_RADIUS_TILES, r)),
-  };
-}
-
-function makeMeteorTarget(boss, base, index) {
-  if (index === 0) return clampToMeteorCenter(boss, base.col, base.row);
-  const options = [
-    { col: base.col + player.dir.dc, row: base.row + player.dir.dr },
-    { col: base.col + 1, row: base.row },
-    { col: base.col - 1, row: base.row },
-    { col: base.col, row: base.row + 1 },
-    { col: base.col, row: base.row - 1 },
-    { col: base.col, row: base.row },
+function laserBossEdgeMeteorTargets(boss) {
+  const midCol = Math.floor((boss.area.left + boss.area.right) / 2);
+  const midRow = Math.floor((boss.area.top + boss.area.bottom) / 2);
+  return [
+    { col: midCol, row: boss.area.top + METEOR_RADIUS_TILES },       // övre kanten
+    { col: boss.area.right - METEOR_RADIUS_TILES, row: midRow },     // högra kanten
+    { col: midCol, row: boss.area.bottom - METEOR_RADIUS_TILES },    // nedre kanten
+    { col: boss.area.left + METEOR_RADIUS_TILES, row: midRow },      // vänstra kanten
   ];
-  for (const option of options) {
-    const target = clampToMeteorCenter(boss, option.col, option.row);
-    const sameAsFirst = target.col === base.col && target.row === base.row;
-    const bossCell = target.col === boss.col && target.row === boss.row;
-    const walkable = tileAt(target.col, target.row) === "floor" || tileAt(target.col, target.row) === "start";
-    if (!sameAsFirst && !bossCell && walkable) return target;
-  }
-  return clampToMeteorCenter(boss, base.col, base.row);
 }
 
 function spawnLaserBossMeteors(boss, now) {
-  const base = { col: player.col, row: player.row };
-  for (let i = 0; i < 2; i++) {
-    const target = makeMeteorTarget(boss, base, i);
+  const targets = laserBossEdgeMeteorTargets(boss);
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
     meteors.push({
       col: target.col,
       row: target.row,
       warnAt: now,
-      landAt: now + METEOR_WARNING_MS + i * 140,
-      doneAt: now + METEOR_WARNING_MS + METEOR_AFTER_MS + i * 140,
+      landAt: now + METEOR_WARNING_MS + i * METEOR_STAGGER_MS,
+      doneAt: now + METEOR_WARNING_MS + METEOR_AFTER_MS + i * METEOR_STAGGER_MS,
       hit: false,
     });
   }
@@ -1390,7 +1375,7 @@ function updateLaserBoss(now) {
     if (now >= arenaBoss.phaseEndsAt) {
       arenaBoss.phase = "meteors";
       spawnLaserBossMeteors(arenaBoss, now);
-      arenaBoss.phaseEndsAt = now + METEOR_WARNING_MS + METEOR_AFTER_MS + 180;
+      arenaBoss.phaseEndsAt = now + METEOR_WARNING_MS + METEOR_AFTER_MS + METEOR_STAGGER_MS * 3 + 180;
     }
     return;
   }
@@ -2961,6 +2946,13 @@ window.render_game_to_text = () => JSON.stringify({
   meteors: meteors.map(m => ({
     col: m.col,
     row: m.row,
+    edge: arenaBoss && isLaserBoss(arenaBoss)
+      ? (m.row === arenaBoss.area.top + METEOR_RADIUS_TILES ? "top"
+        : m.col === arenaBoss.area.right - METEOR_RADIUS_TILES ? "right"
+        : m.row === arenaBoss.area.bottom - METEOR_RADIUS_TILES ? "bottom"
+        : m.col === arenaBoss.area.left + METEOR_RADIUS_TILES ? "left"
+        : "middle")
+      : undefined,
     landed: m.hit,
     landInMs: Math.max(0, Math.round(m.landAt - (frameNow || performance.now()))),
     area: Array.from({ length: 9 }, (_, i) => ({
