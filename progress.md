@@ -114,4 +114,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   vänster, bossen står i mitten, har tio liv och måste besegras med samma
   svärd/SLÅ-knapp som Bana 6. Bossen loopar för alltid: ett medsols laservarv
   på två sekunder, sedan två meteorer som siktar på spelaren. Meteorerna visar
-  skugga i en sekund innan de landar, så spelaren hinner gå bort.
+  skugga i en sekund innan de landar, så spelaren hinner gå bort. Varje meteor
+  landar på ett 3x3-område, alltså nio rutor.
