@@ -189,3 +189,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   natten är 0,5 minut.
 - Blockshop har fått byggbara Pilar för 7 kronor. En placerad pilruta siktar på
   närmaste vanliga/flygande fiende och skjuter en gång per sekund för 0,5 skada.
+- Blockshop har fått Hjärtmedicin för 30 kronor. Köpet helar hjärtat direkt till
+  fullt liv och hamnar inte i lilla gallerian.

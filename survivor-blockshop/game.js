@@ -36,6 +36,7 @@ const PRICES = {
   stone: 15,
   arrow: 7,
   healer: 2,
+  heartHeal: 30,
 };
 
 const BLOCKS = {
@@ -319,6 +320,11 @@ function buy(type) {
     return;
   }
 
+  if (type === "heartHeal") {
+    buyHeartHeal();
+    return;
+  }
+
   if (type === "sword") {
     if (state.hasSword) {
       setMessage("Ni har redan svärdet.", 2);
@@ -343,6 +349,20 @@ function buy(type) {
     state.money -= price;
     setMessage(`${itemName(type)} köpt.`, 1.6);
   }
+}
+
+function buyHeartHeal() {
+  if (state.heart.hp >= state.heart.maxHp) {
+    setMessage("Hjärtat har redan fullt liv.", 2);
+    return;
+  }
+  if (state.money < PRICES.heartHeal) {
+    setMessage("Hjärtmedicin kostar 30 kronor.", 2);
+    return;
+  }
+  state.money -= PRICES.heartHeal;
+  state.heart.hp = state.heart.maxHp;
+  setMessage("Hjärtat helades helt.", 2.2);
 }
 
 function sellSelectedItem() {
@@ -1191,9 +1211,9 @@ function drawToolPanel() {
 function drawShop() {
   if (!state.shopOpen) return;
   const x = 114;
-  const y = 88;
+  const y = 70;
   const w = 690;
-  const h = 520;
+  const h = 590;
   ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
   roundRect(x, y, w, h, 8);
   ctx.fill();
@@ -1203,19 +1223,20 @@ function drawShop() {
   drawText("Blockshop", x + 32, y + 42, 32, "#bbf7d0", "left", "900");
   drawText(`Pengar: ${state.money}`, x + w - 32, y + 42, 22, "#fde68a", "right", "900");
 
-  drawShopItem("buy-wood", x + 36, y + 92, 190, 140, "Träblock", "5 kr", "#c46b34", "5 slag");
-  drawShopItem("buy-stone", x + 250, y + 92, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
-  drawShopItem("buy-sword", x + 464, y + 92, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
-  drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar helt");
+  drawShopItem("buy-wood", x + 36, y + 86, 190, 140, "Träblock", "5 kr", "#c46b34", "5 slag");
+  drawShopItem("buy-stone", x + 250, y + 86, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
+  drawShopItem("buy-sword", x + 464, y + 86, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
+  drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar spelare");
   drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "7 kr", "#38bdf8", "Skjuter 1/s");
+  drawShopItem("buy-heart-heal", x + 464, y + 250, 190, 140, "Hjärtmedicin", "30 kr", "#ef4444", "Helar hjärtat");
 
-  pushButton("sell-selected", x + 464, y + 250, 190, 58, "Sälj valt", "#34d399", { small: true });
-  pushButton("close-shop", x + 464, y + 322, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
+  pushButton("sell-selected", x + 250, y + 410, 190, 58, "Sälj valt", "#34d399", { small: true });
+  pushButton("close-shop", x + 464, y + 410, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
 
   const stack = currentStack();
   const selectedText = stack ? `Valt: ${itemName(stack.type)} x${stack.count}` : "Valt: inget";
-  drawText(selectedText, x + 38, y + 430, 18, "#f8fafc", "left", "800");
-  drawText("Shoppen fungerar bara på dagen.", x + 38, y + 457, 15, "#cbd5e1", "left", "700");
+  drawText(selectedText, x + 38, y + 504, 18, "#f8fafc", "left", "800");
+  drawText("Shoppen fungerar bara på dagen.", x + 38, y + 534, 15, "#cbd5e1", "left", "700");
 }
 
 function drawShopItem(id, x, y, w, h, title, price, color, subtitle) {
@@ -1229,7 +1250,7 @@ function drawShopItem(id, x, y, w, h, title, price, color, subtitle) {
   ctx.fillRect(x + 18, y + 18, 58, 58);
   ctx.fillStyle = "rgba(255,255,255,0.25)";
   ctx.fillRect(x + 27, y + 27, 40, 10);
-  drawText(title, x + 94, y + 37, 18, "#fff", "left", "900");
+  drawText(title, x + 94, y + 37, title.length > 10 ? 16 : 18, "#fff", "left", "900");
   drawText(price, x + 94, y + 66, 17, "#fde68a", "left", "800");
   drawText(subtitle, x + 18, y + 94, 15, "#cbd5e1", "left", "700");
   pushButton(id, x + 18, y + 104, w - 36, 28, "Köp", "#86efac", { small: true });
@@ -1489,6 +1510,10 @@ function handleButton(id) {
   }
   if (id === "buy-arrow") {
     buy("arrow");
+    return;
+  }
+  if (id === "buy-heart-heal") {
+    buy("heartHeal");
     return;
   }
   if (id === "attack-p1") {
