@@ -188,6 +188,9 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Survival-spelets startskärm och spelpanel visar nu: dagen är 1 minut och
   natten är 0,5 minut.
 - Blockshop har fått byggbara Pilar för 7 kronor. En placerad pilruta siktar på
-  närmaste vanliga/flygande fiende och skjuter en gång per sekund för 0,5 skada.
+  närmaste vanliga/flygande fiende och skjuter varannan sekund för 0,5 skada.
+  Pilar skjuter inte på bossen.
+- Verifierat med riktat Playwright-test: pilblock skjuter inte före 2 sekunder,
+  dödar vanlig fiende med två skott, och skjuter inte alls när bara boss finns.
 - Blockshop har fått Hjärtmedicin för 30 kronor. Köpet helar hjärtat direkt till
   fullt liv och hamnar inte i lilla gallerian.

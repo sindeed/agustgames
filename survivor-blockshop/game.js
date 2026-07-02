@@ -18,7 +18,7 @@ const NIGHT_LENGTH = 30;
 const ENEMY_ATTACK_INTERVAL = 2;
 const ENEMY_PLAYER_ATTACK_WINDUP = 1;
 const PLAYER_CHASE_RANGE = 2;
-const ARROW_SHOT_INTERVAL = 1;
+const ARROW_SHOT_INTERVAL = 2;
 const ARROW_DAMAGE = 0.5;
 const CELL_F = { c: 8, r: 0 };
 const CELL_CORNER = { c: 0, r: 0 };
@@ -1227,7 +1227,7 @@ function drawShop() {
   drawShopItem("buy-stone", x + 250, y + 86, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
   drawShopItem("buy-sword", x + 464, y + 86, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
   drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar spelare");
-  drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "7 kr", "#38bdf8", "Skjuter 1/s");
+  drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "7 kr", "#38bdf8", "Skjuter var 2s");
   drawShopItem("buy-heart-heal", x + 464, y + 250, 190, 140, "Hjärtmedicin", "30 kr", "#ef4444", "Helar hjärtat");
 
   pushButton("sell-selected", x + 250, y + 410, 190, 58, "Sälj valt", "#34d399", { small: true });
