@@ -338,19 +338,19 @@ function buy(type) {
   }
 }
 
-function sellSelectedBlock() {
+function sellSelectedItem() {
   const stack = currentStack();
   if (!stack) {
-    setMessage("Välj ett block i lilla gallerian först.", 2);
+    setMessage("Välj något i lilla gallerian först.", 2);
     return;
   }
-  if (!BLOCKS[stack.type]) {
-    setMessage("Man kan bara sälja block.", 2);
+  if (!BLOCKS[stack.type] && stack.type !== "healer") {
+    setMessage("Det går inte att sälja den saken.", 2);
     return;
   }
   removeInventory(stack.type, 1);
   state.money += PRICES[stack.type];
-  setMessage(`${BLOCKS[stack.type].name} sålt.`, 1.6);
+  setMessage(`${itemName(stack.type)} såld.`, 1.6);
 }
 
 function useHealerPotion() {
@@ -612,8 +612,8 @@ function spawnEnemy(type, cell) {
     type,
     c: spawn.c,
     r: spawn.r,
-    hp: type === "boss" ? 3 : type === "flying" ? 0.5 : 1,
-    maxHp: type === "boss" ? 3 : type === "flying" ? 0.5 : 1,
+    hp: type === "boss" ? 3 : 0.5,
+    maxHp: type === "boss" ? 3 : 0.5,
     moveTimer: 0,
     attackTimer: 0,
     hitFlash: 0,
@@ -1088,7 +1088,7 @@ function drawShop() {
   drawShopItem("buy-sword", x + 464, y + 92, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
   drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar helt");
 
-  pushButton("sell-selected", x + 250, y + 304, 190, 58, "Sälj valt block", "#34d399", { small: true });
+  pushButton("sell-selected", x + 250, y + 304, 190, 58, "Sälj valt", "#34d399", { small: true });
   pushButton("close-shop", x + 464, y + 304, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
 
   const stack = currentStack();
@@ -1336,7 +1336,7 @@ function handleButton(id) {
     return;
   }
   if (id === "sell-selected") {
-    sellSelectedBlock();
+    sellSelectedItem();
     return;
   }
   if (id === "drink-healer") {

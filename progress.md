@@ -180,3 +180,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Spelarens attack träffar nu runt spelaren i alla åtta angränsande rutor.
   Handen gör 0,5 skada, svärdet gör 1 skada, och bossen kan fortfarande bara
   skadas med svärd.
+- Healerdrycker kan nu säljas från lilla gallerian med samma säljknapp som block.
+  Vanliga fiender och flygfiender har 0,5 liv.
