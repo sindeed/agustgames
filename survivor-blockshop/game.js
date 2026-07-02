@@ -673,6 +673,10 @@ function updateSpawns() {
   }
 }
 
+function enemyPlayerDamage(enemy) {
+  return enemy.type === "boss" ? 1 : 0.5;
+}
+
 function updateEnemy(enemy, dt) {
   enemy.moveTimer += dt;
   enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
@@ -708,7 +712,7 @@ function updateEnemy(enemy, dt) {
   const blockingPlayer = playerAt(next.c, next.r);
   if (blockingPlayer) {
     if (enemy.attackTimer <= 0) {
-      blockingPlayer.hp -= 1;
+      blockingPlayer.hp -= enemyPlayerDamage(enemy);
       enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
       setMessage(`Fienden slog spelare ${blockingPlayer.id}!`, 1.6);
       if (blockingPlayer.hp <= 0) {

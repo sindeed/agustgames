@@ -173,3 +173,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Blockshop har fått Healerdryck för 2 kronor. Den hamnar i lilla gallerian,
   kan inte byggas som block, och knappen "Drick healerdryck" helar den skadade
   spelare som har minst liv helt upp till 3/3. Verifierat i 1- och 2-spelarläge.
+- Spelarskada från fiender ändrad: bossen tar 1 helt liv när den slår spelaren,
+  medan vanlig fiende och flygfiende tar 0,5 liv. Hjärtats skada är oförändrad.
