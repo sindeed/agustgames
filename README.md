@@ -15,6 +15,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |
+| Survivor of Days | [`survivor-blockshop/`](survivor-blockshop/) | Bygg en bas, handla block i Blockshop och skydda hjärtat i fem dygn. |
 
 ## Struktur
 
@@ -22,6 +23,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 agustgames/
 ├── index.html        ← arkad-meny som länkar till alla spel
 ├── puzzle-game/      ← Pixelgubben (index.html + style.css + game.js)
+├── survivor-blockshop/ ← Survivor of Days and Blockshop of Building
 └── ...               ← nya spel läggs i egna mappar
 ```
 

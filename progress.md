@@ -124,3 +124,38 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   större meteorer som träffar 3x3, alltså nio rutor.
 - Verifierat lokalt i Chrome: Bana 6-meteoren har area 1 och tar ett liv när
   spelaren står i exakt den rutan. Bana 9-meteorerna har fortfarande area 9.
+
+## Survivor of Days and Blockshop of Building
+
+- Nytt spelprojekt påbörjat i `survivor-blockshop/`.
+- Originalidé från Agust: färgglatt pixelspel där spelaren bygger en bas,
+  skyddar ett hjärta, köper block i Blockshop och överlever fem dygn i värld 1.
+- Första versionen ska innehålla både 1 spelare och 2 spelare på samma skärm.
+- Grundfiler skapade: `index.html`, `style.css`, `game.js`.
+- Root-menyn länkar nu till spelet och README listar den nya spelmappen.
+- JavaScript-syntaxkontroll går igenom med `node --check`.
+- Ritordningen för shop-overlay justerad så underliggande spelknappar inte ritas
+  ovanpå Blockshop.
+- Korrigering från Agust: de inre rutorna på kartan är spelrutor; det helt vita
+  utanför kartan är vägg. Värld 1 har därför inga fasta inre vita väggar, men
+  har en tydlig vit yttervägg runt 9x9-kartan.
+- Tom vald plats i lilla gallerian ritas nu som tom ruta med markerad ram, inte
+  som ett gult block.
+- Verifierat med Playwright/browser:
+  - startskärm och 1-spelarläge laddar utan konsolfel,
+  - Blockshop kan köpa två träblock för 10 kronor,
+  - byggläge placerar block,
+  - raderingsläge tar bort block och ger tillbaka blocket,
+  - hjärtknappen flyttar hjärtat på dagen,
+  - 2-spelarläge startar P1 och P2 på samma skärm,
+  - P1 rör sig med WASD och P2 med piltangenter,
+  - natt 1 spawnar vanlig fiende från F,
+  - vanlig attack gör 0,5 skada och två slag dödar vanlig fiende för +5 kronor,
+  - natt 2 spawnar fiender från F och övre vänstra hörnet,
+  - dag 3 visar varningen "Köp svärd!",
+  - natt 3 spawnar boss med 3 liv,
+  - bossen tar ingen skada utan svärd och dör av tre svärdslag,
+  - natt 4 spawnar flygande fiender,
+  - natt 5 spawnar tre flygande fiender per våg,
+  - portalen öppnas uppe till vänster efter natt 5 och avslutar värld 1 när
+    spelaren går in i den.
