@@ -166,3 +166,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   om mitten.
 - Lilla gallerian flyttades lite nedåt så den rosa knappen inte täcker texten
   "Lilla gallerian" heller.
+- Agust förtydligade fiendereglerna: alla fiender och bossen ska alltid gå mot
+  hjärtat på natten. De slår nu varannan sekund. En fiende slår bara spelaren
+  när spelaren står i nästa steg på vägen mot hjärtat; annars fortsätter fienden
+  mot hjärtat.

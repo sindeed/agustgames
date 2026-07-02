@@ -15,6 +15,7 @@ const BOARD_H = GRID_ROWS * TILE;
 const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 60;
+const ENEMY_ATTACK_INTERVAL = 2;
 const CELL_F = { c: 8, r: 0 };
 const CELL_CORNER = { c: 0, r: 0 };
 const CELL_PORTAL = { c: 0, r: 0 };
@@ -636,26 +637,10 @@ function updateEnemy(enemy, dt) {
   enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
   enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
 
-  const nearbyPlayer = state.players
-    .filter((player) => player.hp > 0 && manhattan(player, enemy) === 1)
-    .sort((a, b) => manhattan(a, enemy) - manhattan(b, enemy))[0];
-
-  if (nearbyPlayer) {
-    if (enemy.attackTimer <= 0) {
-      nearbyPlayer.hp -= 1;
-      enemy.attackTimer = 1;
-      setMessage(`Fienden slog spelare ${nearbyPlayer.id}!`, 1.6);
-      if (nearbyPlayer.hp <= 0) {
-        loseGame(`Spelare ${nearbyPlayer.id} dog.`);
-      }
-    }
-    return;
-  }
-
   if (manhattan(enemy, state.heart) === 1) {
     if (enemy.attackTimer <= 0) {
       state.heart.hp -= enemy.type === "boss" ? 1 : 1;
-      enemy.attackTimer = 1;
+      enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
       setMessage("Hjärtat blev slaget!", 1.4);
       if (state.heart.hp <= 0) {
         loseGame("Hjärtat dog.");
@@ -664,20 +649,34 @@ function updateEnemy(enemy, dt) {
     return;
   }
 
-  const blockTarget = adjacentBlockToAttack(enemy);
-  if (blockTarget && enemy.attackTimer <= 0 && enemy.type !== "flying") {
-    damageBlock(blockTarget.c, blockTarget.r, enemy.type === "boss" ? 3 : 1);
-    enemy.attackTimer = 1;
-    return;
-  }
-
   const moveDelay = enemy.type === "boss" ? 0.85 : enemy.type === "flying" ? 0.55 : 0.75;
   if (enemy.moveTimer < moveDelay) return;
   enemy.moveTimer = 0;
 
   const next = nextStepTowardHeart(enemy);
-  if (!next) return;
+  if (!next) {
+    const blockTarget = adjacentBlockToAttack(enemy);
+    if (blockTarget && enemy.attackTimer <= 0 && enemy.type !== "flying") {
+      damageBlock(blockTarget.c, blockTarget.r, enemy.type === "boss" ? 3 : 1);
+      enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
+    }
+    return;
+  }
   if (sameCell(next, state.heart)) return;
+
+  const blockingPlayer = playerAt(next.c, next.r);
+  if (blockingPlayer) {
+    if (enemy.attackTimer <= 0) {
+      blockingPlayer.hp -= 1;
+      enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
+      setMessage(`Fienden slog spelare ${blockingPlayer.id}!`, 1.6);
+      if (blockingPlayer.hp <= 0) {
+        loseGame(`Spelare ${blockingPlayer.id} dog.`);
+      }
+    }
+    return;
+  }
+
   if (enemy.type !== "flying" && state.blocks.has(key(next.c, next.r))) return;
   enemy.c = next.c;
   enemy.r = next.r;
