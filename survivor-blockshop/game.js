@@ -725,14 +725,19 @@ function resetPlayerAttackWindup(enemy) {
   enemy.playerAttackWindup = 0;
 }
 
+function enemyPlayerAttackWindup() {
+  return state.day === 1 ? ENEMY_PLAYER_ATTACK_WINDUP : 0;
+}
+
 function updatePlayerAttack(enemy, player, dt) {
   if (enemy.playerAttackTargetId !== player.id) {
     enemy.playerAttackTargetId = player.id;
     enemy.playerAttackWindup = 0;
   }
 
-  enemy.playerAttackWindup = Math.min(ENEMY_PLAYER_ATTACK_WINDUP, enemy.playerAttackWindup + dt);
-  if (enemy.playerAttackWindup < ENEMY_PLAYER_ATTACK_WINDUP) {
+  const requiredWindup = enemyPlayerAttackWindup();
+  enemy.playerAttackWindup = Math.min(requiredWindup, enemy.playerAttackWindup + dt);
+  if (enemy.playerAttackWindup < requiredWindup) {
     return;
   }
 

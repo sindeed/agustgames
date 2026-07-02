@@ -182,6 +182,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   skadas med svärd.
 - Healerdrycker kan nu säljas från lilla gallerian med samma säljknapp som block.
   Vanliga fiender och flygfiender har 0,5 liv.
-- När en fiende kommer fram till en spelare väntar den nu 1 sekund innan första
-  slaget. Efter första slaget fortsätter den med 2 sekunder mellan slagen.
+- På dag 1 väntar en fiende 1 sekund när den kommer fram till en spelare innan
+  första slaget. Från dag 2 och framåt slår fiender direkt när de är framme.
 - Alla nätter i Survivor är nu 30 sekunder. Dagarna är fortfarande 60 sekunder.
