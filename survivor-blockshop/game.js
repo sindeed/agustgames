@@ -30,11 +30,16 @@ const WORLD_WALL_KEYS = new Set(WORLD_WALL_LIST.map(([c, r]) => `${c},${r}`));
 const PRICES = {
   wood: 5,
   stone: 15,
+  healer: 2,
 };
 
 const BLOCKS = {
   wood: { name: "Trä", hp: 5, color: "#c46b34", light: "#e89d58", dark: "#7e3f1f" },
   stone: { name: "Sten", hp: 10, color: "#8d99a6", light: "#c7d0d9", dark: "#535f69" },
+};
+
+const ITEMS = {
+  healer: { name: "Healerdryck", color: "#fb7185", light: "#fecdd3", dark: "#be123c" },
 };
 
 const DIRS = [
@@ -249,6 +254,14 @@ function currentStack() {
   return state.inventory[state.selectedSlot] || null;
 }
 
+function itemName(type) {
+  return BLOCKS[type]?.name || ITEMS[type]?.name || type;
+}
+
+function hasInventory(type) {
+  return state.inventory.some((stack) => stack.type === type && stack.count > 0);
+}
+
 function addInventory(type, amount = 1) {
   const existing = state.inventory.find((stack) => stack.type === type);
   if (existing) {
@@ -301,12 +314,12 @@ function buy(type) {
 
   const price = PRICES[type];
   if (state.money < price) {
-    setMessage(`${BLOCKS[type].name} kostar ${price} kronor.`, 2);
+    setMessage(`${itemName(type)} kostar ${price} kronor.`, 2);
     return;
   }
   if (addInventory(type, 1)) {
     state.money -= price;
-    setMessage(`${BLOCKS[type].name} köpt.`, 1.6);
+    setMessage(`${itemName(type)} köpt.`, 1.6);
   }
 }
 
@@ -316,9 +329,33 @@ function sellSelectedBlock() {
     setMessage("Välj ett block i lilla gallerian först.", 2);
     return;
   }
+  if (!BLOCKS[stack.type]) {
+    setMessage("Man kan bara sälja block.", 2);
+    return;
+  }
   removeInventory(stack.type, 1);
   state.money += PRICES[stack.type];
   setMessage(`${BLOCKS[stack.type].name} sålt.`, 1.6);
+}
+
+function useHealerPotion() {
+  if (!hasInventory("healer")) {
+    setMessage("Köp en healerdryck först.", 2);
+    return;
+  }
+
+  const target = state.players
+    .filter((player) => player.hp > 0 && player.hp < player.maxHp)
+    .sort((a, b) => a.hp - b.hp)[0];
+
+  if (!target) {
+    setMessage("Alla spelare har fullt liv.", 2);
+    return;
+  }
+
+  target.hp = target.maxHp;
+  removeInventory("healer", 1);
+  setMessage(`Spelare ${target.id} helades helt.`, 2.2);
 }
 
 function canBuildAt(c, r) {
@@ -342,6 +379,10 @@ function placeBlock(c, r) {
   }
   if (!stack) {
     setMessage("Köp eller välj ett block först.", 2);
+    return;
+  }
+  if (!BLOCKS[stack.type]) {
+    setMessage("Välj ett byggblock, inte en dryck.", 2);
     return;
   }
   if (!canBuildAt(c, r)) {
@@ -935,7 +976,7 @@ function drawToolPanel() {
   const x = 732;
   const y = 100;
   ctx.fillStyle = "rgba(15, 23, 42, 0.84)";
-  roundRect(x, y, 250, 330, 8);
+  roundRect(x, y, 250, 382, 8);
   ctx.fill();
   ctx.strokeStyle = "#67e8f9";
   ctx.lineWidth = 2;
@@ -963,6 +1004,11 @@ function drawToolPanel() {
     outline: state.activeTool === "delete" ? "#fef08a" : null,
   });
   pushButton("restart", x + 20, y + 208, 210, 40, "Starta om", "#fbbf24", { small: true });
+  pushButton("drink-healer", x + 20, y + 260, 210, 40, "Drick healerdryck", "#fb7185", {
+    disabled: !hasInventory("healer"),
+    small: true,
+    textColor: "#fff",
+  });
 
   const toolName = state.activeTool === "build"
     ? "Byggläge"
@@ -971,16 +1017,16 @@ function drawToolPanel() {
       : state.activeTool === "heart"
         ? "Flytta hjärtat"
         : "Vanligt läge";
-  drawText(toolName, x + 22, y + 278, 17, "#f8fafc", "left", "800");
-  drawText(state.messageTimer > 0 ? state.message : "Skydda hjärtat.", x + 22, y + 305, 15, "#fde68a", "left", "700");
+  drawText(toolName, x + 22, y + 330, 17, "#f8fafc", "left", "800");
+  drawText(state.messageTimer > 0 ? state.message : "Skydda hjärtat.", x + 22, y + 357, 15, "#fde68a", "left", "700");
 }
 
 function drawShop() {
   if (!state.shopOpen) return;
   const x = 114;
-  const y = 122;
+  const y = 88;
   const w = 690;
-  const h = 420;
+  const h = 520;
   ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
   roundRect(x, y, w, h, 8);
   ctx.fill();
@@ -993,14 +1039,15 @@ function drawShop() {
   drawShopItem("buy-wood", x + 36, y + 92, 190, 140, "Träblock", "5 kr", "#c46b34", "5 slag");
   drawShopItem("buy-stone", x + 250, y + 92, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
   drawShopItem("buy-sword", x + 464, y + 92, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
+  drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar helt");
 
-  pushButton("sell-selected", x + 36, y + 274, 260, 58, "Sälj valt block", "#34d399", { small: true });
-  pushButton("close-shop", x + 394, y + 274, 260, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
+  pushButton("sell-selected", x + 250, y + 304, 190, 58, "Sälj valt block", "#34d399", { small: true });
+  pushButton("close-shop", x + 464, y + 304, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
 
   const stack = currentStack();
-  const selectedText = stack ? `Valt: ${BLOCKS[stack.type].name} x${stack.count}` : "Valt: inget block";
-  drawText(selectedText, x + 38, y + 370, 18, "#f8fafc", "left", "800");
-  drawText("Shoppen fungerar bara på dagen.", x + 38, y + 397, 15, "#cbd5e1", "left", "700");
+  const selectedText = stack ? `Valt: ${itemName(stack.type)} x${stack.count}` : "Valt: inget block";
+  drawText(selectedText, x + 38, y + 430, 18, "#f8fafc", "left", "800");
+  drawText("Shoppen fungerar bara på dagen.", x + 38, y + 457, 15, "#cbd5e1", "left", "700");
 }
 
 function drawShopItem(id, x, y, w, h, title, price, color, subtitle) {
@@ -1041,11 +1088,22 @@ function drawHotbar() {
     pushButton(`slot-${i}`, sx, y, slot, slot, "", "#fff");
 
     if (stack) {
-      const info = BLOCKS[stack.type];
-      ctx.fillStyle = info.dark;
-      ctx.fillRect(sx + 9, y + 8, 26, 26);
-      ctx.fillStyle = info.color;
-      ctx.fillRect(sx + 13, y + 12, 18, 18);
+      if (BLOCKS[stack.type]) {
+        const info = BLOCKS[stack.type];
+        ctx.fillStyle = info.dark;
+        ctx.fillRect(sx + 9, y + 8, 26, 26);
+        ctx.fillStyle = info.color;
+        ctx.fillRect(sx + 13, y + 12, 18, 18);
+      } else if (stack.type === "healer") {
+        const info = ITEMS.healer;
+        ctx.fillStyle = info.dark;
+        ctx.fillRect(sx + 16, y + 9, 12, 6);
+        ctx.fillRect(sx + 12, y + 16, 20, 20);
+        ctx.fillStyle = info.color;
+        ctx.fillRect(sx + 15, y + 19, 14, 14);
+        ctx.fillStyle = info.light;
+        ctx.fillRect(sx + 18, y + 21, 4, 4);
+      }
       drawText(String(stack.count), sx + slot - 8, y + slot - 8, 14, "#fff", "right", "900");
     }
   }
@@ -1234,6 +1292,10 @@ function handleButton(id) {
     sellSelectedBlock();
     return;
   }
+  if (id === "drink-healer") {
+    useHealerPotion();
+    return;
+  }
   if (id === "buy-wood") {
     buy("wood");
     return;
@@ -1244,6 +1306,10 @@ function handleButton(id) {
   }
   if (id === "buy-sword") {
     buy("sword");
+    return;
+  }
+  if (id === "buy-healer") {
+    buy("healer");
     return;
   }
   if (id === "attack-p1") {

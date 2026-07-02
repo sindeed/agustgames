@@ -170,3 +170,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   hjärtat på natten. De slår nu varannan sekund. En fiende slår bara spelaren
   när spelaren står i nästa steg på vägen mot hjärtat; annars fortsätter fienden
   mot hjärtat.
+- Blockshop har fått Healerdryck för 2 kronor. Den hamnar i lilla gallerian,
+  kan inte byggas som block, och knappen "Drick healerdryck" helar den skadade
+  spelare som har minst liv helt upp till 3/3. Verifierat i 1- och 2-spelarläge.
