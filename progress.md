@@ -184,3 +184,4 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   Vanliga fiender och flygfiender har 0,5 liv.
 - När en fiende kommer fram till en spelare väntar den nu 1 sekund innan första
   slaget. Efter första slaget fortsätter den med 2 sekunder mellan slagen.
+- Alla nätter i Survivor är nu 30 sekunder. Dagarna är fortfarande 60 sekunder.
