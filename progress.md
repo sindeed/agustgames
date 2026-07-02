@@ -185,3 +185,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - På dag 1 väntar en fiende 1 sekund när den kommer fram till en spelare innan
   första slaget. Från dag 2 och framåt slår fiender direkt när de är framme.
 - Alla nätter i Survivor är nu 30 sekunder. Dagarna är fortfarande 60 sekunder.
+- Survival-spelets startskärm och spelpanel visar nu: dagen är 1 minut och
+  natten är 0,5 minut.
+- Blockshop har fått byggbara Pilar för 7 kronor. En placerad pilruta siktar på
+  närmaste vanliga/flygande fiende och skjuter en gång per sekund för 0,5 skada.

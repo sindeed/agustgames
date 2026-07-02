@@ -18,6 +18,8 @@ const NIGHT_LENGTH = 30;
 const ENEMY_ATTACK_INTERVAL = 2;
 const ENEMY_PLAYER_ATTACK_WINDUP = 1;
 const PLAYER_CHASE_RANGE = 2;
+const ARROW_SHOT_INTERVAL = 1;
+const ARROW_DAMAGE = 0.5;
 const CELL_F = { c: 8, r: 0 };
 const CELL_CORNER = { c: 0, r: 0 };
 const CELL_PORTAL = { c: 0, r: 0 };
@@ -32,12 +34,14 @@ const WORLD_WALL_KEYS = new Set(WORLD_WALL_LIST.map(([c, r]) => `${c},${r}`));
 const PRICES = {
   wood: 5,
   stone: 15,
+  arrow: 7,
   healer: 2,
 };
 
 const BLOCKS = {
   wood: { name: "Trä", hp: 5, color: "#c46b34", light: "#e89d58", dark: "#7e3f1f" },
   stone: { name: "Sten", hp: 10, color: "#8d99a6", light: "#c7d0d9", dark: "#535f69" },
+  arrow: { name: "Pilar", hp: 5, color: "#38bdf8", light: "#bae6fd", dark: "#075985" },
 };
 
 const ITEMS = {
@@ -90,6 +94,7 @@ const state = {
   heart: { c: HEART_START.c, r: HEART_START.r, hp: 3, maxHp: 3 },
   blocks: new Map(),
   enemies: [],
+  projectiles: [],
   nextEnemyId: 1,
 };
 
@@ -232,6 +237,7 @@ function startGame(playersWanted) {
   state.inventory = [];
   state.blocks = new Map();
   state.enemies = [];
+  state.projectiles = [];
   state.nextEnemyId = 1;
   state.heart = { c: HEART_START.c, r: HEART_START.r, hp: 3, maxHp: 3 };
   state.players = [];
@@ -406,7 +412,13 @@ function placeBlock(c, r) {
     return;
   }
   const info = BLOCKS[stack.type];
-  state.blocks.set(key(c, r), { type: stack.type, hp: info.hp, maxHp: info.hp });
+  state.blocks.set(key(c, r), {
+    type: stack.type,
+    hp: info.hp,
+    maxHp: info.hp,
+    shootTimer: stack.type === "arrow" ? 0 : undefined,
+    shotFlash: 0,
+  });
   removeInventory(stack.type, 1);
 }
 
@@ -500,11 +512,15 @@ function attack(player) {
 
   const damage = state.hasSword ? 1 : 0.5;
   for (const enemy of damageableEnemies) {
-    enemy.hp -= damage;
-    enemy.hitFlash = 0.18;
-    if (enemy.hp <= 0) {
-      killEnemy(enemy);
-    }
+    damageEnemy(enemy, damage);
+  }
+}
+
+function damageEnemy(enemy, amount) {
+  enemy.hp -= amount;
+  enemy.hitFlash = 0.18;
+  if (enemy.hp <= 0) {
+    killEnemy(enemy);
   }
 }
 
@@ -604,6 +620,52 @@ function damageBlock(c, r, amount) {
   if (block.hp <= 0) {
     state.blocks.delete(blockKey);
   }
+}
+
+function nearestArrowTarget(c, r) {
+  return state.enemies
+    .filter((enemy) => enemy.type !== "boss")
+    .sort((a, b) => {
+      const da = manhattan({ c, r }, a);
+      const db = manhattan({ c, r }, b);
+      return da - db || a.id - b.id;
+    })[0] || null;
+}
+
+function shootArrowBlock(c, r, block) {
+  const target = nearestArrowTarget(c, r);
+  if (!target) return false;
+
+  block.shotFlash = 0.18;
+  state.projectiles.push({
+    fromC: c,
+    fromR: r,
+    toC: target.c,
+    toR: target.r,
+    life: 0.18,
+  });
+  damageEnemy(target, ARROW_DAMAGE);
+  return true;
+}
+
+function updateArrowBlocks(dt) {
+  for (const [blockKey, block] of state.blocks.entries()) {
+    block.shotFlash = Math.max(0, (block.shotFlash || 0) - dt);
+    if (block.type !== "arrow") continue;
+
+    const [c, r] = blockKey.split(",").map(Number);
+    block.shootTimer = (block.shootTimer || 0) + dt;
+    while (block.shootTimer >= ARROW_SHOT_INTERVAL) {
+      block.shootTimer -= ARROW_SHOT_INTERVAL;
+      if (!shootArrowBlock(c, r, block)) break;
+    }
+  }
+}
+
+function updateProjectiles(dt) {
+  state.projectiles = state.projectiles
+    .map((projectile) => ({ ...projectile, life: projectile.life - dt }))
+    .filter((projectile) => projectile.life > 0);
 }
 
 function spawnEnemy(type, cell) {
@@ -828,6 +890,9 @@ function update(dt) {
     updateSpawns();
   }
 
+  updateProjectiles(dt);
+  updateArrowBlocks(dt);
+
   for (const enemy of [...state.enemies]) {
     updateEnemy(enemy, dt);
     if (state.mode !== "playing") break;
@@ -908,12 +973,40 @@ function drawBlocks() {
     ctx.fillRect(x + 4, y + 4, TILE - 18, TILE - 18);
     ctx.fillStyle = info.light;
     ctx.fillRect(x + 8, y + 8, TILE - 26, 6);
+    if (block.type === "arrow") {
+      ctx.fillStyle = block.shotFlash > 0 ? "#fef08a" : "#facc15";
+      ctx.fillRect(x + 11, y + 23, 24, 5);
+      ctx.fillRect(x + 29, y + 18, 5, 15);
+      ctx.fillRect(x + 34, y + 21, 5, 9);
+      ctx.fillStyle = "#082f49";
+      ctx.fillRect(x + 12, y + 15, 7, 7);
+      ctx.fillRect(x + 12, y + 31, 7, 7);
+    }
     const hpW = Math.max(0, (TILE - 16) * (block.hp / block.maxHp));
     ctx.fillStyle = "#111827";
     ctx.fillRect(x + 3, y + TILE - 17, TILE - 16, 7);
-    ctx.fillStyle = block.type === "wood" ? "#fde047" : "#e5e7eb";
+    ctx.fillStyle = block.type === "wood" ? "#fde047" : block.type === "arrow" ? "#67e8f9" : "#e5e7eb";
     ctx.fillRect(x + 3, y + TILE - 17, hpW, 7);
   }
+}
+
+function drawProjectiles() {
+  ctx.save();
+  for (const projectile of state.projectiles) {
+    const from = centerOf(projectile.fromC, projectile.fromR);
+    const to = centerOf(projectile.toC, projectile.toR);
+    const alpha = Math.max(0.15, Math.min(1, projectile.life / 0.18));
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.fillStyle = "#fef08a";
+    ctx.fillRect(to.x - 5, to.y - 5, 10, 10);
+  }
+  ctx.restore();
 }
 
 function drawTerrainWalls() {
@@ -1056,6 +1149,7 @@ function drawToolPanel() {
   ctx.stroke();
   drawText("Värld 1", x + 20, y + 28, 24, "#fff", "left", "900");
   drawText(isDay() ? "Bygg på dagen" : "Fiender på natten", x + 20, y + 58, 16, "#cbd5e1", "left", "700");
+  drawText("Dag: 1 min  Natt: 0,5 min", x + 20, y + 78, 13, "#e0f2fe", "left", "800");
 
   const disabledDayTool = !isDay() || state.portalOpen;
   pushButton("shop", x + 20, y + 84, 98, 48, "Shop", "#22c55e", {
@@ -1113,12 +1207,13 @@ function drawShop() {
   drawShopItem("buy-stone", x + 250, y + 92, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
   drawShopItem("buy-sword", x + 464, y + 92, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
   drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar helt");
+  drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "7 kr", "#38bdf8", "Skjuter 1/s");
 
-  pushButton("sell-selected", x + 250, y + 304, 190, 58, "Sälj valt", "#34d399", { small: true });
-  pushButton("close-shop", x + 464, y + 304, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
+  pushButton("sell-selected", x + 464, y + 250, 190, 58, "Sälj valt", "#34d399", { small: true });
+  pushButton("close-shop", x + 464, y + 322, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
 
   const stack = currentStack();
-  const selectedText = stack ? `Valt: ${itemName(stack.type)} x${stack.count}` : "Valt: inget block";
+  const selectedText = stack ? `Valt: ${itemName(stack.type)} x${stack.count}` : "Valt: inget";
   drawText(selectedText, x + 38, y + 430, 18, "#f8fafc", "left", "800");
   drawText("Shoppen fungerar bara på dagen.", x + 38, y + 457, 15, "#cbd5e1", "left", "700");
 }
@@ -1167,6 +1262,12 @@ function drawHotbar() {
         ctx.fillRect(sx + 9, y + 8, 26, 26);
         ctx.fillStyle = info.color;
         ctx.fillRect(sx + 13, y + 12, 18, 18);
+        if (stack.type === "arrow") {
+          ctx.fillStyle = "#facc15";
+          ctx.fillRect(sx + 13, y + 21, 14, 3);
+          ctx.fillRect(sx + 24, y + 17, 3, 11);
+          ctx.fillRect(sx + 27, y + 19, 3, 7);
+        }
       } else if (stack.type === "healer") {
         const info = ITEMS.healer;
         ctx.fillStyle = info.dark;
@@ -1212,7 +1313,7 @@ function drawMenu() {
   drawText("Survivor of Days", VIEW_W / 2, 166, 48, "#fde047", "center", "900");
   drawText("and Blockshop of Building", VIEW_W / 2, 218, 31, "#bae6fd", "center", "900");
   drawText("Bygg en bas. Skydda hjärtat i 5 dagar.", VIEW_W / 2, 284, 22, "#f8fafc", "center", "800");
-  drawText("En hel dag är 2 minuter: 1 minut dag och 1 minut natt.", VIEW_W / 2, 320, 18, "#cbd5e1", "center", "700");
+  drawText("Dagen är 1 minut. Natten är 0,5 minut.", VIEW_W / 2, 320, 18, "#cbd5e1", "center", "700");
 
   pushButton("start-1", 282, 386, 206, 74, "1 spelare", "#38bdf8", { textColor: "#082f49" });
   pushButton("start-2", 536, 386, 206, 74, "2 spelare", "#facc15", { textColor: "#422006" });
@@ -1258,6 +1359,7 @@ function render() {
     drawBoard();
     drawTerrainWalls();
     drawBlocks();
+    drawProjectiles();
     drawHeart();
     drawEnemies();
     drawPlayers();
@@ -1383,6 +1485,10 @@ function handleButton(id) {
   }
   if (id === "buy-healer") {
     buy("healer");
+    return;
+  }
+  if (id === "buy-arrow") {
+    buy("arrow");
     return;
   }
   if (id === "attack-p1") {
@@ -1571,6 +1677,12 @@ function renderGameToText() {
       const [c, r] = blockKey.split(",").map(Number);
       return { c, r, type: block.type, hp: block.hp };
     }),
+    projectiles: state.projectiles.map((projectile) => ({
+      fromC: projectile.fromC,
+      fromR: projectile.fromR,
+      toC: projectile.toC,
+      toR: projectile.toR,
+    })),
     terrainWalls: WORLD_WALL_LIST.map(([c, r]) => ({ c, r })),
     outerWalls: "all tiles outside the 9x9 world are walls",
     message: state.messageTimer > 0 ? state.message : "",
