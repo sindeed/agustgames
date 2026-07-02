@@ -16,6 +16,7 @@ const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 60;
 const ENEMY_ATTACK_INTERVAL = 2;
+const ENEMY_PLAYER_ATTACK_WINDUP = 1;
 const PLAYER_CHASE_RANGE = 2;
 const CELL_F = { c: 8, r: 0 };
 const CELL_CORNER = { c: 0, r: 0 };
@@ -616,6 +617,8 @@ function spawnEnemy(type, cell) {
     maxHp: type === "boss" ? 3 : 0.5,
     moveTimer: 0,
     attackTimer: 0,
+    playerAttackTargetId: null,
+    playerAttackWindup: 0,
     hitFlash: 0,
   };
   state.nextEnemyId += 1;
@@ -717,6 +720,27 @@ function damagePlayer(enemy, player) {
   }
 }
 
+function resetPlayerAttackWindup(enemy) {
+  enemy.playerAttackTargetId = null;
+  enemy.playerAttackWindup = 0;
+}
+
+function updatePlayerAttack(enemy, player, dt) {
+  if (enemy.playerAttackTargetId !== player.id) {
+    enemy.playerAttackTargetId = player.id;
+    enemy.playerAttackWindup = 0;
+  }
+
+  enemy.playerAttackWindup = Math.min(ENEMY_PLAYER_ATTACK_WINDUP, enemy.playerAttackWindup + dt);
+  if (enemy.playerAttackWindup < ENEMY_PLAYER_ATTACK_WINDUP) {
+    return;
+  }
+
+  if (enemy.attackTimer <= 0) {
+    damagePlayer(enemy, player);
+  }
+}
+
 function updateEnemy(enemy, dt) {
   enemy.moveTimer += dt;
   enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
@@ -724,11 +748,10 @@ function updateEnemy(enemy, dt) {
 
   const chasedPlayer = nearestPlayerToChase(enemy);
   if (chasedPlayer && manhattan(enemy, chasedPlayer) <= 1) {
-    if (enemy.attackTimer <= 0) {
-      damagePlayer(enemy, chasedPlayer);
-    }
+    updatePlayerAttack(enemy, chasedPlayer, dt);
     return;
   }
+  resetPlayerAttackWindup(enemy);
 
   if (!chasedPlayer && manhattan(enemy, state.heart) === 1) {
     if (enemy.attackTimer <= 0) {
@@ -759,9 +782,7 @@ function updateEnemy(enemy, dt) {
 
   const blockingPlayer = playerAt(next.c, next.r);
   if (blockingPlayer) {
-    if (enemy.attackTimer <= 0) {
-      damagePlayer(enemy, blockingPlayer);
-    }
+    updatePlayerAttack(enemy, blockingPlayer, dt);
     return;
   }
 
