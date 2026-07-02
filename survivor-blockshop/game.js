@@ -16,6 +16,7 @@ const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 60;
 const ENEMY_ATTACK_INTERVAL = 2;
+const PLAYER_CHASE_RANGE = 2;
 const CELL_F = { c: 8, r: 0 };
 const CELL_CORNER = { c: 0, r: 0 };
 const CELL_PORTAL = { c: 0, r: 0 };
@@ -48,6 +49,20 @@ const DIRS = [
   { dx: 0, dy: 1, name: "down" },
   { dx: -1, dy: 0, name: "left" },
 ];
+const ATTACK_OFFSETS = [
+  { dx: -1, dy: -1 },
+  { dx: 0, dy: -1 },
+  { dx: 1, dy: -1 },
+  { dx: -1, dy: 0 },
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 1 },
+  { dx: 0, dy: 1 },
+  { dx: 1, dy: 1 },
+];
+
+function tileRadius(a, b) {
+  return Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
+}
 
 let uiButtons = [];
 let lastTime = 0;
@@ -467,27 +482,28 @@ function tryMovePlayer(player, dx, dy) {
 function attack(player) {
   if (state.mode !== "playing" || state.shopOpen) return;
   if (player.attackCooldown > 0) return;
-  const dir = dirFromName(player.dir);
-  const target = { c: player.c + dir.dx, r: player.r + dir.dy };
-  const enemy = enemyAt(target.c, target.r);
+  const enemies = ATTACK_OFFSETS.map((offset) => enemyAt(player.c + offset.dx, player.r + offset.dy))
+    .filter(Boolean);
   player.attackCooldown = state.hasSword ? 0.32 : 0.45;
 
-  if (!enemy) {
+  if (enemies.length === 0) {
     setMessage("Slaget träffade luften.", 0.8);
     return;
   }
 
-  if (enemy.type === "boss" && !state.hasSword) {
+  const damageableEnemies = enemies.filter((enemy) => enemy.type !== "boss" || state.hasSword);
+  if (damageableEnemies.length === 0) {
     setMessage("Bossen kan bara skadas med svärd!", 1.8);
     return;
   }
 
   const damage = state.hasSword ? 1 : 0.5;
-  enemy.hp -= damage;
-  enemy.hitFlash = 0.18;
-
-  if (enemy.hp <= 0) {
-    killEnemy(enemy);
+  for (const enemy of damageableEnemies) {
+    enemy.hp -= damage;
+    enemy.hitFlash = 0.18;
+    if (enemy.hp <= 0) {
+      killEnemy(enemy);
+    }
   }
 }
 
@@ -509,9 +525,9 @@ function passableForEnemy(c, r, enemy) {
   return true;
 }
 
-function nextStepTowardHeart(enemy) {
+function nextStepTowardTarget(enemy, target) {
   const startKey = key(enemy.c, enemy.r);
-  const targetKey = key(state.heart.c, state.heart.r);
+  const targetKey = key(target.c, target.r);
   const queue = [{ c: enemy.c, r: enemy.r }];
   const cameFrom = new Map();
   cameFrom.set(startKey, null);
@@ -521,8 +537,8 @@ function nextStepTowardHeart(enemy) {
     if (key(current.c, current.r) === targetKey) break;
 
     const orderedDirs = DIRS.slice().sort((a, b) => {
-      const da = Math.abs(current.c + a.dx - state.heart.c) + Math.abs(current.r + a.dy - state.heart.r);
-      const db = Math.abs(current.c + b.dx - state.heart.c) + Math.abs(current.r + b.dy - state.heart.r);
+      const da = Math.abs(current.c + a.dx - target.c) + Math.abs(current.r + a.dy - target.r);
+      const db = Math.abs(current.c + b.dx - target.c) + Math.abs(current.r + b.dy - target.r);
       return da - db;
     });
 
@@ -541,13 +557,28 @@ function nextStepTowardHeart(enemy) {
     return null;
   }
 
-  let current = { c: state.heart.c, r: state.heart.r };
+  let current = { c: target.c, r: target.r };
   let previous = cameFrom.get(targetKey);
   while (previous && key(previous.c, previous.r) !== startKey) {
     current = previous;
     previous = cameFrom.get(key(current.c, current.r));
   }
   return current;
+}
+
+function nearestPlayerToChase(enemy) {
+  let nearest = null;
+  let nearestDist = Infinity;
+  for (const player of state.players) {
+    if (player.hp <= 0) continue;
+    const dist = tileRadius(enemy, player);
+    if (dist > PLAYER_CHASE_RANGE) continue;
+    if (dist < nearestDist || (dist === nearestDist && player.id < nearest.id)) {
+      nearest = player;
+      nearestDist = dist;
+    }
+  }
+  return nearest;
 }
 
 function adjacentBlockToAttack(enemy) {
@@ -677,12 +708,29 @@ function enemyPlayerDamage(enemy) {
   return enemy.type === "boss" ? 1 : 0.5;
 }
 
+function damagePlayer(enemy, player) {
+  player.hp -= enemyPlayerDamage(enemy);
+  enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
+  setMessage(`Fienden slog spelare ${player.id}!`, 1.6);
+  if (player.hp <= 0) {
+    loseGame(`Spelare ${player.id} dog.`);
+  }
+}
+
 function updateEnemy(enemy, dt) {
   enemy.moveTimer += dt;
   enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
   enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
 
-  if (manhattan(enemy, state.heart) === 1) {
+  const chasedPlayer = nearestPlayerToChase(enemy);
+  if (chasedPlayer && manhattan(enemy, chasedPlayer) <= 1) {
+    if (enemy.attackTimer <= 0) {
+      damagePlayer(enemy, chasedPlayer);
+    }
+    return;
+  }
+
+  if (!chasedPlayer && manhattan(enemy, state.heart) === 1) {
     if (enemy.attackTimer <= 0) {
       state.heart.hp -= enemy.type === "boss" ? 1 : 1;
       enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
@@ -698,7 +746,7 @@ function updateEnemy(enemy, dt) {
   if (enemy.moveTimer < moveDelay) return;
   enemy.moveTimer = 0;
 
-  const next = nextStepTowardHeart(enemy);
+  const next = nextStepTowardTarget(enemy, chasedPlayer || state.heart);
   if (!next) {
     const blockTarget = adjacentBlockToAttack(enemy);
     if (blockTarget && enemy.attackTimer <= 0 && enemy.type !== "flying") {
@@ -712,12 +760,7 @@ function updateEnemy(enemy, dt) {
   const blockingPlayer = playerAt(next.c, next.r);
   if (blockingPlayer) {
     if (enemy.attackTimer <= 0) {
-      blockingPlayer.hp -= enemyPlayerDamage(enemy);
-      enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
-      setMessage(`Fienden slog spelare ${blockingPlayer.id}!`, 1.6);
-      if (blockingPlayer.hp <= 0) {
-        loseGame(`Spelare ${blockingPlayer.id} dog.`);
-      }
+      damagePlayer(enemy, blockingPlayer);
     }
     return;
   }

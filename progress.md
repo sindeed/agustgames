@@ -175,3 +175,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   spelare som har minst liv helt upp till 3/3. Verifierat i 1- och 2-spelarläge.
 - Spelarskada från fiender ändrad: bossen tar 1 helt liv när den slår spelaren,
   medan vanlig fiende och flygfiende tar 0,5 liv. Hjärtats skada är oförändrad.
+- Fiender, flygfiender och bossen jagar nu en spelare som står inom två steg runt
+  fienden, även diagonalt. Om ingen spelare är så nära går de mot hjärtat.
+- Spelarens attack träffar nu runt spelaren i alla åtta angränsande rutor.
+  Handen gör 0,5 skada, svärdet gör 1 skada, och bossen kan fortfarande bara
+  skadas med svärd.
