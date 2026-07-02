@@ -1026,7 +1026,7 @@ function drawHotbar() {
   const gap = 5;
   const totalW = HOTBAR_SLOTS * slot + (HOTBAR_SLOTS - 1) * gap;
   const x = (VIEW_W - totalW) / 2;
-  const y = 660;
+  const y = 676;
   drawText("Lilla gallerian", x, y - 18, 16, "#e0f2fe", "left", "800");
 
   for (let i = 0; i < HOTBAR_SLOTS; i += 1) {
@@ -1055,10 +1055,10 @@ function drawHotbar() {
 function drawControls() {
   if (state.mode !== "playing") return;
   drawDpad(1, 76, 586);
-  pushButton("attack-p1", 212, 586, 76, 48, "Slå", "#f472b6", { small: true });
+  pushButton("attack-p1", 300, 592, 76, 48, "Slå", "#f472b6", { small: true });
   if (state.playersWanted > 1) {
     drawDpad(2, 790, 586);
-    pushButton("attack-p2", 922, 586, 76, 48, "Slå", "#f472b6", { small: true });
+    pushButton("attack-p2", 648, 592, 76, 48, "Slå", "#f472b6", { small: true });
   }
 }
 

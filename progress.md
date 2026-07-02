@@ -161,3 +161,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
     spelaren går in i den.
 - Fixat iPad/touch-kontroller: rosa Slå-knappen låg ovanpå högerpilen på
   styrkorset. Slå-knapparna är flyttade så högerpilen går att se och trycka.
+- Agust såg fortfarande problem på iPad. Slå-knapparna flyttades längre in mot
+  mitten, bort från båda styrkorsen: P1 till vänster om mitten och P2 till höger
+  om mitten.
+- Lilla gallerian flyttades lite nedåt så den rosa knappen inte täcker texten
+  "Lilla gallerian" heller.
