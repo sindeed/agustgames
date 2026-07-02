@@ -159,3 +159,5 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   - natt 5 spawnar tre flygande fiender per våg,
   - portalen öppnas uppe till vänster efter natt 5 och avslutar värld 1 när
     spelaren går in i den.
+- Fixat iPad/touch-kontroller: rosa Slå-knappen låg ovanpå högerpilen på
+  styrkorset. Slå-knapparna är flyttade så högerpilen går att se och trycka.

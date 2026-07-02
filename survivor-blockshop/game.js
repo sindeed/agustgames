@@ -1055,10 +1055,10 @@ function drawHotbar() {
 function drawControls() {
   if (state.mode !== "playing") return;
   drawDpad(1, 76, 586);
-  pushButton("attack-p1", 158, 628, 76, 48, "Slå", "#f472b6", { small: true });
+  pushButton("attack-p1", 212, 586, 76, 48, "Slå", "#f472b6", { small: true });
   if (state.playersWanted > 1) {
     drawDpad(2, 790, 586);
-    pushButton("attack-p2", 870, 628, 76, 48, "Slå", "#f472b6", { small: true });
+    pushButton("attack-p2", 922, 586, 76, 48, "Slå", "#f472b6", { small: true });
   }
 }
 
