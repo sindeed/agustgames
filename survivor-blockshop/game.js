@@ -15,10 +15,10 @@ const BOARD_H = GRID_ROWS * TILE;
 const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 30;
-const ENEMY_ATTACK_INTERVAL = 2;
-const ENEMY_PLAYER_ATTACK_WINDUP = 1;
+const ENEMY_ATTACK_INTERVAL = 1;
+const ENEMY_PLAYER_ATTACK_WINDUP = 0.5;
 const PLAYER_CHASE_RANGE = 2;
-const ARROW_SHOT_INTERVAL = 2;
+const ARROW_SHOT_INTERVAL = 3;
 const ARROW_DAMAGE = 0.5;
 const CELL_F = { c: 8, r: 0 };
 const CELL_CORNER = { c: 0, r: 0 };
@@ -34,7 +34,7 @@ const WORLD_WALL_KEYS = new Set(WORLD_WALL_LIST.map(([c, r]) => `${c},${r}`));
 const PRICES = {
   wood: 5,
   stone: 15,
-  arrow: 7,
+  arrow: 20,
   healer: 2,
   heartHeal: 30,
 };
@@ -632,6 +632,24 @@ function adjacentBlockToAttack(enemy) {
   return candidates[0] || null;
 }
 
+function adjacentBlockTowardTarget(enemy, target) {
+  const candidates = [];
+  const currentDist = manhattan(enemy, target);
+  for (const dir of DIRS) {
+    const c = enemy.c + dir.dx;
+    const r = enemy.r + dir.dy;
+    const block = state.blocks.get(key(c, r));
+    if (!block) continue;
+
+    const dist = manhattan({ c, r }, target);
+    if (dist < currentDist) {
+      candidates.push({ c, r, block, dist });
+    }
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  return candidates[0] || null;
+}
+
 function damageBlock(c, r, amount) {
   const blockKey = key(c, r);
   const block = state.blocks.get(blockKey);
@@ -642,9 +660,26 @@ function damageBlock(c, r, amount) {
   }
 }
 
+function hasClearArrowShot(fromC, fromR, toC, toR) {
+  const steps = Math.max(Math.abs(toC - fromC), Math.abs(toR - fromR));
+  if (steps <= 1) return true;
+
+  const checked = new Set();
+  for (let i = 1; i < steps; i += 1) {
+    const c = Math.round(fromC + ((toC - fromC) * i) / steps);
+    const r = Math.round(fromR + ((toR - fromR) * i) / steps);
+    const cellKey = key(c, r);
+    if (checked.has(cellKey)) continue;
+    checked.add(cellKey);
+    if (state.blocks.has(cellKey)) return false;
+  }
+  return true;
+}
+
 function nearestArrowTarget(c, r) {
   return state.enemies
     .filter((enemy) => enemy.type !== "boss")
+    .filter((enemy) => hasClearArrowShot(c, r, enemy.c, enemy.r))
     .sort((a, b) => {
       const da = manhattan({ c, r }, a);
       const db = manhattan({ c, r }, b);
@@ -752,7 +787,9 @@ function startNextDay() {
   state.phase = "day";
   state.phaseElapsed = 0;
   state.activeTool = "none";
-  if (state.day === 3 && !state.hasSword) {
+  if (state.day === 2 && !state.hasSword) {
+    setMessage("Varning: köp svärd! På dag 3 kommer en boss som bara kan skadas med svärd.", 7);
+  } else if (state.day === 3 && !state.hasSword) {
     setMessage("Dag 3: Köp svärd! Bossen kan bara skadas med svärd.", 6);
   } else {
     setMessage(`Dag ${state.day}: bygg och handla innan natten.`, 3);
@@ -793,13 +830,23 @@ function enemyPlayerDamage(enemy) {
   return enemy.type === "boss" ? 1 : 0.5;
 }
 
+function respawnPlayer(player) {
+  player.c = state.heart.c;
+  player.r = state.heart.r;
+  player.hp = player.maxHp;
+  player.attackCooldown = 0;
+  player.stepCooldown = 0;
+  setMessage(`Spelare ${player.id} började om vid hjärtat.`, 2);
+}
+
 function damagePlayer(enemy, player) {
   player.hp -= enemyPlayerDamage(enemy);
   enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
-  setMessage(`Fienden slog spelare ${player.id}!`, 1.6);
   if (player.hp <= 0) {
-    loseGame(`Spelare ${player.id} dog.`);
+    respawnPlayer(player);
+    return;
   }
+  setMessage(`Fienden slog spelare ${player.id}!`, 1.6);
 }
 
 function resetPlayerAttackWindup(enemy) {
@@ -808,7 +855,7 @@ function resetPlayerAttackWindup(enemy) {
 }
 
 function enemyPlayerAttackWindup() {
-  return state.day === 1 ? ENEMY_PLAYER_ATTACK_WINDUP : 0;
+  return ENEMY_PLAYER_ATTACK_WINDUP;
 }
 
 function updatePlayerAttack(enemy, player, dt) {
@@ -852,11 +899,21 @@ function updateEnemy(enemy, dt) {
     return;
   }
 
+  const target = chasedPlayer || state.heart;
+  const blockTowardTarget = enemy.type !== "flying" ? adjacentBlockTowardTarget(enemy, target) : null;
+  if (blockTowardTarget) {
+    if (enemy.attackTimer <= 0) {
+      damageBlock(blockTowardTarget.c, blockTowardTarget.r, enemy.type === "boss" ? 3 : 1);
+      enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
+    }
+    return;
+  }
+
   const moveDelay = enemy.type === "boss" ? 0.85 : enemy.type === "flying" ? 0.55 : 0.75;
   if (enemy.moveTimer < moveDelay) return;
   enemy.moveTimer = 0;
 
-  const next = nextStepTowardTarget(enemy, chasedPlayer || state.heart);
+  const next = nextStepTowardTarget(enemy, target);
   if (!next) {
     const blockTarget = adjacentBlockToAttack(enemy);
     if (blockTarget && enemy.attackTimer <= 0 && enemy.type !== "flying") {
@@ -1227,7 +1284,7 @@ function drawShop() {
   drawShopItem("buy-stone", x + 250, y + 86, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
   drawShopItem("buy-sword", x + 464, y + 86, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
   drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar spelare");
-  drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "7 kr", "#38bdf8", "Skjuter var 2s");
+  drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "20 kr", "#38bdf8", "Skjuter var 3s");
   drawShopItem("buy-heart-heal", x + 464, y + 250, 190, 140, "Hjärtmedicin", "30 kr", "#ef4444", "Helar hjärtat");
 
   pushButton("sell-selected", x + 250, y + 410, 190, 58, "Sälj valt", "#34d399", { small: true });

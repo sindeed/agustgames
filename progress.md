@@ -194,3 +194,11 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   dödar vanlig fiende med två skott, och skjuter inte alls när bara boss finns.
 - Blockshop har fått Hjärtmedicin för 30 kronor. Köpet helar hjärtat direkt till
   fullt liv och hamnar inte i lilla gallerian.
+- Pilfällor kostar nu 20 kronor, skjuter var tredje sekund, skjuter inte genom
+  byggda block och kan slås sönder av vanliga fiender/bossen. Fiender väntar
+  0,5 sekund första gången de når en spelare och slår sedan varje sekund.
+- När en spelare dör blir det inte Game Over längre. Spelaren får fullt liv och
+  börjar om på hjärtats ruta; bara hjärtats död förlorar spelet.
+- Verifierat med riktat Playwright-test och skärmbild: pilfällans pris/timer,
+  blockerad sikt genom byggda block, fiendens blockslag, spelar-respawn,
+  hjärt-Game-Over och dag 2-varningen fungerar.
