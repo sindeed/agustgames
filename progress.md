@@ -218,3 +218,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Verifierat med syntaxkontroll och Playwright: vanlig start visar `firstPerson3d`,
   byggknappen växlar till `map`, B-tangenten växlar tillbaka till 3D, högerstyrning
   fungerar efter växlingen, och skärmbilderna visar både 3D-vy och kartvy.
+- Survivor har fått touch-spak på styrkorset: håller och drar man på P1/P2-kontrollen
+  fortsätter spelaren gå åt spakens riktning tills man släpper. Vanliga tryck på
+  pilarna fungerar fortfarande. Verifierat med Playwright att P1-spaken registrerar
+  riktning, flyttar spelaren flera rutor medan den hålls nere, släpper korrekt,
+  och byggläge/kartvy fortfarande fungerar efteråt.

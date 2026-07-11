@@ -119,6 +119,8 @@ function tileRadius(a, b) {
 }
 
 let uiButtons = [];
+let joystickZones = [];
+const activeJoysticks = new Map();
 let lastTime = 0;
 let dpr = 1;
 
@@ -634,6 +636,37 @@ function angleFromDir(name) {
 
 function isMapView() {
   return state.shopOpen || state.activeTool !== "none";
+}
+
+function joystickDirectionFromDelta(dx, dy) {
+  const deadZone = 14;
+  if (Math.hypot(dx, dy) < deadZone) return null;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? { dx: 1, dy: 0, name: "right" } : { dx: -1, dy: 0, name: "left" };
+  }
+  return dy > 0 ? { dx: 0, dy: 1, name: "down" } : { dx: 0, dy: -1, name: "up" };
+}
+
+function updateJoystick(pointerId, point) {
+  const joystick = activeJoysticks.get(pointerId);
+  if (!joystick) return;
+  const rawDx = point.x - joystick.centerX;
+  const rawDy = point.y - joystick.centerY;
+  const distance = Math.hypot(rawDx, rawDy);
+  const maxDistance = 34;
+  const scale = distance > maxDistance ? maxDistance / distance : 1;
+  joystick.knobX = joystick.centerX + rawDx * scale;
+  joystick.knobY = joystick.centerY + rawDy * scale;
+  joystick.direction = joystickDirectionFromDelta(rawDx, rawDy);
+}
+
+function movePlayersFromJoysticks() {
+  if (state.mode !== "playing") return;
+  for (const joystick of activeJoysticks.values()) {
+    const player = state.players[joystick.playerId - 1];
+    if (!player || !joystick.direction) continue;
+    tryMovePlayer(player, joystick.direction.dx, joystick.direction.dy);
+  }
 }
 
 function tryMovePlayer(player, dx, dy) {
@@ -1269,6 +1302,7 @@ function update(dt) {
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
     player.stepCooldown = Math.max(0, player.stepCooldown - dt);
   }
+  movePlayersFromJoysticks();
 
   if (!state.portalOpen) {
     state.phaseElapsed += dt;
@@ -1932,11 +1966,36 @@ function drawControls() {
 }
 
 function drawDpad(playerId, x, y) {
+  const centerX = x + 63;
+  const centerY = y + 63;
+  joystickZones.push({ playerId, x: x - 8, y: y - 8, w: 142, h: 112, centerX, centerY });
   drawText(`P${playerId}`, x + 47, y - 15, 15, "#e0f2fe", "center", "900");
   pushButton(`p${playerId}-up`, x + 42, y, 42, 42, "▲", "#93c5fd", { small: true });
   pushButton(`p${playerId}-left`, x, y + 42, 42, 42, "◀", "#93c5fd", { small: true });
   pushButton(`p${playerId}-down`, x + 42, y + 42, 42, 42, "▼", "#93c5fd", { small: true });
   pushButton(`p${playerId}-right`, x + 84, y + 42, 42, 42, "▶", "#93c5fd", { small: true });
+  drawJoystickKnob(playerId, centerX, centerY);
+}
+
+function drawJoystickKnob(playerId, centerX, centerY) {
+  const active = Array.from(activeJoysticks.values()).find((joystick) => joystick.playerId === playerId);
+  const knobX = active ? active.knobX : centerX;
+  const knobY = active ? active.knobY : centerY;
+
+  ctx.save();
+  ctx.globalAlpha = active ? 0.95 : 0.62;
+  ctx.fillStyle = "rgba(15, 23, 42, 0.5)";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 26, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = active ? "#fef08a" : "#dbeafe";
+  ctx.beginPath();
+  ctx.arc(knobX, knobY, 17, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawMenu() {
@@ -1987,6 +2046,7 @@ function drawEndScreen(title, subtitle) {
 
 function render() {
   uiButtons = [];
+  joystickZones = [];
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
   if (state.mode === "menu") {
@@ -2039,6 +2099,16 @@ function buttonAt(x, y) {
   return null;
 }
 
+function joystickZoneAt(x, y) {
+  for (let i = joystickZones.length - 1; i >= 0; i -= 1) {
+    const zone = joystickZones[i];
+    if (x >= zone.x && y >= zone.y && x <= zone.x + zone.w && y <= zone.y + zone.h) {
+      return zone;
+    }
+  }
+  return null;
+}
+
 function pointerToCanvas(event) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -2050,6 +2120,23 @@ function pointerToCanvas(event) {
 function handlePointer(event) {
   event.preventDefault();
   const point = pointerToCanvas(event);
+  const joystickZone = state.mode === "playing" && !state.shopOpen ? joystickZoneAt(point.x, point.y) : null;
+  if (joystickZone) {
+    activeJoysticks.set(event.pointerId, {
+      playerId: joystickZone.playerId,
+      centerX: joystickZone.centerX,
+      centerY: joystickZone.centerY,
+      knobX: joystickZone.centerX,
+      knobY: joystickZone.centerY,
+      direction: null,
+    });
+    updateJoystick(event.pointerId, point);
+    canvas.setPointerCapture?.(event.pointerId);
+    movePlayersFromJoysticks();
+    render();
+    return;
+  }
+
   const button = buttonAt(point.x, point.y);
   if (button && !button.disabled) {
     handleButton(button.id);
@@ -2068,6 +2155,20 @@ function handlePointer(event) {
   } else if (state.activeTool === "heart") {
     moveHeart(cell.c, cell.r);
   }
+  render();
+}
+
+function handlePointerMove(event) {
+  if (!activeJoysticks.has(event.pointerId)) return;
+  event.preventDefault();
+  updateJoystick(event.pointerId, pointerToCanvas(event));
+  render();
+}
+
+function stopPointerJoystick(event) {
+  if (!activeJoysticks.has(event.pointerId)) return;
+  event.preventDefault();
+  activeJoysticks.delete(event.pointerId);
   render();
 }
 
@@ -2323,6 +2424,10 @@ function renderGameToText() {
     money: state.money,
     hasSword: state.hasSword,
     cameraView: isMapView() ? "map" : "firstPerson3d",
+    joysticks: Array.from(activeJoysticks.values()).map((joystick) => ({
+      playerId: joystick.playerId,
+      direction: joystick.direction ? joystick.direction.name : "center",
+    })),
     activeTool: state.activeTool,
     shopOpen: state.shopOpen,
     selectedSlot: state.selectedSlot,
@@ -2382,6 +2487,9 @@ window.advanceTime = (ms) => {
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("keydown", handleKey, { passive: false });
 canvas.addEventListener("pointerdown", handlePointer, { passive: false });
+canvas.addEventListener("pointermove", handlePointerMove, { passive: false });
+canvas.addEventListener("pointerup", stopPointerJoystick, { passive: false });
+canvas.addEventListener("pointercancel", stopPointerJoystick, { passive: false });
 document.addEventListener("fullscreenchange", resizeCanvas);
 
 resizeCanvas();
