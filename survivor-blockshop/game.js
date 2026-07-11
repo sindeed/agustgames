@@ -1970,10 +1970,23 @@ function drawDpad(playerId, x, y) {
   const centerY = y + 63;
   joystickZones.push({ playerId, x: x - 8, y: y - 8, w: 142, h: 112, centerX, centerY });
   drawText(`P${playerId}`, x + 47, y - 15, 15, "#e0f2fe", "center", "900");
-  pushButton(`p${playerId}-up`, x + 42, y, 42, 42, "▲", "#93c5fd", { small: true });
-  pushButton(`p${playerId}-left`, x, y + 42, 42, 42, "◀", "#93c5fd", { small: true });
-  pushButton(`p${playerId}-down`, x + 42, y + 42, 42, 42, "▼", "#93c5fd", { small: true });
-  pushButton(`p${playerId}-right`, x + 84, y + 42, 42, 42, "▶", "#93c5fd", { small: true });
+  ctx.save();
+  ctx.fillStyle = "rgba(147, 197, 253, 0.34)";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 54, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(219, 234, 254, 0.78)";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.45)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 38, centerY);
+  ctx.lineTo(centerX + 38, centerY);
+  ctx.moveTo(centerX, centerY - 38);
+  ctx.lineTo(centerX, centerY + 38);
+  ctx.stroke();
+  ctx.restore();
   drawJoystickKnob(playerId, centerX, centerY);
 }
 
@@ -2264,16 +2277,6 @@ function handleButton(id) {
     return;
   }
 
-  const moveMatch = id.match(/^p(\d+)-(up|down|left|right)$/);
-  if (moveMatch) {
-    const player = state.players[Number(moveMatch[1]) - 1];
-    const dir = moveMatch[2];
-    if (!player) return;
-    if (dir === "up") tryMovePlayer(player, 0, -1);
-    if (dir === "down") tryMovePlayer(player, 0, 1);
-    if (dir === "left") tryMovePlayer(player, -1, 0);
-    if (dir === "right") tryMovePlayer(player, 1, 0);
-  }
 }
 
 function handleKey(event) {

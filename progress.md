@@ -223,3 +223,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   pilarna fungerar fortfarande. Verifierat med Playwright att P1-spaken registrerar
   riktning, flyttar spelaren flera rutor medan den hålls nere, släpper korrekt,
   och byggläge/kartvy fortfarande fungerar efteråt.
+- De vanliga synliga pilknapparna på Survivor-spaken är borttagna. Ett vanligt
+  tryck i spakens mitt flyttar inte längre spelaren; man måste dra spaken. Verifierat
+  med Playwright att tryck inte flyttar, drag flyttar, och skärmbilden visar rund
+  spak utan pilknappar.
