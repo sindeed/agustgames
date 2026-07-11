@@ -2122,22 +2122,6 @@ function joystickZoneAt(x, y) {
   return null;
 }
 
-function gameplayDragZoneAt(x, y) {
-  if (state.mode !== "playing" || state.shopOpen || state.activeTool !== "none") {
-    return null;
-  }
-  const inHud = y < 82;
-  const inHotbar = y > 668 && x > 240 && x < 790;
-  if (inHud || inHotbar) return null;
-
-  const playerId = state.playersWanted > 1 && x > VIEW_W / 2 ? 2 : 1;
-  return {
-    playerId,
-    centerX: x,
-    centerY: y,
-  };
-}
-
 function pointerToCanvas(event) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -2154,9 +2138,7 @@ function startDragControl(id, point) {
     return true;
   }
 
-  const joystickZone = state.mode === "playing" && !state.shopOpen
-    ? joystickZoneAt(point.x, point.y) || gameplayDragZoneAt(point.x, point.y)
-    : null;
+  const joystickZone = state.mode === "playing" && !state.shopOpen ? joystickZoneAt(point.x, point.y) : null;
   if (joystickZone) {
     activeJoysticks.set(id, {
       playerId: joystickZone.playerId,

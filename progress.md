@@ -237,3 +237,7 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   lyssnar nu även på `touchstart`/`touchmove`/`touchend`, inte bara pointer events.
   Verifierat med simulerade Touch Events att dragpunkten syns på spelbilden,
   riktningen blir vänster, spelaren rör sig och draget släpper korrekt.
+- Agust ändrade sig: drag på själva spelbilden ska inte längre flytta spelaren.
+  Dragstyrningen är åter begränsad till den runda spaken, men touch-stödet för
+  spaken finns kvar. Verifierat att touch-drag på spelbilden inte startar joystick
+  och inte flyttar spelaren, medan drag på runda spaken fortfarande flyttar.
