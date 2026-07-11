@@ -227,3 +227,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   tryck i spakens mitt flyttar inte längre spelaren; man måste dra spaken. Verifierat
   med Playwright att tryck inte flyttar, drag flyttar, och skärmbilden visar rund
   spak utan pilknappar.
+- Survivor kan nu styras genom att dra på själva spelbilden i vanligt spelläge,
+  inte bara på den runda spaken. Dragets startruta blir en tillfällig spakpunkt
+  och riktningen väljer vart spelaren går. Knappar som Shop/Bygg/Slå hanteras
+  fortfarande före dragstyrning. Verifierat med Playwright att drag på 3D-bilden
+  flyttar spelaren och att Shop-knappen fortfarande öppnar shoppen.

@@ -2122,6 +2122,22 @@ function joystickZoneAt(x, y) {
   return null;
 }
 
+function gameplayDragZoneAt(x, y) {
+  if (state.mode !== "playing" || state.shopOpen || state.activeTool !== "none") {
+    return null;
+  }
+  const inFirstPersonView = x >= VIEW3D_X && y >= VIEW3D_Y && x <= VIEW3D_X + VIEW3D_W && y <= VIEW3D_Y + VIEW3D_H;
+  const inMapBoard = x >= BOARD_X && y >= BOARD_Y && x <= BOARD_X + BOARD_W && y <= BOARD_Y + BOARD_H;
+  if (!inFirstPersonView && !inMapBoard) return null;
+
+  const playerId = state.playersWanted > 1 && x > VIEW_W / 2 ? 2 : 1;
+  return {
+    playerId,
+    centerX: x,
+    centerY: y,
+  };
+}
+
 function pointerToCanvas(event) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -2133,7 +2149,16 @@ function pointerToCanvas(event) {
 function handlePointer(event) {
   event.preventDefault();
   const point = pointerToCanvas(event);
-  const joystickZone = state.mode === "playing" && !state.shopOpen ? joystickZoneAt(point.x, point.y) : null;
+  const button = buttonAt(point.x, point.y);
+  if (button && !button.disabled) {
+    handleButton(button.id);
+    render();
+    return;
+  }
+
+  const joystickZone = state.mode === "playing" && !state.shopOpen
+    ? joystickZoneAt(point.x, point.y) || gameplayDragZoneAt(point.x, point.y)
+    : null;
   if (joystickZone) {
     activeJoysticks.set(event.pointerId, {
       playerId: joystickZone.playerId,
@@ -2146,13 +2171,6 @@ function handlePointer(event) {
     updateJoystick(event.pointerId, point);
     canvas.setPointerCapture?.(event.pointerId);
     movePlayersFromJoysticks();
-    render();
-    return;
-  }
-
-  const button = buttonAt(point.x, point.y);
-  if (button && !button.disabled) {
-    handleButton(button.id);
     render();
     return;
   }
