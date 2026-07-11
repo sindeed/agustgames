@@ -202,3 +202,12 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Verifierat med riktat Playwright-test och skärmbild: pilfällans pris/timer,
   blockerad sikt genom byggda block, fiendens blockslag, spelar-respawn,
   hjärt-Game-Over och dag 2-varningen fungerar.
+- Värld 2 första spelbara version byggd: menyval för värld 1/värld 2, portal
+  från värld 1 till värld 2, ny karta från Agusts ritning, fasta V-väggar,
+  lava som respawnar spelaren vid hjärtat, A-golv där man inte kan bygga/flytta
+  hjärtat, F1/F2-spawns, och e-rutor som väcker skelett-hjälpare. Värld 2
+  natt 1 spawnar en vanlig fiende per sekund från F1; natt 2-5 har tillfälliga
+  enkla vågor tills Agust bestämmer dem mer exakt.
+- Verifierat med Playwright: värld 2 kan startas från menyn, byggförbud gäller
+  på V/L/A/e/F, lava-respawn fungerar, skelett kan slå fiender, fiender kan slå
+  skelett, F1 spawnar varje sekund natt 1, och värld 1-portalen går till värld 2.

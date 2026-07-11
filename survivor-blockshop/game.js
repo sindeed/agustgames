@@ -20,16 +20,59 @@ const ENEMY_PLAYER_ATTACK_WINDUP = 0.5;
 const PLAYER_CHASE_RANGE = 2;
 const ARROW_SHOT_INTERVAL = 3;
 const ARROW_DAMAGE = 0.5;
-const CELL_F = { c: 8, r: 0 };
-const CELL_CORNER = { c: 0, r: 0 };
-const CELL_PORTAL = { c: 0, r: 0 };
-const HEART_START = { c: 7, r: 5 };
-const PLAYER_STARTS = [
-  { c: 8, r: 8 },
-  { c: 7, r: 8 },
+const SKELETON_ATTACK_INTERVAL = 1;
+const SKELETON_DAMAGE = 0.5;
+const SKELETON_HP = 0.5;
+
+const WORLD_DEFS = [
+  {
+    id: 1,
+    name: "Värld 1",
+    rows: [
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+    ],
+    heartStart: { c: 7, r: 5 },
+    playerStarts: [{ c: 8, r: 8 }, { c: 7, r: 8 }],
+    portal: { c: 0, r: 0 },
+    nextWorld: 2,
+    spawns: {
+      f1: { c: 8, r: 0, label: "F", color: "#ef4444" },
+      f2: { c: 0, r: 0, label: "F2", color: "#f97316" },
+    },
+  },
+  {
+    id: 2,
+    name: "Värld 2",
+    rows: [
+      "VVVVVVVVV",
+      "VVVFAAAFV",
+      "VVVLLALLV",
+      "VVVVLALVV",
+      "VVVVLALVV",
+      "H..VVAVeV",
+      "...AAAeVV",
+      "...VVVVVV",
+      "S..VVVVVV",
+    ],
+    heartStart: { c: 0, r: 5 },
+    playerStarts: [{ c: 0, r: 8 }, { c: 1, r: 8 }],
+    portal: { c: 2, r: 8 },
+    nextWorld: null,
+    spawns: {
+      f1: { c: 7, r: 1, label: "F1", color: "#ef4444" },
+      f2: { c: 3, r: 1, label: "F2", color: "#f97316" },
+    },
+  },
 ];
-const WORLD_WALL_LIST = [];
-const WORLD_WALL_KEYS = new Set(WORLD_WALL_LIST.map(([c, r]) => `${c},${r}`));
+const WORLDS = Object.fromEntries(WORLD_DEFS.map((world) => [world.id, createWorldConfig(world)]));
 
 const PRICES = {
   wood: 5,
@@ -76,6 +119,7 @@ let dpr = 1;
 
 const state = {
   mode: "menu",
+  world: 1,
   playersWanted: 1,
   message: "Välj hur många som spelar.",
   messageTimer: 0,
@@ -92,11 +136,13 @@ const state = {
   selectedSlot: 0,
   inventory: [],
   players: [],
-  heart: { c: HEART_START.c, r: HEART_START.r, hp: 3, maxHp: 3 },
+  heart: { c: 7, r: 5, hp: 3, maxHp: 3 },
   blocks: new Map(),
   enemies: [],
+  skeletons: [],
   projectiles: [],
   nextEnemyId: 1,
+  nextSkeletonId: 1,
 };
 
 function resizeCanvas() {
@@ -123,12 +169,80 @@ function key(c, r) {
   return `${c},${r}`;
 }
 
+function createWorldConfig(world) {
+  const terrainWalls = [];
+  const lava = [];
+  const noBuild = [];
+  const skeletonTriggers = [];
+  const buildableKeys = new Set();
+
+  for (let r = 0; r < world.rows.length; r += 1) {
+    for (let c = 0; c < world.rows[r].length; c += 1) {
+      const mark = world.rows[r][c];
+      const tileKey = key(c, r);
+      if (mark === "V") {
+        terrainWalls.push({ c, r });
+      } else if (mark === "L") {
+        lava.push({ c, r });
+        noBuild.push({ c, r });
+      } else if (mark === "A" || mark === "F" || mark === "e") {
+        noBuild.push({ c, r });
+        if (mark === "e") skeletonTriggers.push({ c, r });
+      } else {
+        buildableKeys.add(tileKey);
+      }
+    }
+  }
+
+  const spawnList = Object.values(world.spawns);
+  const spawnKeys = new Set(spawnList.map((spawn) => key(spawn.c, spawn.r)));
+  for (const spawn of spawnList) {
+    buildableKeys.delete(key(spawn.c, spawn.r));
+  }
+
+  return {
+    ...world,
+    days: 5,
+    terrainWalls,
+    wallKeys: new Set(terrainWalls.map((cell) => key(cell.c, cell.r))),
+    lava,
+    lavaKeys: new Set(lava.map((cell) => key(cell.c, cell.r))),
+    noBuild,
+    noBuildKeys: new Set(noBuild.map((cell) => key(cell.c, cell.r))),
+    skeletonTriggers,
+    skeletonTriggerKeys: new Set(skeletonTriggers.map((cell) => key(cell.c, cell.r))),
+    buildableKeys,
+    spawnList,
+    spawnKeys,
+  };
+}
+
+function currentWorld() {
+  return WORLDS[state.world] || WORLDS[1];
+}
+
 function inBounds(c, r) {
   return c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS;
 }
 
 function isTerrainWall(c, r) {
-  return WORLD_WALL_KEYS.has(key(c, r));
+  return currentWorld().wallKeys.has(key(c, r));
+}
+
+function isBuildableGround(c, r) {
+  return currentWorld().buildableKeys.has(key(c, r));
+}
+
+function isLava(c, r) {
+  return currentWorld().lavaKeys.has(key(c, r));
+}
+
+function isSpawnCell(c, r) {
+  return currentWorld().spawnKeys.has(key(c, r));
+}
+
+function isSkeletonTrigger(c, r) {
+  return currentWorld().skeletonTriggerKeys.has(key(c, r));
 }
 
 function sameCell(a, b) {
@@ -221,8 +335,14 @@ function setMessage(text, seconds = 2.8) {
   state.messageTimer = seconds;
 }
 
-function startGame(playersWanted) {
+function startGame(playersWanted, worldId = 1) {
+  setupWorld(worldId, playersWanted, false);
+}
+
+function setupWorld(worldId, playersWanted, keepProgress = false) {
+  const world = WORLDS[worldId] || WORLDS[1];
   state.mode = "playing";
+  state.world = world.id;
   state.playersWanted = playersWanted;
   state.day = 1;
   state.phase = "day";
@@ -232,22 +352,27 @@ function startGame(playersWanted) {
   state.portalOpen = false;
   state.activeTool = "none";
   state.shopOpen = false;
-  state.money = 10;
-  state.hasSword = false;
-  state.selectedSlot = 0;
-  state.inventory = [];
+  if (!keepProgress) {
+    state.money = 10;
+    state.hasSword = false;
+    state.selectedSlot = 0;
+    state.inventory = [];
+  }
   state.blocks = new Map();
   state.enemies = [];
+  state.skeletons = [];
   state.projectiles = [];
   state.nextEnemyId = 1;
-  state.heart = { c: HEART_START.c, r: HEART_START.r, hp: 3, maxHp: 3 };
+  state.nextSkeletonId = 1;
+  state.heart = { c: world.heartStart.c, r: world.heartStart.r, hp: 3, maxHp: 3 };
   state.players = [];
 
   for (let i = 0; i < playersWanted; i += 1) {
+    const start = world.playerStarts[i] || world.playerStarts[0];
     state.players.push({
       id: i + 1,
-      c: PLAYER_STARTS[i].c,
-      r: PLAYER_STARTS[i].r,
+      c: start.c,
+      r: start.r,
       hp: 3,
       maxHp: 3,
       dir: i === 0 ? "left" : "up",
@@ -258,7 +383,7 @@ function startGame(playersWanted) {
     });
   }
 
-  setMessage("Dag 1: bygg basen runt hjärtat.", 4);
+  setMessage(`${world.name}: dag 1. Bygg basen runt hjärtat.`, 4);
 }
 
 function isDay() {
@@ -403,13 +528,14 @@ function useHealerPotion() {
 function canBuildAt(c, r) {
   if (!inBounds(c, r)) return false;
   if (isTerrainWall(c, r)) return false;
+  if (!isBuildableGround(c, r)) return false;
   if (state.blocks.has(key(c, r))) return false;
   if (sameCell({ c, r }, state.heart)) return false;
-  if (sameCell({ c, r }, CELL_F)) return false;
-  if (sameCell({ c, r }, CELL_CORNER)) return false;
+  if (isSpawnCell(c, r)) return false;
   if (state.players.some((player) => player.c === c && player.r === r)) return false;
   if (state.enemies.some((enemy) => enemy.c === c && enemy.r === r)) return false;
-  if (state.portalOpen && sameCell({ c, r }, CELL_PORTAL)) return false;
+  if (state.skeletons.some((skeleton) => skeleton.c === c && skeleton.r === r)) return false;
+  if (state.portalOpen && sameCell({ c, r }, currentWorld().portal)) return false;
   return true;
 }
 
@@ -478,6 +604,10 @@ function enemyAt(c, r) {
   return state.enemies.find((enemy) => enemy.c === c && enemy.r === r) || null;
 }
 
+function skeletonAt(c, r) {
+  return state.skeletons.find((skeleton) => skeleton.c === c && skeleton.r === r && skeleton.hp > 0) || null;
+}
+
 function isPlayerBlocked(c, r, playerId) {
   if (!inBounds(c, r)) return true;
   if (isTerrainWall(c, r)) return true;
@@ -505,10 +635,13 @@ function tryMovePlayer(player, dx, dy) {
   player.r = nextR;
   player.stepCooldown = 0.11;
 
-  if (state.portalOpen && sameCell(player, CELL_PORTAL)) {
-    state.mode = "worldComplete";
-    state.shopOpen = false;
-    setMessage("Portalen tog er vidare! Värld 2 kommer senare.", 5);
+  if (isLava(player.c, player.r)) {
+    damagePlayerByLava(player);
+    return;
+  }
+
+  if (state.portalOpen && sameCell(player, currentWorld().portal)) {
+    enterPortal();
   }
 }
 
@@ -544,6 +677,14 @@ function damageEnemy(enemy, amount) {
   }
 }
 
+function damageSkeleton(skeleton, amount) {
+  skeleton.hp -= amount;
+  skeleton.hitFlash = 0.18;
+  if (skeleton.hp <= 0) {
+    state.skeletons = state.skeletons.filter((item) => item.id !== skeleton.id);
+  }
+}
+
 function killEnemy(enemy) {
   state.enemies = state.enemies.filter((item) => item.id !== enemy.id);
   if (enemy.type === "boss") {
@@ -559,6 +700,18 @@ function passableForEnemy(c, r, enemy) {
   if (!inBounds(c, r)) return false;
   if (enemy.type !== "flying" && isTerrainWall(c, r)) return false;
   if (enemy.type !== "flying" && state.blocks.has(key(c, r))) return false;
+  if (enemy.type !== "flying" && skeletonAt(c, r)) return false;
+  return true;
+}
+
+function passableForSkeleton(c, r) {
+  if (!inBounds(c, r)) return false;
+  if (isTerrainWall(c, r)) return false;
+  if (state.blocks.has(key(c, r))) return false;
+  if (sameCell({ c, r }, state.heart)) return false;
+  if (state.players.some((player) => player.c === c && player.r === r)) return false;
+  if (state.enemies.some((enemy) => enemy.c === c && enemy.r === r)) return false;
+  if (skeletonAt(c, r)) return false;
   return true;
 }
 
@@ -632,6 +785,18 @@ function adjacentBlockToAttack(enemy) {
   return candidates[0] || null;
 }
 
+function adjacentSkeletonToAttack(enemy) {
+  const candidates = [];
+  for (const dir of DIRS) {
+    const skeleton = skeletonAt(enemy.c + dir.dx, enemy.r + dir.dy);
+    if (skeleton) {
+      candidates.push({ skeleton, dist: manhattan(skeleton, state.heart) });
+    }
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  return candidates[0]?.skeleton || null;
+}
+
 function adjacentBlockTowardTarget(enemy, target) {
   const candidates = [];
   const currentDist = manhattan(enemy, target);
@@ -657,6 +822,81 @@ function damageBlock(c, r, amount) {
   block.hp -= amount;
   if (block.hp <= 0) {
     state.blocks.delete(blockKey);
+  }
+}
+
+function spawnSkeletonFromTrigger(c, r) {
+  const candidates = [
+    { c, r },
+    ...DIRS.map((dir) => ({ c: c + dir.dx, r: r + dir.dy })),
+  ];
+  const spawn = candidates.find((candidate) => passableForSkeleton(candidate.c, candidate.r));
+  if (!spawn) return null;
+
+  const skeleton = {
+    id: state.nextSkeletonId,
+    c: spawn.c,
+    r: spawn.r,
+    hp: SKELETON_HP,
+    maxHp: SKELETON_HP,
+    moveTimer: 0,
+    attackTimer: 0,
+    hitFlash: 0,
+  };
+  state.nextSkeletonId += 1;
+  state.skeletons.push(skeleton);
+  setMessage("En skelett-hjälpare vaknade!", 1.5);
+  return skeleton;
+}
+
+function triggerSkeletonsForEnemy(enemy) {
+  if (!currentWorld().skeletonTriggers.length) return;
+  for (const trigger of currentWorld().skeletonTriggers) {
+    if (tileRadius(enemy, trigger) <= 1) {
+      spawnSkeletonFromTrigger(trigger.c, trigger.r);
+    }
+  }
+}
+
+function nearestEnemyForSkeleton(skeleton) {
+  return state.enemies
+    .slice()
+    .sort((a, b) => manhattan(skeleton, a) - manhattan(skeleton, b) || a.id - b.id)[0] || null;
+}
+
+function updateSkeleton(skeleton, dt) {
+  skeleton.moveTimer += dt;
+  skeleton.attackTimer = Math.max(0, skeleton.attackTimer - dt);
+  skeleton.hitFlash = Math.max(0, skeleton.hitFlash - dt);
+
+  const target = nearestEnemyForSkeleton(skeleton);
+  if (!target) return;
+
+  if (manhattan(skeleton, target) <= 1) {
+    if (skeleton.attackTimer <= 0) {
+      damageEnemy(target, SKELETON_DAMAGE);
+      skeleton.attackTimer = SKELETON_ATTACK_INTERVAL;
+    }
+    return;
+  }
+
+  if (skeleton.moveTimer < 0.65) return;
+  skeleton.moveTimer = 0;
+
+  const next = DIRS
+    .map((dir) => ({ c: skeleton.c + dir.dx, r: skeleton.r + dir.dy }))
+    .filter((cell) => passableForSkeleton(cell.c, cell.r))
+    .sort((a, b) => manhattan(a, target) - manhattan(b, target))[0];
+
+  if (next && manhattan(next, target) < manhattan(skeleton, target)) {
+    skeleton.c = next.c;
+    skeleton.r = next.r;
+  }
+}
+
+function updateSkeletons(dt) {
+  for (const skeleton of [...state.skeletons]) {
+    updateSkeleton(skeleton, dt);
   }
 }
 
@@ -757,6 +997,7 @@ function findOpenSpawn(cell) {
     if (state.blocks.has(key(candidate.c, candidate.r))) continue;
     if (sameCell(candidate, state.heart)) continue;
     if (playerAt(candidate.c, candidate.r)) continue;
+    if (skeletonAt(candidate.c, candidate.r)) continue;
     return candidate;
   }
   return cell;
@@ -769,17 +1010,18 @@ function startNight() {
   state.bossSpawned = false;
   state.shopOpen = false;
   state.activeTool = "none";
-  setMessage(`Natt ${state.day}! Skydda hjärtat.`, 3);
+  setMessage(`${currentWorld().name} natt ${state.day}! Skydda hjärtat.`, 3);
 }
 
 function startNextDay() {
   state.enemies = [];
-  if (state.day >= 5) {
+  state.skeletons = [];
+  if (state.day >= currentWorld().days) {
     state.portalOpen = true;
     state.phase = "day";
     state.phaseElapsed = 0;
     state.activeTool = "none";
-    setMessage("Värld 1 klar! Portalen öppnade uppe till vänster.", 5);
+    setMessage(`${currentWorld().name} klar! Portalen öppnade.`, 5);
     return;
   }
 
@@ -792,16 +1034,41 @@ function startNextDay() {
   } else if (state.day === 3 && !state.hasSword) {
     setMessage("Dag 3: Köp svärd! Bossen kan bara skadas med svärd.", 6);
   } else {
-    setMessage(`Dag ${state.day}: bygg och handla innan natten.`, 3);
+    setMessage(`${currentWorld().name} dag ${state.day}: bygg och handla innan natten.`, 3);
   }
 }
 
 function updateSpawns() {
   if (state.phase !== "night") return;
+  const world = currentWorld();
+
+  if (state.world === 2) {
+    const interval = state.day === 1 ? 1 : 3;
+    while (state.phaseElapsed >= state.spawnCursor) {
+      if (state.day === 1) {
+        spawnEnemy("normal", world.spawns.f1);
+      } else if (state.day === 2) {
+        spawnEnemy("normal", world.spawns.f1);
+        spawnEnemy("normal", world.spawns.f2);
+      } else if (state.day === 3) {
+        spawnEnemy("normal", world.spawns.f1);
+        spawnEnemy("flying", world.spawns.f2);
+      } else if (state.day === 4) {
+        spawnEnemy("flying", world.spawns.f1);
+        spawnEnemy("normal", world.spawns.f2);
+      } else if (state.day === 5) {
+        spawnEnemy("flying", world.spawns.f1);
+        spawnEnemy("flying", world.spawns.f2);
+      }
+      state.spawnCursor += interval;
+      if (state.spawnCursor > NIGHT_LENGTH) break;
+    }
+    return;
+  }
 
   if (state.day === 3) {
     if (!state.bossSpawned) {
-      spawnEnemy("boss", CELL_F);
+      spawnEnemy("boss", world.spawns.f1);
       state.bossSpawned = true;
       setMessage("Bossen kom från F!", 2.5);
     }
@@ -810,16 +1077,16 @@ function updateSpawns() {
 
   while (state.phaseElapsed >= state.spawnCursor) {
     if (state.day === 1) {
-      spawnEnemy("normal", CELL_F);
+      spawnEnemy("normal", world.spawns.f1);
     } else if (state.day === 2) {
-      spawnEnemy("normal", CELL_F);
-      spawnEnemy("normal", CELL_CORNER);
+      spawnEnemy("normal", world.spawns.f1);
+      spawnEnemy("normal", world.spawns.f2);
     } else if (state.day === 4) {
-      spawnEnemy("flying", CELL_F);
+      spawnEnemy("flying", world.spawns.f1);
     } else if (state.day === 5) {
-      spawnEnemy("flying", CELL_F);
-      spawnEnemy("flying", CELL_F);
-      spawnEnemy("flying", CELL_F);
+      spawnEnemy("flying", world.spawns.f1);
+      spawnEnemy("flying", world.spawns.f1);
+      spawnEnemy("flying", world.spawns.f1);
     }
     state.spawnCursor += 3;
     if (state.spawnCursor > NIGHT_LENGTH) break;
@@ -837,6 +1104,29 @@ function respawnPlayer(player) {
   player.attackCooldown = 0;
   player.stepCooldown = 0;
   setMessage(`Spelare ${player.id} började om vid hjärtat.`, 2);
+}
+
+function damagePlayerByLava(player) {
+  player.hp -= 3;
+  if (player.hp <= 0) {
+    respawnPlayer(player);
+    setMessage(`Lava! Spelare ${player.id} började om vid hjärtat.`, 2);
+  }
+}
+
+function enterPortal() {
+  const world = currentWorld();
+  state.shopOpen = false;
+  state.activeTool = "none";
+
+  if (world.nextWorld) {
+    setupWorld(world.nextWorld, state.playersWanted, true);
+    setMessage(`${world.name} klar! Ni kom till ${currentWorld().name}.`, 5);
+    return;
+  }
+
+  state.mode = "worldComplete";
+  setMessage(`${world.name} klar! Fler världar kommer senare.`, 5);
 }
 
 function damagePlayer(enemy, player) {
@@ -887,6 +1177,16 @@ function updateEnemy(enemy, dt) {
   }
   resetPlayerAttackWindup(enemy);
 
+  const skeletonTarget = adjacentSkeletonToAttack(enemy);
+  if (skeletonTarget) {
+    if (enemy.attackTimer <= 0) {
+      damageSkeleton(skeletonTarget, enemyPlayerDamage(enemy));
+      enemy.attackTimer = ENEMY_ATTACK_INTERVAL;
+      setMessage("Fienden slog ett skelett!", 1.2);
+    }
+    return;
+  }
+
   if (!chasedPlayer && manhattan(enemy, state.heart) === 1) {
     if (enemy.attackTimer <= 0) {
       state.heart.hp -= enemy.type === "boss" ? 1 : 1;
@@ -933,6 +1233,7 @@ function updateEnemy(enemy, dt) {
   if (enemy.type !== "flying" && state.blocks.has(key(next.c, next.r))) return;
   enemy.c = next.c;
   enemy.r = next.r;
+  triggerSkeletonsForEnemy(enemy);
 }
 
 function loseGame(reason) {
@@ -974,6 +1275,10 @@ function update(dt) {
     updateEnemy(enemy, dt);
     if (state.mode !== "playing") break;
   }
+
+  if (state.mode === "playing") {
+    updateSkeletons(dt);
+  }
 }
 
 function drawBackground() {
@@ -1011,20 +1316,47 @@ function drawBoard() {
     for (let c = 0; c < GRID_COLS; c += 1) {
       const x = BOARD_X + c * TILE;
       const y = BOARD_Y + r * TILE;
-      const palette = ["#7ed957", "#5fd38d", "#5bc7c9", "#e6cf5a", "#f29f6b"];
-      const color = palette[(c * 2 + r * 3) % palette.length];
+      const mark = currentWorld().rows[r][c];
+      const palette = state.world === 2
+        ? ["#fff7ed", "#fef3c7", "#fde68a", "#e0f2fe", "#dcfce7"]
+        : ["#7ed957", "#5fd38d", "#5bc7c9", "#e6cf5a", "#f29f6b"];
+      let color = palette[(c * 2 + r * 3) % palette.length];
+      if (mark === "A") color = "#94a3b8";
+      if (mark === "L") color = "#f97316";
+      if (mark === "e") color = "#e5e7eb";
+      if (mark === "V") color = "#dbeafe";
       ctx.fillStyle = color;
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = "rgba(255,255,255,0.12)";
       ctx.fillRect(x + 5, y + 5, TILE - 10, 8);
+      if (mark === "L") {
+        ctx.fillStyle = "#dc2626";
+        ctx.fillRect(x + 11, y + 28, TILE - 22, 8);
+        ctx.fillStyle = "#facc15";
+        ctx.fillRect(x + 18, y + 17, TILE - 36, 7);
+      } else if (mark === "A") {
+        drawText("A", x + TILE / 2, y + TILE / 2 + 1, 25, "#334155", "center", "900");
+      } else if (mark === "e") {
+        ctx.fillStyle = "#f8fafc";
+        ctx.fillRect(x + 18, y + 13, 18, 14);
+        ctx.fillRect(x + 22, y + 27, 10, 15);
+        ctx.fillStyle = "#111827";
+        ctx.fillRect(x + 22, y + 18, 4, 4);
+        ctx.fillRect(x + 29, y + 18, 4, 4);
+        drawText("e", x + TILE / 2, y + 43, 16, "#475569", "center", "900");
+      }
       ctx.strokeStyle = "rgba(22, 44, 57, 0.45)";
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
     }
   }
 
-  drawSpawnMarker(CELL_F.c, CELL_F.r, "F", "#ef4444");
-  drawSpawnMarker(CELL_CORNER.c, CELL_CORNER.r, state.portalOpen ? "P" : "F2", state.portalOpen ? "#8b5cf6" : "#f97316");
+  for (const spawn of currentWorld().spawnList) {
+    drawSpawnMarker(spawn.c, spawn.r, spawn.label, spawn.color);
+  }
+  if (state.portalOpen) {
+    drawSpawnMarker(currentWorld().portal.c, currentWorld().portal.r, "P", "#8b5cf6");
+  }
   ctx.restore();
 }
 
@@ -1087,7 +1419,7 @@ function drawProjectiles() {
 }
 
 function drawTerrainWalls() {
-  for (const [c, r] of WORLD_WALL_LIST) {
+  for (const { c, r } of currentWorld().terrainWalls) {
     const x = BOARD_X + c * TILE + 4;
     const y = BOARD_Y + r * TILE + 4;
     ctx.fillStyle = "#eef6ff";
@@ -1194,6 +1526,34 @@ function drawEnemies() {
   }
 }
 
+function drawSkeletons() {
+  for (const skeleton of state.skeletons) {
+    const { x, y } = centerOf(skeleton.c, skeleton.r);
+    ctx.save();
+    if (skeleton.hitFlash > 0) {
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x - 23, y - 23, 46, 46);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(x - 13, y - 19, 26, 19);
+    ctx.fillRect(x - 8, y, 16, 25);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillRect(x - 18, y + 4, 8, 18);
+    ctx.fillRect(x + 10, y + 4, 8, 18);
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(x - 7, y - 12, 5, 5);
+    ctx.fillRect(x + 3, y - 12, 5, 5);
+    ctx.fillRect(x - 5, y - 3, 10, 3);
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(x - 18, y + 29, 36, 5);
+    ctx.fillStyle = "#e5e7eb";
+    ctx.fillRect(x - 18, y + 29, 36 * Math.max(0, skeleton.hp / skeleton.maxHp), 5);
+    ctx.restore();
+  }
+}
+
 function drawTopHud() {
   const isNight = state.phase === "night";
   ctx.fillStyle = isNight ? "#111827" : "#fff7ad";
@@ -1205,7 +1565,7 @@ function drawTopHud() {
 
   const phaseText = state.portalOpen
     ? "Portal öppen"
-    : `${isNight ? "Natt" : "Dag"} ${state.day}`;
+    : `V${state.world} ${isNight ? "Natt" : "Dag"} ${state.day}`;
   drawText(phaseText, 52, 45, 22, isNight ? "#dbeafe" : "#422006", "left", "900");
   drawText(`Tid: ${Math.ceil(phaseRemaining())}s`, 190, 45, 18, isNight ? "#dbeafe" : "#422006", "left", "800");
   drawText(`Pengar: ${state.money}`, 315, 45, 18, isNight ? "#fde68a" : "#854d0e", "left", "800");
@@ -1224,7 +1584,7 @@ function drawToolPanel() {
   ctx.strokeStyle = "#67e8f9";
   ctx.lineWidth = 2;
   ctx.stroke();
-  drawText("Värld 1", x + 20, y + 28, 24, "#fff", "left", "900");
+  drawText(currentWorld().name, x + 20, y + 28, 24, "#fff", "left", "900");
   drawText(isDay() ? "Bygg på dagen" : "Fiender på natten", x + 20, y + 58, 16, "#cbd5e1", "left", "700");
   drawText("Dag: 1 min  Natt: 0,5 min", x + 20, y + 78, 13, "#e0f2fe", "left", "800");
 
@@ -1390,21 +1750,28 @@ function drawMenu() {
 
   drawText("Survivor of Days", VIEW_W / 2, 166, 48, "#fde047", "center", "900");
   drawText("and Blockshop of Building", VIEW_W / 2, 218, 31, "#bae6fd", "center", "900");
-  drawText("Bygg en bas. Skydda hjärtat i 5 dagar.", VIEW_W / 2, 284, 22, "#f8fafc", "center", "800");
-  drawText("Dagen är 1 minut. Natten är 0,5 minut.", VIEW_W / 2, 320, 18, "#cbd5e1", "center", "700");
+  drawText("Bygg en bas. Skydda hjärtat i 5 dagar.", VIEW_W / 2, 276, 22, "#f8fafc", "center", "800");
+  drawText("Dagen är 1 minut. Natten är 0,5 minut.", VIEW_W / 2, 310, 18, "#cbd5e1", "center", "700");
 
-  pushButton("start-1", 282, 386, 206, 74, "1 spelare", "#38bdf8", { textColor: "#082f49" });
-  pushButton("start-2", 536, 386, 206, 74, "2 spelare", "#facc15", { textColor: "#422006" });
+  drawText("Värld 1", 242, 370, 18, "#bbf7d0", "left", "900");
+  pushButton("start-w1-1", 282, 392, 206, 58, "1 spelare", "#38bdf8", { textColor: "#082f49" });
+  pushButton("start-w1-2", 536, 392, 206, 58, "2 spelare", "#facc15", { textColor: "#422006" });
 
-  drawText("P1: WASD + Space", VIEW_W / 2, 506, 17, "#e0f2fe", "center", "800");
-  drawText("P2: pilar + Enter", VIEW_W / 2, 535, 17, "#fef3c7", "center", "800");
+  drawText("Värld 2", 242, 466, 18, "#fed7aa", "left", "900");
+  pushButton("start-w2-1", 282, 488, 206, 58, "1 spelare", "#fb923c", { textColor: "#431407" });
+  pushButton("start-w2-2", 536, 488, 206, 58, "2 spelare", "#f97316", { textColor: "#431407" });
+
+  drawText("P1: WASD + Space", VIEW_W / 2, 570, 17, "#e0f2fe", "center", "800");
+  drawText("P2: pilar + Enter", VIEW_W / 2, 598, 17, "#fef3c7", "center", "800");
 }
 
 function drawEndScreen(title, subtitle) {
   drawBackground();
   drawBoard();
+  drawTerrainWalls();
   drawBlocks();
   drawHeart();
+  drawSkeletons();
   drawEnemies();
   drawPlayers();
   ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
@@ -1429,7 +1796,7 @@ function render() {
     drawEndScreen("Game Over", state.message || "Hjärtat måste överleva.");
     drawButtonsFrom(0);
   } else if (state.mode === "worldComplete") {
-    drawEndScreen("Värld 1 klar!", "Värld 2 kommer i nästa byggpass.");
+    drawEndScreen(`${currentWorld().name} klar!`, "Fler världar kommer senare.");
     drawButtonsFrom(0);
   } else {
     drawBackground();
@@ -1439,6 +1806,7 @@ function render() {
     drawBlocks();
     drawProjectiles();
     drawHeart();
+    drawSkeletons();
     drawEnemies();
     drawPlayers();
     drawToolPanel();
@@ -1500,16 +1868,25 @@ function handlePointer(event) {
 }
 
 function handleButton(id) {
-  if (id === "start-1") {
-    startGame(1);
+  if (id === "start-w1-1") {
+    startGame(1, 1);
     return;
   }
-  if (id === "start-2") {
-    startGame(2);
+  if (id === "start-w1-2") {
+    startGame(2, 1);
+    return;
+  }
+  if (id === "start-w2-1") {
+    startGame(1, 2);
+    return;
+  }
+  if (id === "start-w2-2") {
+    startGame(2, 2);
     return;
   }
   if (id === "restart") {
     state.mode = "menu";
+    state.world = 1;
     state.message = "Välj hur många som spelar.";
     return;
   }
@@ -1601,8 +1978,10 @@ function handleKey(event) {
   }
 
   if (state.mode === "menu") {
-    if (event.key === "1") startGame(1);
-    if (event.key === "2") startGame(2);
+    if (event.key === "1") startGame(1, 1);
+    if (event.key === "2") startGame(2, 1);
+    if (event.key === "3") startGame(1, 2);
+    if (event.key === "4") startGame(2, 2);
     render();
     return;
   }
@@ -1617,6 +1996,7 @@ function handleKey(event) {
   if (state.mode !== "playing") {
     if (event.key === "Enter" || event.key === " ") {
       state.mode = "menu";
+      state.world = 1;
       render();
     }
     return;
@@ -1730,6 +2110,8 @@ function renderGameToText() {
   const payload = {
     coordinateSystem: "tile grid, origin top-left, c increases right, r increases down",
     mode: state.mode,
+    world: state.world,
+    worldName: currentWorld().name,
     day: state.day,
     phase: state.phase,
     phaseRemaining: Math.ceil(phaseRemaining()),
@@ -1755,6 +2137,12 @@ function renderGameToText() {
       r: enemy.r,
       hp: enemy.hp,
     })),
+    skeletons: state.skeletons.map((skeleton) => ({
+      id: skeleton.id,
+      c: skeleton.c,
+      r: skeleton.r,
+      hp: skeleton.hp,
+    })),
     blocks: Array.from(state.blocks.entries()).map(([blockKey, block]) => {
       const [c, r] = blockKey.split(",").map(Number);
       return { c, r, type: block.type, hp: block.hp };
@@ -1765,7 +2153,11 @@ function renderGameToText() {
       toC: projectile.toC,
       toR: projectile.toR,
     })),
-    terrainWalls: WORLD_WALL_LIST.map(([c, r]) => ({ c, r })),
+    terrainWalls: currentWorld().terrainWalls.map((cell) => ({ c: cell.c, r: cell.r })),
+    lava: currentWorld().lava.map((cell) => ({ c: cell.c, r: cell.r })),
+    noBuild: currentWorld().noBuild.map((cell) => ({ c: cell.c, r: cell.r })),
+    skeletonTriggers: currentWorld().skeletonTriggers.map((cell) => ({ c: cell.c, r: cell.r })),
+    spawns: currentWorld().spawnList.map((spawn) => ({ c: spawn.c, r: spawn.r, label: spawn.label })),
     outerWalls: "all tiles outside the 9x9 world are walls",
     message: state.messageTimer > 0 ? state.message : "",
   };
