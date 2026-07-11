@@ -12,6 +12,11 @@ const BOARD_X = 214;
 const BOARD_Y = 88;
 const BOARD_W = GRID_COLS * TILE;
 const BOARD_H = GRID_ROWS * TILE;
+const VIEW3D_X = 30;
+const VIEW3D_Y = 88;
+const VIEW3D_W = 670;
+const VIEW3D_H = 486;
+const VIEW3D_COLS = 170;
 const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 30;
@@ -618,6 +623,17 @@ function isPlayerBlocked(c, r, playerId) {
 
 function dirFromName(name) {
   return DIRS.find((dir) => dir.name === name) || DIRS[0];
+}
+
+function angleFromDir(name) {
+  if (name === "right") return 0;
+  if (name === "down") return Math.PI / 2;
+  if (name === "left") return Math.PI;
+  return -Math.PI / 2;
+}
+
+function isMapView() {
+  return state.shopOpen || state.activeTool !== "none";
 }
 
 function tryMovePlayer(player, dx, dy) {
@@ -1370,6 +1386,185 @@ function drawSpawnMarker(c, r, label, color) {
   drawText(label, x + (TILE - 14) / 2, y + (TILE - 14) / 2 + 1, label.length > 1 ? 17 : 22, "#fff", "center", "900");
 }
 
+function wallColorFor3d(c, r, block, distance) {
+  const shade = Math.max(0.38, 1 - distance * 0.11);
+  const mix = (hex) => {
+    const value = hex.replace("#", "");
+    const red = Math.round(parseInt(value.slice(0, 2), 16) * shade);
+    const green = Math.round(parseInt(value.slice(2, 4), 16) * shade);
+    const blue = Math.round(parseInt(value.slice(4, 6), 16) * shade);
+    return `rgb(${red},${green},${blue})`;
+  };
+  if (block) return mix(BLOCKS[block.type]?.color || "#94a3b8");
+  if (!inBounds(c, r) || isTerrainWall(c, r)) return mix("#dbeafe");
+  return mix("#94a3b8");
+}
+
+function castWallRay(angle, player) {
+  const startX = player.c + 0.5;
+  const startY = player.r + 0.5;
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const step = 0.025;
+  const maxDistance = 12;
+  let previousKey = key(player.c, player.r);
+
+  for (let distance = step; distance <= maxDistance; distance += step) {
+    const x = startX + dx * distance;
+    const y = startY + dy * distance;
+    const c = Math.floor(x);
+    const r = Math.floor(y);
+    const cellKey = key(c, r);
+    if (cellKey === previousKey) continue;
+    previousKey = cellKey;
+    const block = state.blocks.get(cellKey);
+    if (!inBounds(c, r) || isTerrainWall(c, r) || block) {
+      return { c, r, distance, block };
+    }
+  }
+  return { c: -1, r: -1, distance: maxDistance, block: null };
+}
+
+function drawFirstPersonGroundMarkers(player, cameraAngle) {
+  const markers = [
+    ...currentWorld().lava.map((cell) => ({ ...cell, color: "#f97316", label: "LAVA" })),
+    ...(state.portalOpen ? [{ ...currentWorld().portal, color: "#8b5cf6", label: "PORTAL" }] : []),
+  ];
+  for (const marker of markers) {
+    drawFirstPersonBillboard(player, cameraAngle, marker.c, marker.r, marker.label, marker.color, "floor");
+  }
+}
+
+function drawFirstPersonBillboard(player, cameraAngle, c, r, label, color, kind = "sprite", sizeBoost = 1) {
+  const px = player.c + 0.5;
+  const py = player.r + 0.5;
+  const dx = c + 0.5 - px;
+  const dy = r + 0.5 - py;
+  const forward = Math.cos(cameraAngle) * dx + Math.sin(cameraAngle) * dy;
+  if (forward <= 0.15 || forward > 8) return;
+
+  const side = -Math.sin(cameraAngle) * dx + Math.cos(cameraAngle) * dy;
+  const halfFov = Math.PI / 5;
+  const angleOffset = Math.atan2(side, forward);
+  if (Math.abs(angleOffset) > halfFov * 1.18) return;
+
+  const screenX = VIEW3D_X + VIEW3D_W / 2 + (angleOffset / halfFov) * (VIEW3D_W / 2);
+  const distance = Math.max(0.35, Math.hypot(dx, dy));
+  const scale = Math.max(22, (115 / distance) * sizeBoost);
+  const horizon = VIEW3D_Y + VIEW3D_H * 0.48;
+  const baseY = kind === "floor"
+    ? horizon + (VIEW3D_H * 0.42) / distance
+    : horizon + 135 / distance;
+  const w = kind === "floor" ? scale * 1.35 : scale;
+  const h = kind === "floor" ? Math.max(14, scale * 0.28) : scale * 1.2;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.35, 1 - distance * 0.08);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(screenX - w * 0.45, baseY + h * 0.42, w * 0.9, Math.max(5, h * 0.12));
+  ctx.fillStyle = color;
+  if (kind === "floor") {
+    ctx.fillRect(screenX - w / 2, baseY, w, h);
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillRect(screenX - w / 2 + 4, baseY + 3, w - 8, 4);
+  } else {
+    ctx.fillRect(screenX - w / 2, baseY - h, w, h);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fillRect(screenX - w / 2 + 5, baseY - h + 6, w - 10, Math.max(5, h * 0.15));
+  }
+  drawText(label, screenX, kind === "floor" ? baseY + h / 2 : baseY - h / 2, Math.max(11, Math.min(24, w * 0.22)), "#111827", "center", "900");
+  ctx.restore();
+}
+
+function drawFirstPersonEntities(player, cameraAngle) {
+  const sprites = [
+    { c: state.heart.c, r: state.heart.r, label: "H", color: "#fb7185", kind: "heart", boost: 1.15 },
+    ...state.players
+      .filter((other) => other.id !== player.id)
+      .map((other) => ({ c: other.c, r: other.r, label: `P${other.id}`, color: other.color, kind: "player", boost: 1 })),
+    ...state.skeletons.map((skeleton) => ({ c: skeleton.c, r: skeleton.r, label: "S", color: "#f8fafc", kind: "skeleton", boost: 0.9 })),
+    ...state.enemies.map((enemy) => ({
+      c: enemy.c,
+      r: enemy.r,
+      label: enemy.type === "boss" ? "BOSS" : enemy.type === "flying" ? "FLYG" : "FIENDE",
+      color: enemy.type === "boss" ? "#ef4444" : enemy.type === "flying" ? "#f0abfc" : "#8b5cf6",
+      kind: "enemy",
+      boost: enemy.type === "boss" ? 1.45 : 1,
+    })),
+  ];
+
+  sprites
+    .map((sprite) => ({
+      ...sprite,
+      dist: Math.hypot(sprite.c - player.c, sprite.r - player.r),
+    }))
+    .sort((a, b) => b.dist - a.dist)
+    .forEach((sprite) => {
+      drawFirstPersonBillboard(player, cameraAngle, sprite.c, sprite.r, sprite.label, sprite.color, "sprite", sprite.boost);
+    });
+}
+
+function drawFirstPersonView() {
+  const player = state.players[0];
+  if (!player) return;
+
+  const cameraAngle = angleFromDir(player.dir);
+  const horizon = VIEW3D_Y + VIEW3D_H * 0.48;
+  ctx.save();
+  roundRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H, 8);
+  ctx.clip();
+
+  const sky = ctx.createLinearGradient(0, VIEW3D_Y, 0, horizon);
+  sky.addColorStop(0, state.phase === "night" ? "#0f172a" : "#38bdf8");
+  sky.addColorStop(1, state.phase === "night" ? "#1e293b" : "#bfdbfe");
+  ctx.fillStyle = sky;
+  ctx.fillRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, horizon - VIEW3D_Y);
+
+  const floor = ctx.createLinearGradient(0, horizon, 0, VIEW3D_Y + VIEW3D_H);
+  floor.addColorStop(0, "#64748b");
+  floor.addColorStop(1, state.world === 2 ? "#fef3c7" : "#166534");
+  ctx.fillStyle = floor;
+  ctx.fillRect(VIEW3D_X, horizon, VIEW3D_W, VIEW3D_Y + VIEW3D_H - horizon);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.14)";
+  ctx.lineWidth = 2;
+  for (let i = 1; i <= 8; i += 1) {
+    const y = horizon + (VIEW3D_H * 0.46) * (i / 8) ** 1.7;
+    ctx.beginPath();
+    ctx.moveTo(VIEW3D_X, y);
+    ctx.lineTo(VIEW3D_X + VIEW3D_W, y);
+    ctx.stroke();
+  }
+
+  const fov = Math.PI / 2.8;
+  for (let i = 0; i < VIEW3D_COLS; i += 1) {
+    const ratio = i / (VIEW3D_COLS - 1);
+    const rayAngle = cameraAngle - fov / 2 + ratio * fov;
+    const hit = castWallRay(rayAngle, player);
+    const corrected = Math.max(0.18, hit.distance * Math.cos(rayAngle - cameraAngle));
+    const sliceH = Math.min(VIEW3D_H * 1.6, VIEW3D_H * 0.9 / corrected);
+    const x = VIEW3D_X + ratio * VIEW3D_W;
+    const w = VIEW3D_W / VIEW3D_COLS + 1;
+    const y = horizon - sliceH / 2;
+    ctx.fillStyle = wallColorFor3d(hit.c, hit.r, hit.block, corrected);
+    ctx.fillRect(x, y, w, sliceH);
+    if (i % 8 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.11)";
+      ctx.fillRect(x, y + 6, w, Math.max(4, sliceH * 0.05));
+    }
+  }
+
+  drawFirstPersonGroundMarkers(player, cameraAngle);
+  drawFirstPersonEntities(player, cameraAngle);
+
+  ctx.strokeStyle = "#67e8f9";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(VIEW3D_X + 2, VIEW3D_Y + 2, VIEW3D_W - 4, VIEW3D_H - 4);
+  drawText("3D-läge", VIEW3D_X + 22, VIEW3D_Y + 28, 20, "#f8fafc", "left", "900");
+  drawText(`P1 tittar ${player.dir}`, VIEW3D_X + 22, VIEW3D_Y + 54, 14, "#e0f2fe", "left", "800");
+  ctx.restore();
+}
+
 function drawBlocks() {
   for (const [blockKey, block] of state.blocks.entries()) {
     const [c, r] = blockKey.split(",").map(Number);
@@ -1622,7 +1817,12 @@ function drawToolPanel() {
         ? "Flytta hjärtat"
         : "Vanligt läge";
   drawText(toolName, x + 22, y + 330, 17, "#f8fafc", "left", "800");
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x + 20, y + 338, 210, 38);
+  ctx.clip();
   drawText(state.messageTimer > 0 ? state.message : "Skydda hjärtat.", x + 22, y + 357, 15, "#fde68a", "left", "700");
+  ctx.restore();
 }
 
 function drawShop() {
@@ -1801,14 +2001,18 @@ function render() {
   } else {
     drawBackground();
     drawTopHud();
-    drawBoard();
-    drawTerrainWalls();
-    drawBlocks();
-    drawProjectiles();
-    drawHeart();
-    drawSkeletons();
-    drawEnemies();
-    drawPlayers();
+    if (isMapView()) {
+      drawBoard();
+      drawTerrainWalls();
+      drawBlocks();
+      drawProjectiles();
+      drawHeart();
+      drawSkeletons();
+      drawEnemies();
+      drawPlayers();
+    } else {
+      drawFirstPersonView();
+    }
     drawToolPanel();
     drawHotbar();
     drawControls();
@@ -2118,6 +2322,7 @@ function renderGameToText() {
     portalOpen: state.portalOpen,
     money: state.money,
     hasSword: state.hasSword,
+    cameraView: isMapView() ? "map" : "firstPerson3d",
     activeTool: state.activeTool,
     shopOpen: state.shopOpen,
     selectedSlot: state.selectedSlot,

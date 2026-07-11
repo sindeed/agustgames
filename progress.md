@@ -211,3 +211,10 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Verifierat med Playwright: värld 2 kan startas från menyn, byggförbud gäller
   på V/L/A/e/F, lava-respawn fungerar, skelett kan slå fiender, fiender kan slå
   skelett, F1 spawnar varje sekund natt 1, och värld 1-portalen går till värld 2.
+- Survivor har nu en första enkel 3D/förstapersonsvy i vanligt spelläge. När
+  spelaren öppnar shop, byggläge, raderingsläge eller hjärtflytt växlar spelet
+  tillbaka till kartvy så rutor fortfarande går att trycka på. `render_game_to_text`
+  visar `cameraView` som `firstPerson3d` eller `map`.
+- Verifierat med syntaxkontroll och Playwright: vanlig start visar `firstPerson3d`,
+  byggknappen växlar till `map`, B-tangenten växlar tillbaka till 3D, högerstyrning
+  fungerar efter växlingen, och skärmbilderna visar både 3D-vy och kartvy.
