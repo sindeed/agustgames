@@ -2126,9 +2126,9 @@ function gameplayDragZoneAt(x, y) {
   if (state.mode !== "playing" || state.shopOpen || state.activeTool !== "none") {
     return null;
   }
-  const inFirstPersonView = x >= VIEW3D_X && y >= VIEW3D_Y && x <= VIEW3D_X + VIEW3D_W && y <= VIEW3D_Y + VIEW3D_H;
-  const inMapBoard = x >= BOARD_X && y >= BOARD_Y && x <= BOARD_X + BOARD_W && y <= BOARD_Y + BOARD_H;
-  if (!inFirstPersonView && !inMapBoard) return null;
+  const inHud = y < 82;
+  const inHotbar = y > 668 && x > 240 && x < 790;
+  if (inHud || inHotbar) return null;
 
   const playerId = state.playersWanted > 1 && x > VIEW_W / 2 ? 2 : 1;
   return {
@@ -2146,21 +2146,19 @@ function pointerToCanvas(event) {
   };
 }
 
-function handlePointer(event) {
-  event.preventDefault();
-  const point = pointerToCanvas(event);
+function startDragControl(id, point) {
   const button = buttonAt(point.x, point.y);
   if (button && !button.disabled) {
     handleButton(button.id);
     render();
-    return;
+    return true;
   }
 
   const joystickZone = state.mode === "playing" && !state.shopOpen
     ? joystickZoneAt(point.x, point.y) || gameplayDragZoneAt(point.x, point.y)
     : null;
   if (joystickZone) {
-    activeJoysticks.set(event.pointerId, {
+    activeJoysticks.set(id, {
       playerId: joystickZone.playerId,
       centerX: joystickZone.centerX,
       centerY: joystickZone.centerY,
@@ -2168,10 +2166,19 @@ function handlePointer(event) {
       knobY: joystickZone.centerY,
       direction: null,
     });
-    updateJoystick(event.pointerId, point);
-    canvas.setPointerCapture?.(event.pointerId);
+    updateJoystick(id, point);
     movePlayersFromJoysticks();
     render();
+    return true;
+  }
+  return false;
+}
+
+function handlePointer(event) {
+  event.preventDefault();
+  const point = pointerToCanvas(event);
+  if (startDragControl(event.pointerId, point)) {
+    canvas.setPointerCapture?.(event.pointerId);
     return;
   }
 
@@ -2201,6 +2208,53 @@ function stopPointerJoystick(event) {
   event.preventDefault();
   activeJoysticks.delete(event.pointerId);
   render();
+}
+
+function touchToCanvas(touch) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: ((touch.clientX - rect.left) / rect.width) * VIEW_W,
+    y: ((touch.clientY - rect.top) / rect.height) * VIEW_H,
+  };
+}
+
+function touchId(touch) {
+  return `touch-${touch.identifier}`;
+}
+
+function handleTouchStart(event) {
+  event.preventDefault();
+  for (const touch of event.changedTouches) {
+    startDragControl(touchId(touch), touchToCanvas(touch));
+  }
+}
+
+function handleTouchMove(event) {
+  let handled = false;
+  for (const touch of event.changedTouches) {
+    const id = touchId(touch);
+    if (!activeJoysticks.has(id)) continue;
+    updateJoystick(id, touchToCanvas(touch));
+    handled = true;
+  }
+  if (handled) {
+    event.preventDefault();
+    render();
+  }
+}
+
+function handleTouchEnd(event) {
+  let handled = false;
+  for (const touch of event.changedTouches) {
+    const id = touchId(touch);
+    if (!activeJoysticks.has(id)) continue;
+    activeJoysticks.delete(id);
+    handled = true;
+  }
+  if (handled) {
+    event.preventDefault();
+    render();
+  }
 }
 
 function handleButton(id) {
@@ -2511,6 +2565,10 @@ canvas.addEventListener("pointerdown", handlePointer, { passive: false });
 canvas.addEventListener("pointermove", handlePointerMove, { passive: false });
 canvas.addEventListener("pointerup", stopPointerJoystick, { passive: false });
 canvas.addEventListener("pointercancel", stopPointerJoystick, { passive: false });
+canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
 document.addEventListener("fullscreenchange", resizeCanvas);
 
 resizeCanvas();

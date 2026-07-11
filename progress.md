@@ -232,3 +232,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   och riktningen väljer vart spelaren går. Knappar som Shop/Bygg/Slå hanteras
   fortfarande före dragstyrning. Verifierat med Playwright att drag på 3D-bilden
   flyttar spelaren och att Shop-knappen fortfarande öppnar shoppen.
+- Dragstyrningen har gjorts robustare för iPad: nästan hela canvasen i vanligt
+  spelläge kan starta en tillfällig dragpunkt, förutom HUD/hotbar/knappar. Spelet
+  lyssnar nu även på `touchstart`/`touchmove`/`touchend`, inte bara pointer events.
+  Verifierat med simulerade Touch Events att dragpunkten syns på spelbilden,
+  riktningen blir vänster, spelaren rör sig och draget släpper korrekt.
