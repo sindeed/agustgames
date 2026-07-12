@@ -289,3 +289,19 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Lokalt regressionstest med spelklienten visar en enda fullstor P1-kamera i
   botläget och fortsatt två korrekt klippta kameror när två människor spelar,
   utan konsol- eller sidfel.
+- Fiender slår nu direkt vid första kontakt med en mänsklig spelare eller bot,
+  även när kontakten uppstår på fiendens eget rörelsesteg. Efter första slaget
+  är den vanliga attackrytmen fortfarande ett slag per sekund.
+- Verifierat deterministiskt: en fiende som går från diagonal ruta till kontakt
+  tar omedelbart 0,5 liv från P1 respektive BOT 2, gör inget extraslag före en
+  sekund och slår igen när sekunden gått. Botläget är även granskat med den
+  ordinarie spelklienten utan konsol- eller sidfel.
+- Blockplacering kontrollerar nu strukturella markvägar från båda fiendespawns
+  och alla befintliga markfiender till en attackruta bredvid hjärtat. Om det
+  senaste blocket stänger en nödvändig väg tas just det blocket bort direkt och
+  behålls i spelarens lilla galleri.
+- Verifierat i värld 1 och 2: lagliga block ligger kvar och förbrukas; sista
+  blocket runt hjärtat, block i värld 2:s enda korridor och block som fångar en
+  befintlig markfiende tas bort utan att förbrukas. Trä, sten och pilblock är
+  testade, flygfiender ger inga falska stopp och ordinarie köp/byggflöde fungerar
+  visuellt utan konsol- eller sidfel.

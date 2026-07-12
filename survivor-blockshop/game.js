@@ -31,7 +31,6 @@ const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 30;
 const ENEMY_ATTACK_INTERVAL = 1;
-const ENEMY_PLAYER_ATTACK_WINDUP = 0.5;
 const PLAYER_CHASE_RANGE = 2;
 const ARROW_SHOT_INTERVAL = 3;
 const ARROW_DAMAGE = 0.5;
@@ -581,6 +580,48 @@ function canBuildAt(c, r) {
   return true;
 }
 
+function groundRouteToHeartExists(start) {
+  const attackCells = new Set(
+    DIRS
+      .map((dir) => ({ c: state.heart.c + dir.dx, r: state.heart.r + dir.dy }))
+      .filter((cell) => inBounds(cell.c, cell.r))
+      .filter((cell) => !isTerrainWall(cell.c, cell.r))
+      .filter((cell) => !state.blocks.has(key(cell.c, cell.r)))
+      .map((cell) => key(cell.c, cell.r)),
+  );
+  if (attackCells.size === 0) return false;
+
+  const startKey = key(start.c, start.r);
+  const queue = [{ c: start.c, r: start.r }];
+  const visited = new Set([startKey]);
+
+  for (let i = 0; i < queue.length; i += 1) {
+    const current = queue[i];
+    if (attackCells.has(key(current.c, current.r))) return true;
+
+    for (const dir of DIRS) {
+      const c = current.c + dir.dx;
+      const r = current.r + dir.dy;
+      const cellKey = key(c, r);
+      if (visited.has(cellKey)) continue;
+      if (!inBounds(c, r) || isTerrainWall(c, r)) continue;
+      if (state.blocks.has(cellKey) || sameCell({ c, r }, state.heart)) continue;
+      visited.add(cellKey);
+      queue.push({ c, r });
+    }
+  }
+  return false;
+}
+
+function allGroundEnemyRoutesOpen() {
+  const sources = [
+    ...currentWorld().spawnList,
+    ...state.enemies.filter((enemy) => enemy.type !== "flying"),
+  ];
+  const uniqueSources = new Map(sources.map((source) => [key(source.c, source.r), source]));
+  return Array.from(uniqueSources.values()).every(groundRouteToHeartExists);
+}
+
 function placeBlock(c, r) {
   const stack = currentStack();
   if (!isDay()) {
@@ -600,13 +641,19 @@ function placeBlock(c, r) {
     return;
   }
   const info = BLOCKS[stack.type];
-  state.blocks.set(key(c, r), {
+  const blockKey = key(c, r);
+  state.blocks.set(blockKey, {
     type: stack.type,
     hp: info.hp,
     maxHp: info.hp,
     shootTimer: stack.type === "arrow" ? 0 : undefined,
     shotFlash: 0,
   });
+  if (!allGroundEnemyRoutesOpen()) {
+    state.blocks.delete(blockKey);
+    setMessage("Block bort – fri väg krävs!", 3);
+    return;
+  }
   removeInventory(stack.type, 1);
 }
 
@@ -897,6 +944,12 @@ function nearestPlayerToChase(enemy) {
     }
   }
   return nearest;
+}
+
+function adjacentPlayerToAttack(enemy) {
+  return state.players
+    .filter((player) => player.hp > 0 && manhattan(enemy, player) <= 1)
+    .sort((a, b) => a.id - b.id)[0] || null;
 }
 
 function adjacentBlockToAttack(enemy) {
@@ -1252,7 +1305,6 @@ function spawnEnemy(type, cell) {
     moveTimer: 0,
     attackTimer: 0,
     playerAttackTargetId: null,
-    playerAttackWindup: 0,
     hitFlash: 0,
   };
   state.nextEnemyId += 1;
@@ -1418,27 +1470,12 @@ function damagePlayer(enemy, player) {
   setMessage(`Fienden slog spelare ${player.id}!`, 1.6);
 }
 
-function resetPlayerAttackWindup(enemy) {
+function resetPlayerAttackTarget(enemy) {
   enemy.playerAttackTargetId = null;
-  enemy.playerAttackWindup = 0;
 }
 
-function enemyPlayerAttackWindup() {
-  return ENEMY_PLAYER_ATTACK_WINDUP;
-}
-
-function updatePlayerAttack(enemy, player, dt) {
-  if (enemy.playerAttackTargetId !== player.id) {
-    enemy.playerAttackTargetId = player.id;
-    enemy.playerAttackWindup = 0;
-  }
-
-  const requiredWindup = enemyPlayerAttackWindup();
-  enemy.playerAttackWindup = Math.min(requiredWindup, enemy.playerAttackWindup + dt);
-  if (enemy.playerAttackWindup < requiredWindup) {
-    return;
-  }
-
+function updatePlayerAttack(enemy, player) {
+  enemy.playerAttackTargetId = player.id;
   if (enemy.attackTimer <= 0) {
     damagePlayer(enemy, player);
   }
@@ -1449,12 +1486,14 @@ function updateEnemy(enemy, dt) {
   enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
   enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
 
-  const chasedPlayer = nearestPlayerToChase(enemy);
-  if (chasedPlayer && manhattan(enemy, chasedPlayer) <= 1) {
-    updatePlayerAttack(enemy, chasedPlayer, dt);
+  const adjacentPlayer = adjacentPlayerToAttack(enemy);
+  if (adjacentPlayer) {
+    updatePlayerAttack(enemy, adjacentPlayer);
     return;
   }
-  resetPlayerAttackWindup(enemy);
+  resetPlayerAttackTarget(enemy);
+
+  const chasedPlayer = nearestPlayerToChase(enemy);
 
   const skeletonTarget = adjacentSkeletonToAttack(enemy);
   if (skeletonTarget) {
@@ -1505,13 +1544,17 @@ function updateEnemy(enemy, dt) {
 
   const blockingPlayer = playerAt(next.c, next.r);
   if (blockingPlayer) {
-    updatePlayerAttack(enemy, blockingPlayer, dt);
+    updatePlayerAttack(enemy, blockingPlayer);
     return;
   }
 
   if (enemy.type !== "flying" && state.blocks.has(key(next.c, next.r))) return;
   enemy.c = next.c;
   enemy.r = next.r;
+  const reachedPlayer = adjacentPlayerToAttack(enemy);
+  if (reachedPlayer) {
+    updatePlayerAttack(enemy, reachedPlayer);
+  }
   triggerSkeletonsForEnemy(enemy);
 }
 
@@ -3474,6 +3517,8 @@ function renderGameToText() {
       c: enemy.c,
       r: enemy.r,
       hp: enemy.hp,
+      targetPlayerId: enemy.playerAttackTargetId,
+      attackCooldown: Number(enemy.attackTimer.toFixed(3)),
     })),
     skeletons: state.skeletons.map((skeleton) => ({
       id: skeleton.id,
