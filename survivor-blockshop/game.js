@@ -31,6 +31,8 @@ const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 30;
 const ENEMY_ATTACK_INTERVAL = 1;
+const ENEMY_REWARD = 2;
+const BOSS_REWARD = 4;
 const PLAYER_CHASE_RANGE = 2;
 const ARROW_SHOT_INTERVAL = 3;
 const ARROW_DAMAGE = 0.5;
@@ -864,11 +866,11 @@ function killEnemy(enemy) {
   state.enemies = state.enemies.filter((item) => item.id !== enemy.id);
   if (state.botTargetEnemyId === enemy.id) state.botTargetEnemyId = null;
   if (enemy.type === "boss") {
-    state.money += 20;
-    setMessage("Bossen föll! +20 kronor.", 2.5);
+    state.money += BOSS_REWARD;
+    setMessage(`Bossen föll! +${BOSS_REWARD} pengar.`, 2.5);
   } else {
-    state.money += 5;
-    setMessage("+5 kronor", 1.2);
+    state.money += ENEMY_REWARD;
+    setMessage(`+${ENEMY_REWARD} pengar`, 1.2);
   }
 }
 

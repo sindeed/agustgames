@@ -319,3 +319,11 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   stället för lava, reservspawn följer samma regel, bossen kräver tre svärdslag
   och portalen avslutar värld 2 efter natt 5. Tidigare direktattack och
   blockvägskontroll passerar fortsatt utan konsol- eller sidfel.
+- Nya dödsbelöningar i Survivor: vanlig fiende och flygfiende ger exakt 2 pengar,
+  medan bossen ger exakt 4 pengar. Samma lagpengar delas oavsett om dödsslaget
+  kommer från spelare, bot, pilblock eller skelett (bossen kräver fortfarande
+  svärd).
+- Verifierat i webbläsaren: start från 10 pengar slutar på 12 efter vanlig eller
+  flygande fiende och 14 efter boss, med rätt meddelanden och utan dubbla
+  belöningar, konsolfel eller sidfel. Värld 2:s vågor, lava, bosskydd och portal
+  passerar fortfarande hela regressionstestet.
