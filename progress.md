@@ -266,3 +266,19 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   fri look ändrar kamera men inte position, framåt följer kameran efter vridning,
   sid-/bakåtdrag ignoreras, släpp stoppar rörelsen, och Shop/Bygg/köp/placering
   fortsätter fungera utan dubbeltryck eller konsolfel.
+- Survivor 2P har nu äkta delad förstapersonsskärm: P1 får övre vyn och P2 den
+  undre. Båda har egen yaw/pitch-kamera, egen framåtspak och egen SLÅ-knapp, och
+  två fingrar kan styra kamerorna samtidigt utan korskoppling. Shop och byggläge
+  växlar fortfarande till den gemensamma kartan.
+- Menyn har fått `1 + bot` i båda världarna. BOT 2 har en egen observerbar vy,
+  vaktar två rutor från hjärtat på dagen och väljer nåbara hot på natten. Den
+  undviker lava, väggar, block, spawns, portal, spelare och andra figurer, slår
+  närliggande fiender först och ignorerar bossen tills laget har svärd.
+- Botens beslut körs deterministiskt var 0,25 sekund. Den använder vanliga
+  spelarregler för rörelse, attack, skada och respawn och kan inte styras via P2-
+  kontroller. Botläget bevaras vid portalövergång till värld 2.
+- Verifierat slutligt med riktig samtidig CDP-touch i iPad-landskap: 23/23 P0-
+  tester passerar efter de sista rättningarna. Båda spelarnas look/framåt/släpp,
+  kontrollrensning vid Shop/Bygg, botens nattdödande, värld 2-säkerhet och hela
+  1P-flödet fungerar utan konsol- eller sidfel. Split-, bot- och kartvyer har
+  granskats visuellt och är korrekt klippta utan överlapp.

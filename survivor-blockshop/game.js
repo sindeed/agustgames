@@ -22,6 +22,11 @@ const VIEW3D_CAMERA_HEIGHT = 0.54;
 const VIEW3D_WALL_HEIGHT = 1.08;
 const VIEW3D_NEAR = 0.08;
 const VIEW3D_MAX_DISTANCE = 20;
+const SINGLE_VIEW = { x: VIEW3D_X, y: VIEW3D_Y, w: VIEW3D_W, h: VIEW3D_H, cols: VIEW3D_COLS };
+const SPLIT_VIEWS = [
+  { x: VIEW3D_X, y: VIEW3D_Y, w: VIEW3D_W, h: 239, cols: 210 },
+  { x: VIEW3D_X, y: 335, w: VIEW3D_W, h: 239, cols: 210 },
+];
 const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 30;
@@ -130,14 +135,25 @@ let uiButtons = [];
 let joystickZones = [];
 const activeJoysticks = new Map();
 const activeLookDrags = new Map();
-const firstPersonDepth = new Float32Array(VIEW3D_COLS);
+const firstPersonDepthBuffers = [
+  new Float32Array(VIEW3D_COLS),
+  new Float32Array(VIEW3D_COLS),
+];
 let lastTime = 0;
 let dpr = 1;
+
+function clearActiveControls() {
+  activeJoysticks.clear();
+  activeLookDrags.clear();
+}
 
 const state = {
   mode: "menu",
   world: 1,
   playersWanted: 1,
+  botPlayerId: null,
+  botTargetEnemyId: null,
+  botGoal: null,
   message: "Välj hur många som spelar.",
   messageTimer: 0,
   day: 1,
@@ -352,15 +368,18 @@ function setMessage(text, seconds = 2.8) {
   state.messageTimer = seconds;
 }
 
-function startGame(playersWanted, worldId = 1) {
-  setupWorld(worldId, playersWanted, false);
+function startGame(playersWanted, worldId = 1, botPlayerId = null) {
+  setupWorld(worldId, playersWanted, false, botPlayerId);
 }
 
-function setupWorld(worldId, playersWanted, keepProgress = false) {
+function setupWorld(worldId, playersWanted, keepProgress = false, botPlayerId = null) {
   const world = WORLDS[worldId] || WORLDS[1];
   state.mode = "playing";
   state.world = world.id;
   state.playersWanted = playersWanted;
+  state.botPlayerId = botPlayerId;
+  state.botTargetEnemyId = null;
+  state.botGoal = null;
   state.day = 1;
   state.phase = "day";
   state.phaseElapsed = 0;
@@ -383,12 +402,11 @@ function setupWorld(worldId, playersWanted, keepProgress = false) {
   state.nextSkeletonId = 1;
   state.heart = { c: world.heartStart.c, r: world.heartStart.r, hp: 3, maxHp: 3 };
   state.players = [];
-  activeJoysticks.clear();
-  activeLookDrags.clear();
+  clearActiveControls();
 
   for (let i = 0; i < playersWanted; i += 1) {
     const start = world.playerStarts[i] || world.playerStarts[0];
-    const startDir = i === 0 ? "left" : "up";
+    const startDir = i === 0 && playersWanted === 1 ? "left" : "up";
     state.players.push({
       id: i + 1,
       c: start.c,
@@ -398,6 +416,8 @@ function setupWorld(worldId, playersWanted, keepProgress = false) {
       dir: startDir,
       lookYaw: angleFromDir(startDir),
       lookPitch: 0,
+      isBot: i + 1 === botPlayerId,
+      botMoveTimer: 0,
       attackCooldown: 0,
       stepCooldown: 0,
       color: i === 0 ? "#37d3ff" : "#ffd447",
@@ -683,13 +703,21 @@ function isMapView() {
   return state.shopOpen || state.activeTool !== "none";
 }
 
-function joystickDirectionFromDelta(dx, dy) {
-  const deadZone = 14;
-  if (Math.hypot(dx, dy) < deadZone) return null;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    return dx > 0 ? { dx: 1, dy: 0, name: "right" } : { dx: -1, dy: 0, name: "left" };
-  }
-  return dy > 0 ? { dx: 0, dy: 1, name: "down" } : { dx: 0, dy: -1, name: "up" };
+function usesSplitScreen() {
+  return state.playersWanted > 1 && state.players.length > 1;
+}
+
+function firstPersonViewFor(playerId) {
+  if (!usesSplitScreen()) return SINGLE_VIEW;
+  return SPLIT_VIEWS[playerId - 1] || SPLIT_VIEWS[0];
+}
+
+function firstPersonViewEntries() {
+  return state.players.map((player) => ({
+    player,
+    view: firstPersonViewFor(player.id),
+    depth: firstPersonDepthBuffers[player.id - 1] || firstPersonDepthBuffers[0],
+  }));
 }
 
 function updateJoystick(pointerId, point) {
@@ -698,33 +726,24 @@ function updateJoystick(pointerId, point) {
   const rawDx = point.x - joystick.centerX;
   const rawDy = point.y - joystick.centerY;
   const player = state.players[joystick.playerId - 1];
-  if (joystick.playerId === 1) {
+  if (player && !player.isBot) {
     const forwardAmount = Math.max(0, -rawDy);
     joystick.knobX = joystick.centerX;
     joystick.knobY = joystick.centerY - Math.min(34, forwardAmount);
-    joystick.forwardActive = rawDy < -14;
+    joystick.forwardActive = rawDy < -14 && -rawDy >= Math.abs(rawDx);
     joystick.direction = joystick.forwardActive ? forwardDirectionFor(player) : null;
     return;
   }
-  const distance = Math.hypot(rawDx, rawDy);
-  const maxDistance = 34;
-  const scale = distance > maxDistance ? maxDistance / distance : 1;
-  joystick.knobX = joystick.centerX + rawDx * scale;
-  joystick.knobY = joystick.centerY + rawDy * scale;
-  joystick.direction = joystickDirectionFromDelta(rawDx, rawDy);
+  joystick.direction = null;
 }
 
 function movePlayersFromJoysticks() {
-  if (state.mode !== "playing") return;
+  if (state.mode !== "playing" || isMapView()) return;
   for (const joystick of activeJoysticks.values()) {
     const player = state.players[joystick.playerId - 1];
     if (!player || !joystick.direction) continue;
-    if (joystick.playerId === 1) {
-      joystick.direction = forwardDirectionFor(player);
-      movePlayerForward(player);
-    } else {
-      tryMovePlayer(player, joystick.direction.dx, joystick.direction.dy);
-    }
+    joystick.direction = forwardDirectionFor(player);
+    movePlayerForward(player);
   }
 }
 
@@ -795,6 +814,7 @@ function damageSkeleton(skeleton, amount) {
 
 function killEnemy(enemy) {
   state.enemies = state.enemies.filter((item) => item.id !== enemy.id);
+  if (state.botTargetEnemyId === enemy.id) state.botTargetEnemyId = null;
   if (enemy.type === "boss") {
     state.money += 20;
     setMessage("Bossen föll! +20 kronor.", 2.5);
@@ -1008,6 +1028,155 @@ function updateSkeletons(dt) {
   }
 }
 
+function botPlayer() {
+  return state.botPlayerId ? state.players.find((player) => player.id === state.botPlayerId) || null : null;
+}
+
+function passableForBot(c, r, bot) {
+  if (!inBounds(c, r)) return false;
+  if (isTerrainWall(c, r) || isLava(c, r)) return false;
+  if (state.blocks.has(key(c, r))) return false;
+  if (sameCell({ c, r }, state.heart)) return false;
+  if (isSpawnCell(c, r)) return false;
+  if (state.portalOpen && sameCell({ c, r }, currentWorld().portal)) return false;
+  if (state.players.some((player) => player.id !== bot.id && player.c === c && player.r === r)) return false;
+  if (state.enemies.some((enemy) => enemy.c === c && enemy.r === r)) return false;
+  if (state.skeletons.some((skeleton) => skeleton.c === c && skeleton.r === r)) return false;
+  return true;
+}
+
+function botPathPlan(bot, goals) {
+  const goalKeys = new Set(goals.map((goal) => key(goal.c, goal.r)));
+  const startKey = key(bot.c, bot.r);
+  if (goalKeys.has(startKey)) {
+    return { next: null, goal: { c: bot.c, r: bot.r } };
+  }
+
+  const queue = [{ c: bot.c, r: bot.r }];
+  const cameFrom = new Map([[startKey, null]]);
+  let reached = null;
+
+  for (let i = 0; i < queue.length && !reached; i += 1) {
+    const current = queue[i];
+    const orderedDirs = DIRS.slice().sort((a, b) => {
+      const aCell = { c: current.c + a.dx, r: current.r + a.dy };
+      const bCell = { c: current.c + b.dx, r: current.r + b.dy };
+      const da = Math.min(...goals.map((goal) => manhattan(aCell, goal)));
+      const db = Math.min(...goals.map((goal) => manhattan(bCell, goal)));
+      return da - db;
+    });
+    for (const dir of orderedDirs) {
+      const next = { c: current.c + dir.dx, r: current.r + dir.dy };
+      const nextKey = key(next.c, next.r);
+      if (cameFrom.has(nextKey) || !passableForBot(next.c, next.r, bot)) continue;
+      cameFrom.set(nextKey, current);
+      queue.push(next);
+      if (goalKeys.has(nextKey)) {
+        reached = next;
+        break;
+      }
+    }
+  }
+
+  if (!reached) return null;
+  let step = reached;
+  let previous = cameFrom.get(key(step.c, step.r));
+  while (previous && key(previous.c, previous.r) !== startKey) {
+    step = previous;
+    previous = cameFrom.get(key(step.c, step.r));
+  }
+  return { next: step, goal: reached };
+}
+
+function botGuardGoals(bot) {
+  const guardOffsets = [];
+  for (let dy = -2; dy <= 2; dy += 1) {
+    for (let dx = -2; dx <= 2; dx += 1) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) guardOffsets.push({ dx, dy });
+    }
+  }
+  return guardOffsets
+    .map((offset) => ({ c: state.heart.c + offset.dx, r: state.heart.r + offset.dy }))
+    .filter((cell) => passableForBot(cell.c, cell.r, bot))
+    .sort((a, b) => manhattan(bot, a) - manhattan(bot, b) || a.r - b.r || a.c - b.c);
+}
+
+function botAttackGoals(bot, enemy) {
+  return ATTACK_OFFSETS
+    .map((offset) => ({ c: enemy.c + offset.dx, r: enemy.r + offset.dy }))
+    .filter((cell) => passableForBot(cell.c, cell.r, bot));
+}
+
+function botTargetPlan(bot) {
+  const candidates = state.enemies
+    .filter((enemy) => enemy.type !== "boss" || state.hasSword)
+    .filter((enemy) => manhattan(enemy, state.heart) <= 6 || tileRadius(bot, enemy) <= 3)
+    .sort((a, b) => (
+      manhattan(a, state.heart) - manhattan(b, state.heart)
+      || manhattan(bot, a) - manhattan(bot, b)
+      || a.id - b.id
+    ));
+  for (const target of candidates) {
+    const goals = botAttackGoals(bot, target);
+    const path = goals.length ? botPathPlan(bot, goals) : null;
+    if (path) return { target, path };
+  }
+  return null;
+}
+
+function faceBotToward(bot, target) {
+  const dx = target.c - bot.c;
+  const dy = target.r - bot.r;
+  if (dx === 0 && dy === 0) return;
+  bot.lookYaw = normalizeAngle(Math.atan2(dy, dx));
+  bot.lookPitch = 0;
+  bot.dir = forwardDirectionFor(bot).name;
+}
+
+function updateBot(dt) {
+  const bot = botPlayer();
+  if (!bot || state.mode !== "playing") return;
+  bot.botMoveTimer += dt;
+  if (bot.botMoveTimer < 0.25) return;
+  bot.botMoveTimer -= 0.25;
+
+  if (!isDay()) {
+    const adjacent = state.enemies
+      .filter((enemy) => enemy.type !== "boss" || state.hasSword)
+      .filter((enemy) => tileRadius(bot, enemy) <= 1)
+      .sort((a, b) => manhattan(a, state.heart) - manhattan(b, state.heart) || a.id - b.id)[0] || null;
+    if (adjacent) {
+      state.botTargetEnemyId = adjacent.id;
+      state.botGoal = { type: "attack", c: bot.c, r: bot.r };
+      faceBotToward(bot, adjacent);
+      attack(bot);
+      if (!state.enemies.some((enemy) => enemy.id === adjacent.id)) {
+        state.botTargetEnemyId = null;
+      }
+      return;
+    }
+
+    const targetPlan = botTargetPlan(bot);
+    if (targetPlan) {
+      state.botTargetEnemyId = targetPlan.target.id;
+      state.botGoal = { type: "attack", c: targetPlan.path.goal.c, r: targetPlan.path.goal.r };
+      if (targetPlan.path.next) {
+        faceBotToward(bot, targetPlan.path.next);
+        tryMovePlayer(bot, targetPlan.path.next.c - bot.c, targetPlan.path.next.r - bot.r);
+      }
+      return;
+    }
+  }
+
+  state.botTargetEnemyId = null;
+  const guardGoals = botGuardGoals(bot);
+  const guardPlan = guardGoals.length ? botPathPlan(bot, guardGoals) : null;
+  state.botGoal = guardPlan ? { type: "guard", c: guardPlan.goal.c, r: guardPlan.goal.r } : null;
+  if (!guardPlan?.next) return;
+  faceBotToward(bot, guardPlan.next);
+  tryMovePlayer(bot, guardPlan.next.c - bot.c, guardPlan.next.r - bot.r);
+}
+
 function hasClearArrowShot(fromC, fromR, toC, toR) {
   const steps = Math.max(Math.abs(toC - fromC), Math.abs(toR - fromR));
   if (steps <= 1) return true;
@@ -1112,6 +1281,7 @@ function findOpenSpawn(cell) {
 }
 
 function startNight() {
+  clearActiveControls();
   state.phase = "night";
   state.phaseElapsed = 0;
   state.spawnCursor = 0;
@@ -1224,11 +1394,12 @@ function damagePlayerByLava(player) {
 
 function enterPortal() {
   const world = currentWorld();
+  clearActiveControls();
   state.shopOpen = false;
   state.activeTool = "none";
 
   if (world.nextWorld) {
-    setupWorld(world.nextWorld, state.playersWanted, true);
+    setupWorld(world.nextWorld, state.playersWanted, true, state.botPlayerId);
     setMessage(`${world.name} klar! Ni kom till ${currentWorld().name}.`, 5);
     return;
   }
@@ -1345,6 +1516,7 @@ function updateEnemy(enemy, dt) {
 }
 
 function loseGame(reason) {
+  clearActiveControls();
   state.mode = "gameover";
   state.shopOpen = false;
   state.activeTool = "none";
@@ -1376,6 +1548,8 @@ function update(dt) {
     state.shopOpen = false;
     updateSpawns();
   }
+
+  updateBot(dt);
 
   updateProjectiles(dt);
   updateArrowBlocks(dt);
@@ -1756,9 +1930,10 @@ function realisticWallColor(hit, forwardDistance) {
   return shadeHex(material.base, cellVariation * texture * sideShade * distanceShade);
 }
 
-function drawRealisticSky(horizon) {
+function drawRealisticSky(horizon, view) {
   const night = state.phase === "night";
-  const sky = ctx.createLinearGradient(0, VIEW3D_Y, 0, horizon + 16);
+  const scale = Math.min(1, view.h / VIEW3D_H);
+  const sky = ctx.createLinearGradient(0, view.y, 0, horizon + 16 * scale);
   if (night) {
     sky.addColorStop(0, "#020617");
     sky.addColorStop(0.58, "#10223b");
@@ -1769,13 +1944,13 @@ function drawRealisticSky(horizon) {
     sky.addColorStop(1, "#d8e8dc");
   }
   ctx.fillStyle = sky;
-  ctx.fillRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, horizon - VIEW3D_Y + 18);
+  ctx.fillRect(view.x, view.y, view.w, horizon - view.y + 18 * scale);
 
   if (night) {
-    for (let i = 0; i < 70; i += 1) {
-      const x = VIEW3D_X + stableNoise(i * 17) * VIEW3D_W;
-      const y = VIEW3D_Y + stableNoise(i * 31 + 3) * (horizon - VIEW3D_Y - 12);
-      const radius = 0.45 + stableNoise(i * 53) * 1.25;
+    for (let i = 0; i < 55; i += 1) {
+      const x = view.x + stableNoise(i * 17) * view.w;
+      const y = view.y + stableNoise(i * 31 + 3) * Math.max(8, horizon - view.y - 12 * scale);
+      const radius = (0.45 + stableNoise(i * 53) * 1.25) * Math.max(0.55, scale);
       ctx.globalAlpha = 0.38 + stableNoise(i * 97) * 0.55;
       ctx.fillStyle = stableNoise(i * 23) > 0.82 ? "#bfdbfe" : "#ffffff";
       ctx.beginPath();
@@ -1783,57 +1958,59 @@ function drawRealisticSky(horizon) {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
-    const moonX = VIEW3D_X + VIEW3D_W * 0.78;
-    const moonY = VIEW3D_Y + 75;
-    const glow = ctx.createRadialGradient(moonX, moonY, 4, moonX, moonY, 58);
+    const moonX = view.x + view.w * 0.78;
+    const moonY = view.y + 75 * scale;
+    const glowRadius = 58 * scale;
+    const glow = ctx.createRadialGradient(moonX, moonY, 4 * scale, moonX, moonY, glowRadius);
     glow.addColorStop(0, "rgba(255,255,226,0.95)");
     glow.addColorStop(0.22, "rgba(226,232,240,0.75)");
     glow.addColorStop(1, "rgba(191,219,254,0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(moonX, moonY, 58, 0, Math.PI * 2);
+    ctx.arc(moonX, moonY, glowRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#e8edf2";
     ctx.beginPath();
-    ctx.arc(moonX, moonY, 21, 0, Math.PI * 2);
+    ctx.arc(moonX, moonY, 21 * scale, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "rgba(100,116,139,0.25)";
     ctx.beginPath();
-    ctx.arc(moonX - 7, moonY + 2, 5, 0, Math.PI * 2);
+    ctx.arc(moonX - 7 * scale, moonY + 2 * scale, 5 * scale, 0, Math.PI * 2);
     ctx.fill();
   } else {
-    const sunX = VIEW3D_X + VIEW3D_W * 0.76;
-    const sunY = VIEW3D_Y + 74;
-    const glow = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 78);
+    const sunX = view.x + view.w * 0.76;
+    const sunY = view.y + 74 * scale;
+    const glowRadius = 78 * scale;
+    const glow = ctx.createRadialGradient(sunX, sunY, 5 * scale, sunX, sunY, glowRadius);
     glow.addColorStop(0, "rgba(255,250,205,1)");
     glow.addColorStop(0.24, "rgba(255,226,125,0.7)");
     glow.addColorStop(1, "rgba(255,221,120,0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 78, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, glowRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#fff5c4";
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 22, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 22 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     for (let i = 0; i < 5; i += 1) {
-      const cloudX = VIEW3D_X - 110 + ((i * 177 + state.phaseElapsed * 4) % (VIEW3D_W + 220));
-      const cloudY = VIEW3D_Y + 48 + (i % 3) * 43;
+      const cloudX = view.x - 110 * scale + ((i * 177 + state.phaseElapsed * 4) % (view.w + 220 * scale));
+      const cloudY = view.y + (48 + (i % 3) * 43) * scale;
       ctx.fillStyle = "rgba(255,255,255,0.28)";
       ctx.beginPath();
-      ctx.ellipse(cloudX, cloudY, 58, 15, 0, 0, Math.PI * 2);
-      ctx.ellipse(cloudX - 24, cloudY - 8, 28, 18, 0, 0, Math.PI * 2);
-      ctx.ellipse(cloudX + 18, cloudY - 11, 34, 22, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloudX, cloudY, 58 * scale, 15 * scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloudX - 24 * scale, cloudY - 8 * scale, 28 * scale, 18 * scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloudX + 18 * scale, cloudY - 11 * scale, 34 * scale, 22 * scale, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 }
 
-function drawRealisticFloor(horizon, player) {
+function drawRealisticFloor(horizon, player, view) {
   const night = state.phase === "night";
   const worldTwo = state.world === 2;
-  const floor = ctx.createLinearGradient(0, horizon, 0, VIEW3D_Y + VIEW3D_H);
+  const floor = ctx.createLinearGradient(0, horizon, 0, view.y + view.h);
   if (worldTwo) {
     floor.addColorStop(0, night ? "#30343a" : "#817764");
     floor.addColorStop(1, night ? "#171b20" : "#403a31");
@@ -1842,14 +2019,15 @@ function drawRealisticFloor(horizon, player) {
     floor.addColorStop(1, night ? "#071812" : "#173f25");
   }
   ctx.fillStyle = floor;
-  ctx.fillRect(VIEW3D_X, horizon, VIEW3D_W, VIEW3D_Y + VIEW3D_H - horizon);
+  ctx.fillRect(view.x, horizon, view.w, view.y + view.h - horizon);
 
   const seed = state.world * 1000 + player.c * 101 + player.r * 211;
-  for (let i = 0; i < 190; i += 1) {
-    const x = VIEW3D_X + stableNoise(seed + i * 13) * VIEW3D_W;
+  const detailCount = view.h < VIEW3D_H ? 100 : 190;
+  for (let i = 0; i < detailCount; i += 1) {
+    const x = view.x + stableNoise(seed + i * 13) * view.w;
     const depth = Math.pow(stableNoise(seed + i * 29 + 7), 0.48);
-    const y = horizon + 5 + depth * (VIEW3D_Y + VIEW3D_H - horizon - 7);
-    const size = 0.7 + depth * 4.2;
+    const y = horizon + 5 + depth * Math.max(1, view.y + view.h - horizon - 7);
+    const size = (0.7 + depth * 4.2) * Math.min(1, view.h / VIEW3D_H + 0.2);
     ctx.globalAlpha = 0.14 + depth * 0.36;
     if (worldTwo) {
       ctx.fillStyle = stableNoise(seed + i * 43) > 0.5 ? "#c2b69d" : "#27231f";
@@ -1872,7 +2050,7 @@ function drawRealisticFloor(horizon, player) {
   haze.addColorStop(0.5, night ? "rgba(92,115,126,0.24)" : "rgba(221,232,216,0.3)");
   haze.addColorStop(1, "rgba(220,232,224,0)");
   ctx.fillStyle = haze;
-  ctx.fillRect(VIEW3D_X, horizon - 18, VIEW3D_W, 90);
+  ctx.fillRect(view.x, horizon - 18, view.w, Math.min(90, view.h * 0.28));
 }
 
 function drawProjectedSpriteArt(kind, label, color, x, baseY, w, h, hpRatio) {
@@ -2026,13 +2204,13 @@ function drawProjectedSpriteArt(kind, label, color, x, baseY, w, h, hpRatio) {
   ctx.restore();
 }
 
-function drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection) {
+function drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection, view, depthBuffer) {
   const dx = sprite.c + 0.5 - (player.c + 0.5);
   const dy = sprite.r + 0.5 - (player.r + 0.5);
   const forward = Math.cos(cameraAngle) * dx + Math.sin(cameraAngle) * dy;
   if (forward <= 0.12 || forward > VIEW3D_MAX_DISTANCE) return;
   const side = -Math.sin(cameraAngle) * dx + Math.cos(cameraAngle) * dy;
-  const screenX = VIEW3D_X + VIEW3D_W / 2 + (side / forward) * projection;
+  const screenX = view.x + view.w / 2 + (side / forward) * projection;
   const sizeBoost = sprite.boost || 1;
   const spriteW = Math.max(12, projection * 0.62 * sizeBoost / forward);
   const spriteH = sprite.kind === "floor"
@@ -2041,23 +2219,23 @@ function drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection
   const baseY = horizon + projection * VIEW3D_CAMERA_HEIGHT / forward;
   const left = screenX - spriteW * 0.58;
   const right = screenX + spriteW * 0.58;
-  if (right < VIEW3D_X || left > VIEW3D_X + VIEW3D_W) return;
+  if (right < view.x || left > view.x + view.w) return;
 
-  const columnWidth = VIEW3D_W / VIEW3D_COLS;
-  const startCol = Math.max(0, Math.floor((left - VIEW3D_X) / columnWidth));
-  const endCol = Math.min(VIEW3D_COLS - 1, Math.ceil((right - VIEW3D_X) / columnWidth));
+  const columnWidth = view.w / view.cols;
+  const startCol = Math.max(0, Math.floor((left - view.x) / columnWidth));
+  const endCol = Math.min(view.cols - 1, Math.ceil((right - view.x) / columnWidth));
   let runStart = -1;
   const drawRun = (from, to) => {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(VIEW3D_X + from * columnWidth - 1, VIEW3D_Y, (to - from + 1) * columnWidth + 2, VIEW3D_H);
+    ctx.rect(view.x + from * columnWidth - 1, view.y, (to - from + 1) * columnWidth + 2, view.h);
     ctx.clip();
     drawProjectedSpriteArt(
       sprite.kind,
       sprite.label,
       sprite.color,
       screenX,
-      Math.min(VIEW3D_Y + VIEW3D_H + spriteH * 0.2, baseY),
+      Math.min(view.y + view.h + spriteH * 0.2, baseY),
       spriteW,
       spriteH,
       sprite.hpRatio,
@@ -2066,7 +2244,7 @@ function drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection
   };
 
   for (let col = startCol; col <= endCol + 1; col += 1) {
-    const visible = col <= endCol && forward < firstPersonDepth[col] + 0.14;
+    const visible = col <= endCol && forward < depthBuffer[col] + 0.14;
     if (visible && runStart < 0) runStart = col;
     if (!visible && runStart >= 0) {
       drawRun(runStart, col - 1);
@@ -2075,7 +2253,7 @@ function drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection
   }
 }
 
-function drawRealisticEntities(player, cameraAngle, horizon, projection) {
+function drawRealisticEntities(player, cameraAngle, horizon, projection, view, depthBuffer) {
   const sprites = [
     { c: state.heart.c, r: state.heart.r, label: "HJÄRTA", color: "#fb7185", kind: "heart", boost: 1.18, hpRatio: state.heart.hp / state.heart.maxHp },
     ...state.players
@@ -2101,32 +2279,33 @@ function drawRealisticEntities(player, cameraAngle, horizon, projection) {
       forward: Math.cos(cameraAngle) * (sprite.c - player.c) + Math.sin(cameraAngle) * (sprite.r - player.r),
     }))
     .sort((a, b) => b.forward - a.forward)
-    .forEach((sprite) => drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection));
+    .forEach((sprite) => drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection, view, depthBuffer));
 }
 
-function drawFirstPersonHands() {
-  const bottom = VIEW3D_Y + VIEW3D_H;
-  const skin = ctx.createLinearGradient(0, bottom - 95, 0, bottom);
+function drawFirstPersonHands(view) {
+  const bottom = view.y + view.h;
+  const scale = Math.min(1, view.h / 360);
+  const skin = ctx.createLinearGradient(0, bottom - 95 * scale, 0, bottom);
   skin.addColorStop(0, "#e7b585");
   skin.addColorStop(1, "#9b6540");
   ctx.fillStyle = skin;
   ctx.beginPath();
-  ctx.moveTo(VIEW3D_X + 125, bottom);
-  ctx.quadraticCurveTo(VIEW3D_X + 165, bottom - 76, VIEW3D_X + 224, bottom - 38);
-  ctx.lineTo(VIEW3D_X + 247, bottom);
+  ctx.moveTo(view.x + view.w * 0.19, bottom);
+  ctx.quadraticCurveTo(view.x + view.w * 0.25, bottom - 76 * scale, view.x + view.w * 0.33, bottom - 38 * scale);
+  ctx.lineTo(view.x + view.w * 0.37, bottom);
   ctx.closePath();
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(VIEW3D_X + VIEW3D_W - 125, bottom);
-  ctx.quadraticCurveTo(VIEW3D_X + VIEW3D_W - 165, bottom - 76, VIEW3D_X + VIEW3D_W - 224, bottom - 38);
-  ctx.lineTo(VIEW3D_X + VIEW3D_W - 247, bottom);
+  ctx.moveTo(view.x + view.w * 0.81, bottom);
+  ctx.quadraticCurveTo(view.x + view.w * 0.75, bottom - 76 * scale, view.x + view.w * 0.67, bottom - 38 * scale);
+  ctx.lineTo(view.x + view.w * 0.63, bottom);
   ctx.closePath();
   ctx.fill();
 
   if (state.hasSword) {
-    const swordX = VIEW3D_X + VIEW3D_W * 0.7;
+    const swordX = view.x + view.w * 0.7;
     ctx.save();
-    ctx.translate(swordX, bottom - 35);
+    ctx.translate(swordX, bottom - 35 * scale);
     ctx.rotate(-0.24);
     const blade = ctx.createLinearGradient(-12, 0, 18, 0);
     blade.addColorStop(0, "#64748b");
@@ -2134,44 +2313,45 @@ function drawFirstPersonHands() {
     blade.addColorStop(1, "#94a3b8");
     ctx.fillStyle = blade;
     ctx.beginPath();
-    ctx.moveTo(-10, 0);
-    ctx.lineTo(-5, -168);
-    ctx.lineTo(0, -188);
-    ctx.lineTo(8, -166);
-    ctx.lineTo(11, 0);
+    ctx.moveTo(-10 * scale, 0);
+    ctx.lineTo(-5 * scale, -168 * scale);
+    ctx.lineTo(0, -188 * scale);
+    ctx.lineTo(8 * scale, -166 * scale);
+    ctx.lineTo(11 * scale, 0);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = "#c9a227";
-    ctx.fillRect(-34, -4, 68, 10);
+    ctx.fillRect(-34 * scale, -4 * scale, 68 * scale, 10 * scale);
     ctx.fillStyle = "#4b2e1f";
-    ctx.fillRect(-8, 4, 16, 55);
+    ctx.fillRect(-8 * scale, 4 * scale, 16 * scale, 55 * scale);
     ctx.restore();
   }
 }
 
-function drawRealisticFirstPersonView() {
-  const player = state.players[0];
-  if (!player) return;
+function drawRealisticFirstPersonView(player, view, depthBuffer) {
+  if (!player || !view) return;
   const cameraAngle = cameraAngleFor(player);
-  const projection = (VIEW3D_W / 2) / Math.tan(VIEW3D_FOV / 2);
-  const horizon = VIEW3D_Y + VIEW3D_H * 0.46 + Math.tan(player.lookPitch || 0) * projection;
-  const columnWidth = VIEW3D_W / VIEW3D_COLS;
+  const projection = (view.w / 2) / Math.tan(VIEW3D_FOV / 2);
+  const pitchLimit = Math.min(MAX_LOOK_PITCH, Math.atan((view.h * 0.4) / projection));
+  const renderPitch = Math.max(-pitchLimit, Math.min(pitchLimit, player.lookPitch || 0));
+  const horizon = view.y + view.h * 0.46 + Math.tan(renderPitch) * projection;
+  const columnWidth = view.w / view.cols;
 
   ctx.save();
-  roundRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H, 9);
+  roundRect(view.x, view.y, view.w, view.h, 9);
   ctx.clip();
-  drawRealisticSky(horizon);
-  drawRealisticFloor(horizon, player);
+  drawRealisticSky(horizon, view);
+  drawRealisticFloor(horizon, player, view);
 
-  for (let i = 0; i < VIEW3D_COLS; i += 1) {
-    const cameraX = (i + 0.5) / VIEW3D_COLS - 0.5;
+  for (let i = 0; i < view.cols; i += 1) {
+    const cameraX = (i + 0.5) / view.cols - 0.5;
     const rayAngle = cameraAngle + cameraX * VIEW3D_FOV;
     const hit = castRealisticWallRay(rayAngle, player);
     const forwardDistance = Math.max(VIEW3D_NEAR, hit.distance * Math.cos(rayAngle - cameraAngle));
-    firstPersonDepth[i] = forwardDistance;
-    const sliceH = Math.min(VIEW3D_H * 2.25, projection * VIEW3D_WALL_HEIGHT / forwardDistance);
+    depthBuffer[i] = forwardDistance;
+    const sliceH = Math.min(view.h * 2.25, projection * VIEW3D_WALL_HEIGHT / forwardDistance);
     const wallY = horizon - sliceH * (1 - VIEW3D_CAMERA_HEIGHT);
-    const x = VIEW3D_X + i * columnWidth;
+    const x = view.x + i * columnWidth;
     ctx.fillStyle = realisticWallColor(hit, forwardDistance);
     ctx.fillRect(x, wallY, columnWidth + 1, sliceH);
 
@@ -2197,25 +2377,25 @@ function drawRealisticFirstPersonView() {
     }
   }
 
-  drawRealisticEntities(player, cameraAngle, horizon, projection);
-  drawFirstPersonHands();
+  drawRealisticEntities(player, cameraAngle, horizon, projection, view, depthBuffer);
+  drawFirstPersonHands(view);
 
   const vignette = ctx.createRadialGradient(
-    VIEW3D_X + VIEW3D_W / 2,
-    VIEW3D_Y + VIEW3D_H * 0.48,
-    VIEW3D_H * 0.12,
-    VIEW3D_X + VIEW3D_W / 2,
-    VIEW3D_Y + VIEW3D_H * 0.48,
-    VIEW3D_W * 0.54,
+    view.x + view.w / 2,
+    view.y + view.h * 0.48,
+    view.h * 0.12,
+    view.x + view.w / 2,
+    view.y + view.h * 0.48,
+    view.w * 0.54,
   );
   vignette.addColorStop(0, "rgba(0,0,0,0)");
   vignette.addColorStop(0.72, "rgba(0,0,0,0.08)");
   vignette.addColorStop(1, state.phase === "night" ? "rgba(0,0,0,0.56)" : "rgba(0,0,0,0.34)");
   ctx.fillStyle = vignette;
-  ctx.fillRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H);
+  ctx.fillRect(view.x, view.y, view.w, view.h);
 
-  const cx = VIEW3D_X + VIEW3D_W / 2;
-  const cy = VIEW3D_Y + VIEW3D_H / 2;
+  const cx = view.x + view.w / 2;
+  const cy = view.y + view.h / 2;
   ctx.strokeStyle = "rgba(255,255,255,0.72)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -2230,20 +2410,36 @@ function drawRealisticFirstPersonView() {
   ctx.stroke();
 
   ctx.fillStyle = "rgba(5,12,18,0.55)";
-  roundRect(VIEW3D_X + 14, VIEW3D_Y + 14, 190, 44, 7);
+  roundRect(view.x + 14, view.y + 12, player.isBot ? 180 : 205, 40, 7);
   ctx.fill();
-  drawText("DRA BILDEN FÖR ATT TITTA", VIEW3D_X + 28, VIEW3D_Y + 31, 12, "#f8fafc", "left", "900");
-  drawText("Spak: bara framåt", VIEW3D_X + 28, VIEW3D_Y + 49, 11, "#dbeafe", "left", "700");
+  drawText(
+    player.isBot ? "BOT 2 • FÖRSVARAR" : `P${player.id} • DRA FÖR ATT TITTA`,
+    view.x + 28,
+    view.y + 27,
+    12,
+    player.id === 1 ? "#e0f2fe" : "#fef3c7",
+    "left",
+    "900",
+  );
+  drawText(
+    player.isBot ? "Boten styr själv" : "Spak: bara framåt",
+    view.x + 28,
+    view.y + 44,
+    11,
+    "#dbeafe",
+    "left",
+    "700",
+  );
   ctx.restore();
 
   ctx.save();
   ctx.strokeStyle = "#0b1720";
   ctx.lineWidth = 8;
-  roundRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H, 9);
+  roundRect(view.x, view.y, view.w, view.h, 9);
   ctx.stroke();
-  ctx.strokeStyle = state.phase === "night" ? "#6489a4" : "#b7c6bd";
+  ctx.strokeStyle = player.id === 1 ? "#67e8f9" : "#fde047";
   ctx.lineWidth = 2;
-  roundRect(VIEW3D_X + 4, VIEW3D_Y + 4, VIEW3D_W - 8, VIEW3D_H - 8, 7);
+  roundRect(view.x + 4, view.y + 4, view.w - 8, view.h - 8, 7);
   ctx.stroke();
   ctx.restore();
 }
@@ -2449,7 +2645,9 @@ function drawTopHud() {
   drawText(`Pengar: ${state.money}`, 315, 45, 18, isNight ? "#fde68a" : "#854d0e", "left", "800");
   drawText(`Hjärta: ${Math.max(0, state.heart.hp)}/3`, 450, 45, 18, isNight ? "#fecdd3" : "#9f1239", "left", "800");
   drawText(`Svärd: ${state.hasSword ? "ja" : "nej"}`, 595, 45, 18, isNight ? "#d1fae5" : "#14532d", "left", "800");
-  const lives = state.players.map((player) => `P${player.id} ${Math.max(0, player.hp)}/3`).join("  ");
+  const lives = state.players
+    .map((player) => `${player.isBot ? "BOT" : `P${player.id}`} ${Math.max(0, player.hp)}/3`)
+    .join("  ");
   drawText(lives, 720, 45, 18, isNight ? "#e0f2fe" : "#1e3a8a", "left", "800");
 }
 
@@ -2608,7 +2806,7 @@ function drawControls() {
   if (state.mode !== "playing") return;
   drawDpad(1, 76, 586);
   pushButton("attack-p1", 300, 592, 76, 48, "Slå", "#f472b6", { small: true });
-  if (state.playersWanted > 1) {
+  if (state.playersWanted > 1 && !state.botPlayerId) {
     drawDpad(2, 790, 586);
     pushButton("attack-p2", 648, 592, 76, 48, "Slå", "#f472b6", { small: true });
   }
@@ -2618,7 +2816,7 @@ function drawDpad(playerId, x, y) {
   const centerX = x + 63;
   const centerY = y + 63;
   joystickZones.push({ playerId, x: x - 8, y: y - 8, w: 142, h: 112, centerX, centerY });
-  drawText(playerId === 1 ? "P1 FRAMÅT" : `P${playerId}`, centerX, y - 4, 14, "#e0f2fe", "center", "900");
+  drawText(`P${playerId} FRAMÅT`, centerX, y - 4, 14, "#e0f2fe", "center", "900");
   ctx.save();
   ctx.fillStyle = "rgba(147, 197, 253, 0.34)";
   ctx.beginPath();
@@ -2630,19 +2828,12 @@ function drawDpad(playerId, x, y) {
   ctx.strokeStyle = "rgba(15, 23, 42, 0.45)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  if (playerId === 1) {
-    ctx.moveTo(centerX, centerY + 30);
-    ctx.lineTo(centerX, centerY - 30);
-    ctx.moveTo(centerX, centerY - 30);
-    ctx.lineTo(centerX - 13, centerY - 16);
-    ctx.moveTo(centerX, centerY - 30);
-    ctx.lineTo(centerX + 13, centerY - 16);
-  } else {
-    ctx.moveTo(centerX - 38, centerY);
-    ctx.lineTo(centerX + 38, centerY);
-    ctx.moveTo(centerX, centerY - 38);
-    ctx.lineTo(centerX, centerY + 38);
-  }
+  ctx.moveTo(centerX, centerY + 30);
+  ctx.lineTo(centerX, centerY - 30);
+  ctx.moveTo(centerX, centerY - 30);
+  ctx.lineTo(centerX - 13, centerY - 16);
+  ctx.moveTo(centerX, centerY - 30);
+  ctx.lineTo(centerX + 13, centerY - 16);
   ctx.stroke();
   ctx.restore();
   drawJoystickKnob(playerId, centerX, centerY);
@@ -2684,15 +2875,17 @@ function drawMenu() {
   drawText("Dagen är 1 minut. Natten är 0,5 minut.", VIEW_W / 2, 310, 18, "#cbd5e1", "center", "700");
 
   drawText("Värld 1", 242, 370, 18, "#bbf7d0", "left", "900");
-  pushButton("start-w1-1", 282, 392, 206, 58, "1 spelare", "#38bdf8", { textColor: "#082f49" });
-  pushButton("start-w1-2", 536, 392, 206, 58, "2 spelare", "#facc15", { textColor: "#422006" });
+  pushButton("start-w1-1", 226, 392, 170, 58, "1 spelare", "#38bdf8", { textColor: "#082f49" });
+  pushButton("start-w1-2", 427, 392, 170, 58, "2 spelare", "#facc15", { textColor: "#422006" });
+  pushButton("start-w1-bot", 628, 392, 170, 58, "1 + bot", "#86efac", { textColor: "#14532d" });
 
   drawText("Värld 2", 242, 466, 18, "#fed7aa", "left", "900");
-  pushButton("start-w2-1", 282, 488, 206, 58, "1 spelare", "#fb923c", { textColor: "#431407" });
-  pushButton("start-w2-2", 536, 488, 206, 58, "2 spelare", "#f97316", { textColor: "#431407" });
+  pushButton("start-w2-1", 226, 488, 170, 58, "1 spelare", "#fb923c", { textColor: "#431407" });
+  pushButton("start-w2-2", 427, 488, 170, 58, "2 spelare", "#f97316", { textColor: "#431407" });
+  pushButton("start-w2-bot", 628, 488, 170, 58, "1 + bot", "#a7f3d0", { textColor: "#064e3b" });
 
-  drawText("P1: dra bilden + spak framåt", VIEW_W / 2, 570, 17, "#e0f2fe", "center", "800");
-  drawText("P2: pilar + Enter", VIEW_W / 2, 598, 17, "#fef3c7", "center", "800");
+  drawText("P1/P2: dra sin bild + spak framåt", VIEW_W / 2, 570, 16, "#e0f2fe", "center", "800");
+  drawText("Bot: försvarar hjärtat själv", VIEW_W / 2, 598, 16, "#d1fae5", "center", "800");
 }
 
 function drawEndScreen(title, subtitle) {
@@ -2742,7 +2935,9 @@ function render() {
       drawEnemies();
       drawPlayers();
     } else {
-      drawRealisticFirstPersonView();
+      for (const entry of firstPersonViewEntries()) {
+        drawRealisticFirstPersonView(entry.player, entry.view, entry.depth);
+      }
     }
     drawToolPanel();
     drawHotbar();
@@ -2780,27 +2975,32 @@ function joystickZoneAt(x, y) {
   return null;
 }
 
-function isLookDragPoint(x, y) {
-  return state.mode === "playing"
-    && !isMapView()
-    && x >= VIEW3D_X
-    && y >= VIEW3D_Y
-    && x <= VIEW3D_X + VIEW3D_W
-    && y <= VIEW3D_Y + VIEW3D_H;
+function lookDragViewAt(x, y) {
+  if (state.mode !== "playing" || isMapView()) return null;
+  return firstPersonViewEntries().find(({ player, view }) => (
+    !player.isBot
+    && x >= view.x
+    && y >= view.y
+    && x <= view.x + view.w
+    && y <= view.y + view.h
+  )) || null;
 }
 
 function updateLookDrag(id, point) {
+  if (isMapView()) return;
   const drag = activeLookDrags.get(id);
-  const player = state.players[0];
+  const player = state.players[drag?.playerId - 1];
   if (!drag || !player) return;
   const dx = point.x - drag.lastX;
   const dy = point.y - drag.lastY;
   drag.lastX = point.x;
   drag.lastY = point.y;
   player.lookYaw = normalizeAngle(cameraAngleFor(player) + dx * LOOK_YAW_SENSITIVITY);
+  const projection = (drag.view.w / 2) / Math.tan(VIEW3D_FOV / 2);
+  const pitchLimit = Math.min(MAX_LOOK_PITCH, Math.atan((drag.view.h * 0.4) / projection));
   player.lookPitch = Math.max(
-    -MAX_LOOK_PITCH,
-    Math.min(MAX_LOOK_PITCH, (player.lookPitch || 0) - dy * LOOK_PITCH_SENSITIVITY),
+    -pitchLimit,
+    Math.min(pitchLimit, (player.lookPitch || 0) - dy * LOOK_PITCH_SENSITIVITY),
   );
   player.dir = forwardDirectionFor(player).name;
 }
@@ -2836,9 +3036,11 @@ function startDragControl(id, point) {
     render();
     return true;
   }
-  if (isLookDragPoint(point.x, point.y)) {
+  const lookEntry = lookDragViewAt(point.x, point.y);
+  if (lookEntry) {
     activeLookDrags.set(id, {
-      playerId: 1,
+      playerId: lookEntry.player.id,
+      view: lookEntry.view,
       lastX: point.x,
       lastY: point.y,
     });
@@ -2882,7 +3084,6 @@ function handlePointerMove(event) {
   const point = pointerToCanvas(event);
   if (hasJoystick) updateJoystick(event.pointerId, point);
   if (hasLookDrag) updateLookDrag(event.pointerId, point);
-  render();
 }
 
 function stopPointerControl(event) {
@@ -2929,7 +3130,6 @@ function handleTouchMove(event) {
   }
   if (handled) {
     event.preventDefault();
-    render();
   }
 }
 
@@ -2955,6 +3155,10 @@ function handleButton(id) {
     startGame(2, 1);
     return;
   }
+  if (id === "start-w1-bot") {
+    startGame(2, 1, 2);
+    return;
+  }
   if (id === "start-w2-1") {
     startGame(1, 2);
     return;
@@ -2963,9 +3167,15 @@ function handleButton(id) {
     startGame(2, 2);
     return;
   }
+  if (id === "start-w2-bot") {
+    startGame(2, 2, 2);
+    return;
+  }
   if (id === "restart") {
+    clearActiveControls();
     state.mode = "menu";
     state.world = 1;
+    state.botPlayerId = null;
     state.message = "Välj hur många som spelar.";
     return;
   }
@@ -2974,26 +3184,31 @@ function handleButton(id) {
     return;
   }
   if (id === "shop") {
+    clearActiveControls();
     state.shopOpen = !state.shopOpen;
     state.activeTool = "none";
     return;
   }
   if (id === "build") {
+    clearActiveControls();
     state.shopOpen = false;
     state.activeTool = state.activeTool === "build" ? "none" : "build";
     return;
   }
   if (id === "heart") {
+    clearActiveControls();
     state.shopOpen = false;
     state.activeTool = state.activeTool === "heart" ? "none" : "heart";
     return;
   }
   if (id === "delete") {
+    clearActiveControls();
     state.shopOpen = false;
     state.activeTool = state.activeTool === "delete" ? "none" : "delete";
     return;
   }
   if (id === "close-shop") {
+    clearActiveControls();
     state.shopOpen = false;
     return;
   }
@@ -3033,7 +3248,7 @@ function handleButton(id) {
     attack(state.players[0]);
     return;
   }
-  if (id === "attack-p2" && state.players[1]) {
+  if (id === "attack-p2" && state.players[1] && !state.players[1].isBot) {
     attack(state.players[1]);
     return;
   }
@@ -3051,6 +3266,8 @@ function handleKey(event) {
     if (event.key === "2") startGame(2, 1);
     if (event.key === "3") startGame(1, 2);
     if (event.key === "4") startGame(2, 2);
+    if (event.key === "5") startGame(2, 1, 2);
+    if (event.key === "6") startGame(2, 2, 2);
     render();
     return;
   }
@@ -3095,27 +3312,27 @@ function handleKey(event) {
       attack(p1);
       break;
     case "ArrowUp":
-      if (p2) tryMovePlayer(p2, 0, -1);
+      if (p2 && !p2.isBot) movePlayerForward(p2);
       else movePlayerForward(p1);
       break;
     case "ArrowDown":
-      if (p2) tryMovePlayer(p2, 0, 1);
       break;
     case "ArrowLeft":
-      if (p2) tryMovePlayer(p2, -1, 0);
+      if (p2 && !p2.isBot) turnPlayerView(p2, -Math.PI / 8);
       else turnPlayerView(p1, -Math.PI / 8);
       break;
     case "ArrowRight":
-      if (p2) tryMovePlayer(p2, 1, 0);
+      if (p2 && !p2.isBot) turnPlayerView(p2, Math.PI / 8);
       else turnPlayerView(p1, Math.PI / 8);
       break;
     case "Enter":
-      if (p2) attack(p2);
+      if (p2 && !p2.isBot) attack(p2);
       else attack(p1);
       break;
     case "g":
     case "G":
       if (isDay() && !state.portalOpen) {
+        clearActiveControls();
         state.shopOpen = !state.shopOpen;
         state.activeTool = "none";
       }
@@ -3123,6 +3340,7 @@ function handleKey(event) {
     case "b":
     case "B":
       if (isDay() && !state.portalOpen) {
+        clearActiveControls();
         state.shopOpen = false;
         state.activeTool = state.activeTool === "build" ? "none" : "build";
       }
@@ -3130,6 +3348,7 @@ function handleKey(event) {
     case "r":
     case "R":
       if (isDay() && !state.portalOpen) {
+        clearActiveControls();
         state.shopOpen = false;
         state.activeTool = state.activeTool === "delete" ? "none" : "delete";
       }
@@ -3137,6 +3356,7 @@ function handleKey(event) {
     case "h":
     case "H":
       if (isDay() && !state.portalOpen) {
+        clearActiveControls();
         state.shopOpen = false;
         state.activeTool = state.activeTool === "heart" ? "none" : "heart";
       }
@@ -3176,6 +3396,22 @@ function gameLoop(timestamp) {
 function renderGameToText() {
   const cameraPlayer = state.players[0];
   const cameraForward = cameraPlayer ? forwardDirectionFor(cameraPlayer) : null;
+  const activeBotTarget = state.botTargetEnemyId
+    ? state.enemies.find((enemy) => enemy.id === state.botTargetEnemyId) || null
+    : null;
+  const cameras = state.players.map((player) => {
+    const forward = forwardDirectionFor(player);
+    const view = firstPersonViewFor(player.id);
+    return {
+      playerId: player.id,
+      label: player.isBot ? "BOT" : `P${player.id}`,
+      yawRadians: Number(cameraAngleFor(player).toFixed(3)),
+      pitchRadians: Number((player.lookPitch || 0).toFixed(3)),
+      forward: { dx: forward.dx, dy: forward.dy, name: forward.name },
+      dragging: Array.from(activeLookDrags.values()).some((drag) => drag.playerId === player.id),
+      viewport: { x: view.x, y: view.y, w: view.w, h: view.h },
+    };
+  });
   const payload = {
     coordinateSystem: "tile grid, origin top-left, c increases right, r increases down",
     mode: state.mode,
@@ -3188,12 +3424,28 @@ function renderGameToText() {
     money: state.money,
     hasSword: state.hasSword,
     cameraView: isMapView() ? "map" : "firstPerson3d",
-    controlMode: "drag image to look; P1 movement is forward only",
+    splitScreen: usesSplitScreen() && !isMapView(),
+    player2Control: state.playersWanted < 2 ? "none" : state.botPlayerId ? "bot" : "human",
+    controlMode: "each human drags their image to look; movement is forward only",
     camera: cameraPlayer ? {
       yawRadians: Number(cameraAngleFor(cameraPlayer).toFixed(3)),
       pitchRadians: Number((cameraPlayer.lookPitch || 0).toFixed(3)),
       forward: { dx: cameraForward.dx, dy: cameraForward.dy, name: cameraForward.name },
-      dragging: activeLookDrags.size > 0,
+      dragging: cameras[0]?.dragging || false,
+    } : null,
+    cameras,
+    bot: state.botPlayerId ? {
+      playerId: state.botPlayerId,
+      targetEnemyId: state.botTargetEnemyId,
+      target: activeBotTarget ? {
+        id: activeBotTarget.id,
+        type: activeBotTarget.type,
+        c: activeBotTarget.c,
+        r: activeBotTarget.r,
+        hp: activeBotTarget.hp,
+      } : null,
+      goal: state.botGoal,
+      decisionTimer: Number((botPlayer()?.botMoveTimer || 0).toFixed(3)),
     } : null,
     joysticks: Array.from(activeJoysticks.values()).map((joystick) => ({
       playerId: joystick.playerId,
@@ -3206,12 +3458,15 @@ function renderGameToText() {
     heart: { c: state.heart.c, r: state.heart.r, hp: state.heart.hp },
     players: state.players.map((player) => ({
       id: player.id,
+      controller: player.isBot ? "bot" : "human",
       c: player.c,
       r: player.r,
       hp: player.hp,
       dir: player.dir,
       lookYaw: Number(cameraAngleFor(player).toFixed(3)),
       lookPitch: Number((player.lookPitch || 0).toFixed(3)),
+      attackCooldown: Number(player.attackCooldown.toFixed(3)),
+      stepCooldown: Number(player.stepCooldown.toFixed(3)),
     })),
     enemies: state.enemies.slice(0, 20).map((enemy) => ({
       id: enemy.id,
