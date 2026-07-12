@@ -31,8 +31,7 @@ canvas {
   height: min(100vh, 768px);
   max-width: 100vw;
   max-height: 100vh;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+  image-rendering: auto;
   background: #1d2234;
   border: 0;
 }

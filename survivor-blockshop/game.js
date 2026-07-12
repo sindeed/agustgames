@@ -16,7 +16,12 @@ const VIEW3D_X = 30;
 const VIEW3D_Y = 88;
 const VIEW3D_W = 670;
 const VIEW3D_H = 486;
-const VIEW3D_COLS = 170;
+const VIEW3D_COLS = 268;
+const VIEW3D_FOV = Math.PI / 3;
+const VIEW3D_CAMERA_HEIGHT = 0.54;
+const VIEW3D_WALL_HEIGHT = 1.08;
+const VIEW3D_NEAR = 0.08;
+const VIEW3D_MAX_DISTANCE = 20;
 const HOTBAR_SLOTS = 10;
 const DAY_LENGTH = 60;
 const NIGHT_LENGTH = 30;
@@ -121,6 +126,7 @@ function tileRadius(a, b) {
 let uiButtons = [];
 let joystickZones = [];
 const activeJoysticks = new Map();
+const firstPersonDepth = new Float32Array(VIEW3D_COLS);
 let lastTime = 0;
 let dpr = 1;
 
@@ -1599,6 +1605,596 @@ function drawFirstPersonView() {
   ctx.restore();
 }
 
+function shadeHex(hex, factor) {
+  const value = hex.replace("#", "");
+  const r = Math.max(0, Math.min(255, Math.round(parseInt(value.slice(0, 2), 16) * factor)));
+  const g = Math.max(0, Math.min(255, Math.round(parseInt(value.slice(2, 4), 16) * factor)));
+  const b = Math.max(0, Math.min(255, Math.round(parseInt(value.slice(4, 6), 16) * factor)));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function stableNoise(value) {
+  const raw = Math.sin(value * 12.9898 + 78.233) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
+function wallMaterialAt(c, r, block) {
+  if (block?.type === "wood") return { name: "wood", base: "#925329" };
+  if (block?.type === "stone") return { name: "stone", base: "#89939a" };
+  if (block?.type === "arrow") return { name: "arrow", base: "#227da1" };
+  if (!inBounds(c, r)) return { name: "boundary", base: state.world === 2 ? "#7b7469" : "#a9b2b5" };
+  return { name: "temple", base: state.world === 2 ? "#8a8071" : "#c5c9c4" };
+}
+
+function castRealisticWallRay(angle, player) {
+  const posX = player.c + 0.5;
+  const posY = player.r + 0.5;
+  const rayX = Math.cos(angle);
+  const rayY = Math.sin(angle);
+  let mapX = Math.floor(posX);
+  let mapY = Math.floor(posY);
+  const deltaX = Math.abs(1 / (Math.abs(rayX) < 0.00001 ? 0.00001 : rayX));
+  const deltaY = Math.abs(1 / (Math.abs(rayY) < 0.00001 ? 0.00001 : rayY));
+  const stepX = rayX < 0 ? -1 : 1;
+  const stepY = rayY < 0 ? -1 : 1;
+  let sideX = rayX < 0 ? (posX - mapX) * deltaX : (mapX + 1 - posX) * deltaX;
+  let sideY = rayY < 0 ? (posY - mapY) * deltaY : (mapY + 1 - posY) * deltaY;
+  let side = 0;
+
+  for (let steps = 0; steps < 64; steps += 1) {
+    if (sideX < sideY) {
+      sideX += deltaX;
+      mapX += stepX;
+      side = 0;
+    } else {
+      sideY += deltaY;
+      mapY += stepY;
+      side = 1;
+    }
+
+    const block = state.blocks.get(key(mapX, mapY));
+    if (!inBounds(mapX, mapY) || isTerrainWall(mapX, mapY) || block) {
+      const distance = Math.min(
+        VIEW3D_MAX_DISTANCE,
+        side === 0 ? sideX - deltaX : sideY - deltaY,
+      );
+      const hitPosition = side === 0 ? posY + distance * rayY : posX + distance * rayX;
+      let wallU = hitPosition - Math.floor(hitPosition);
+      if ((side === 0 && rayX > 0) || (side === 1 && rayY < 0)) wallU = 1 - wallU;
+      return {
+        c: mapX,
+        r: mapY,
+        distance: Math.max(VIEW3D_NEAR, distance),
+        side,
+        wallU,
+        block,
+        material: wallMaterialAt(mapX, mapY, block),
+      };
+    }
+  }
+
+  return {
+    c: -1,
+    r: -1,
+    distance: VIEW3D_MAX_DISTANCE,
+    side: 0,
+    wallU: 0,
+    block: null,
+    material: wallMaterialAt(-1, -1, null),
+  };
+}
+
+function realisticWallColor(hit, forwardDistance) {
+  const { material, wallU, c, r } = hit;
+  const cellVariation = 0.92 + stableNoise(c * 37 + r * 71) * 0.14;
+  let texture = 1;
+  if (material.name === "wood") {
+    texture = 0.86 + Math.sin((wallU + stableNoise(c * 9 + r)) * 58) * 0.055;
+    if (wallU < 0.035 || wallU > 0.965) texture *= 0.62;
+  } else if (material.name === "stone" || material.name === "temple" || material.name === "boundary") {
+    const mortar = Math.abs((wallU * 4) % 1 - 0.5);
+    texture = mortar > 0.455 ? 0.63 : 0.93 + stableNoise(Math.floor(wallU * 15) + c * 11 + r * 19) * 0.1;
+  } else if (material.name === "arrow") {
+    texture = 0.83 + Math.sin(wallU * Math.PI * 10) * 0.08;
+    if (Math.abs(wallU - 0.5) < 0.055) texture = 1.45;
+  }
+  const sideShade = hit.side === 1 ? 0.79 : 1;
+  const distanceShade = Math.max(0.31, 1 / (1 + forwardDistance * 0.105));
+  return shadeHex(material.base, cellVariation * texture * sideShade * distanceShade);
+}
+
+function drawRealisticSky(horizon) {
+  const night = state.phase === "night";
+  const sky = ctx.createLinearGradient(0, VIEW3D_Y, 0, horizon + 16);
+  if (night) {
+    sky.addColorStop(0, "#020617");
+    sky.addColorStop(0.58, "#10223b");
+    sky.addColorStop(1, "#40536a");
+  } else {
+    sky.addColorStop(0, "#1777b7");
+    sky.addColorStop(0.55, "#62b7df");
+    sky.addColorStop(1, "#d8e8dc");
+  }
+  ctx.fillStyle = sky;
+  ctx.fillRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, horizon - VIEW3D_Y + 18);
+
+  if (night) {
+    for (let i = 0; i < 70; i += 1) {
+      const x = VIEW3D_X + stableNoise(i * 17) * VIEW3D_W;
+      const y = VIEW3D_Y + stableNoise(i * 31 + 3) * (horizon - VIEW3D_Y - 12);
+      const radius = 0.45 + stableNoise(i * 53) * 1.25;
+      ctx.globalAlpha = 0.38 + stableNoise(i * 97) * 0.55;
+      ctx.fillStyle = stableNoise(i * 23) > 0.82 ? "#bfdbfe" : "#ffffff";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    const moonX = VIEW3D_X + VIEW3D_W * 0.78;
+    const moonY = VIEW3D_Y + 75;
+    const glow = ctx.createRadialGradient(moonX, moonY, 4, moonX, moonY, 58);
+    glow.addColorStop(0, "rgba(255,255,226,0.95)");
+    glow.addColorStop(0.22, "rgba(226,232,240,0.75)");
+    glow.addColorStop(1, "rgba(191,219,254,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, 58, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e8edf2";
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, 21, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(100,116,139,0.25)";
+    ctx.beginPath();
+    ctx.arc(moonX - 7, moonY + 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const sunX = VIEW3D_X + VIEW3D_W * 0.76;
+    const sunY = VIEW3D_Y + 74;
+    const glow = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 78);
+    glow.addColorStop(0, "rgba(255,250,205,1)");
+    glow.addColorStop(0.24, "rgba(255,226,125,0.7)");
+    glow.addColorStop(1, "rgba(255,221,120,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 78, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff5c4";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 5; i += 1) {
+      const cloudX = VIEW3D_X - 110 + ((i * 177 + state.phaseElapsed * 4) % (VIEW3D_W + 220));
+      const cloudY = VIEW3D_Y + 48 + (i % 3) * 43;
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.beginPath();
+      ctx.ellipse(cloudX, cloudY, 58, 15, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloudX - 24, cloudY - 8, 28, 18, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloudX + 18, cloudY - 11, 34, 22, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawRealisticFloor(horizon, player) {
+  const night = state.phase === "night";
+  const worldTwo = state.world === 2;
+  const floor = ctx.createLinearGradient(0, horizon, 0, VIEW3D_Y + VIEW3D_H);
+  if (worldTwo) {
+    floor.addColorStop(0, night ? "#30343a" : "#817764");
+    floor.addColorStop(1, night ? "#171b20" : "#403a31");
+  } else {
+    floor.addColorStop(0, night ? "#1c342d" : "#527b44");
+    floor.addColorStop(1, night ? "#071812" : "#173f25");
+  }
+  ctx.fillStyle = floor;
+  ctx.fillRect(VIEW3D_X, horizon, VIEW3D_W, VIEW3D_Y + VIEW3D_H - horizon);
+
+  const seed = state.world * 1000 + player.c * 101 + player.r * 211;
+  for (let i = 0; i < 190; i += 1) {
+    const x = VIEW3D_X + stableNoise(seed + i * 13) * VIEW3D_W;
+    const depth = Math.pow(stableNoise(seed + i * 29 + 7), 0.48);
+    const y = horizon + 5 + depth * (VIEW3D_Y + VIEW3D_H - horizon - 7);
+    const size = 0.7 + depth * 4.2;
+    ctx.globalAlpha = 0.14 + depth * 0.36;
+    if (worldTwo) {
+      ctx.fillStyle = stableNoise(seed + i * 43) > 0.5 ? "#c2b69d" : "#27231f";
+      ctx.beginPath();
+      ctx.ellipse(x, y, size * 1.4, size * 0.45, stableNoise(i * 71) * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = stableNoise(seed + i * 37) > 0.55 ? "#b0d269" : "#173d21";
+      ctx.lineWidth = Math.max(0.7, size * 0.34);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + size * 0.25, y - size, x + size * 0.8, y - size * 1.55);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  const haze = ctx.createLinearGradient(0, horizon - 18, 0, horizon + 72);
+  haze.addColorStop(0, "rgba(220,232,224,0)");
+  haze.addColorStop(0.5, night ? "rgba(92,115,126,0.24)" : "rgba(221,232,216,0.3)");
+  haze.addColorStop(1, "rgba(220,232,224,0)");
+  ctx.fillStyle = haze;
+  ctx.fillRect(VIEW3D_X, horizon - 18, VIEW3D_W, 90);
+}
+
+function drawProjectedSpriteArt(kind, label, color, x, baseY, w, h, hpRatio) {
+  ctx.save();
+  ctx.translate(x, baseY);
+  ctx.fillStyle = "rgba(0,0,0,0.42)";
+  ctx.beginPath();
+  ctx.ellipse(0, 2, w * 0.44, Math.max(3, h * 0.075), 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (kind === "floor") {
+    if (label === "PORTAL") {
+      ctx.shadowBlur = Math.max(10, w * 0.22);
+      ctx.shadowColor = "#c084fc";
+      const portal = ctx.createRadialGradient(0, -h * 0.1, 2, 0, -h * 0.1, w * 0.48);
+      portal.addColorStop(0, "rgba(255,255,255,0.95)");
+      portal.addColorStop(0.28, "rgba(168,85,247,0.85)");
+      portal.addColorStop(0.72, "rgba(76,29,149,0.65)");
+      portal.addColorStop(1, "rgba(88,28,135,0)");
+      ctx.fillStyle = portal;
+      ctx.beginPath();
+      ctx.ellipse(0, -h * 0.08, w * 0.52, h * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.shadowBlur = Math.max(8, w * 0.17);
+      ctx.shadowColor = "#fb923c";
+      ctx.fillStyle = "#7f1d1d";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w * 0.53, h * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fb923c";
+      for (let i = 0; i < 5; i += 1) {
+        ctx.beginPath();
+        ctx.arc((i - 2) * w * 0.16, -stableNoise(i * 9) * h * 0.12, w * 0.09, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (kind === "heart") {
+    ctx.fillStyle = "#463429";
+    ctx.fillRect(-w * 0.34, -h * 0.18, w * 0.68, h * 0.2);
+    ctx.shadowBlur = Math.max(12, w * 0.25);
+    ctx.shadowColor = "#fb7185";
+    const heart = ctx.createLinearGradient(0, -h, 0, 0);
+    heart.addColorStop(0, "#fecdd3");
+    heart.addColorStop(0.34, "#fb4770");
+    heart.addColorStop(1, "#9f1239");
+    ctx.fillStyle = heart;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.12);
+    ctx.bezierCurveTo(-w * 0.5, -h * 0.4, -w * 0.52, -h * 0.9, -w * 0.2, -h * 0.88);
+    ctx.bezierCurveTo(0, -h * 0.86, 0, -h * 0.66, 0, -h * 0.6);
+    ctx.bezierCurveTo(0, -h * 0.66, 0, -h * 0.86, w * 0.2, -h * 0.88);
+    ctx.bezierCurveTo(w * 0.52, -h * 0.9, w * 0.5, -h * 0.4, 0, -h * 0.12);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  } else if (kind === "flying") {
+    ctx.fillStyle = "#301943";
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.48);
+    ctx.lineTo(-w * 0.58, -h * 0.82);
+    ctx.lineTo(-w * 0.43, -h * 0.32);
+    ctx.lineTo(-w * 0.18, -h * 0.45);
+    ctx.lineTo(0, -h * 0.16);
+    ctx.lineTo(w * 0.18, -h * 0.45);
+    ctx.lineTo(w * 0.43, -h * 0.32);
+    ctx.lineTo(w * 0.58, -h * 0.82);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#d946ef";
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.48, w * 0.18, h * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fde047";
+    ctx.fillRect(-w * 0.09, -h * 0.56, w * 0.06, h * 0.035);
+    ctx.fillRect(w * 0.03, -h * 0.56, w * 0.06, h * 0.035);
+  } else if (kind === "skeleton") {
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = Math.max(2, w * 0.09);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.63);
+    ctx.lineTo(0, -h * 0.22);
+    ctx.moveTo(0, -h * 0.52);
+    ctx.lineTo(-w * 0.32, -h * 0.3);
+    ctx.moveTo(0, -h * 0.52);
+    ctx.lineTo(w * 0.32, -h * 0.3);
+    ctx.moveTo(0, -h * 0.24);
+    ctx.lineTo(-w * 0.2, -h * 0.02);
+    ctx.moveTo(0, -h * 0.24);
+    ctx.lineTo(w * 0.2, -h * 0.02);
+    ctx.stroke();
+    ctx.fillStyle = "#f1f5f9";
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.76, w * 0.22, h * 0.17, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#111827";
+    ctx.beginPath();
+    ctx.arc(-w * 0.075, -h * 0.79, w * 0.045, 0, Math.PI * 2);
+    ctx.arc(w * 0.075, -h * 0.79, w * 0.045, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const boss = kind === "boss";
+    const player = kind === "player";
+    const body = ctx.createLinearGradient(-w * 0.35, -h * 0.65, w * 0.35, -h * 0.08);
+    body.addColorStop(0, player ? shadeHex(color, 1.25) : boss ? "#991b1b" : "#4c1d6f");
+    body.addColorStop(1, player ? shadeHex(color, 0.52) : boss ? "#3f0b0b" : "#190d29");
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.32, -h * 0.12);
+    ctx.lineTo(-w * 0.27, -h * 0.62);
+    ctx.quadraticCurveTo(0, -h * 0.76, w * 0.27, -h * 0.62);
+    ctx.lineTo(w * 0.32, -h * 0.12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = player ? "#d9a477" : boss ? "#7f1d1d" : "#66545d";
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.76, w * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    if (boss) {
+      ctx.fillStyle = "#2b1010";
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.18, -h * 0.9);
+      ctx.lineTo(-w * 0.36, -h * 1.05);
+      ctx.lineTo(-w * 0.07, -h * 0.91);
+      ctx.moveTo(w * 0.18, -h * 0.9);
+      ctx.lineTo(w * 0.36, -h * 1.05);
+      ctx.lineTo(w * 0.07, -h * 0.91);
+      ctx.fill();
+    }
+    ctx.fillStyle = player ? "#f8fafc" : "#fef08a";
+    ctx.shadowBlur = player ? 0 : Math.max(4, w * 0.08);
+    ctx.shadowColor = "#facc15";
+    ctx.beginPath();
+    ctx.arc(-w * 0.075, -h * 0.78, w * 0.035, 0, Math.PI * 2);
+    ctx.arc(w * 0.075, -h * 0.78, w * 0.035, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  if (Number.isFinite(hpRatio) && hpRatio < 0.999) {
+    ctx.fillStyle = "rgba(7,12,18,0.88)";
+    roundRect(-w * 0.42, -h * 1.08, w * 0.84, Math.max(4, h * 0.055), 3);
+    ctx.fill();
+    ctx.fillStyle = hpRatio > 0.45 ? "#4ade80" : "#fb7185";
+    ctx.fillRect(-w * 0.4, -h * 1.065, w * 0.8 * Math.max(0, hpRatio), Math.max(2, h * 0.025));
+  }
+  ctx.restore();
+}
+
+function drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection) {
+  const dx = sprite.c + 0.5 - (player.c + 0.5);
+  const dy = sprite.r + 0.5 - (player.r + 0.5);
+  const forward = Math.cos(cameraAngle) * dx + Math.sin(cameraAngle) * dy;
+  if (forward <= 0.12 || forward > VIEW3D_MAX_DISTANCE) return;
+  const side = -Math.sin(cameraAngle) * dx + Math.cos(cameraAngle) * dy;
+  const screenX = VIEW3D_X + VIEW3D_W / 2 + (side / forward) * projection;
+  const sizeBoost = sprite.boost || 1;
+  const spriteW = Math.max(12, projection * 0.62 * sizeBoost / forward);
+  const spriteH = sprite.kind === "floor"
+    ? Math.max(8, projection * 0.24 * sizeBoost / forward)
+    : Math.max(16, projection * 0.92 * sizeBoost / forward);
+  const baseY = horizon + projection * VIEW3D_CAMERA_HEIGHT / forward;
+  const left = screenX - spriteW * 0.58;
+  const right = screenX + spriteW * 0.58;
+  if (right < VIEW3D_X || left > VIEW3D_X + VIEW3D_W) return;
+
+  const columnWidth = VIEW3D_W / VIEW3D_COLS;
+  const startCol = Math.max(0, Math.floor((left - VIEW3D_X) / columnWidth));
+  const endCol = Math.min(VIEW3D_COLS - 1, Math.ceil((right - VIEW3D_X) / columnWidth));
+  let runStart = -1;
+  const drawRun = (from, to) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(VIEW3D_X + from * columnWidth - 1, VIEW3D_Y, (to - from + 1) * columnWidth + 2, VIEW3D_H);
+    ctx.clip();
+    drawProjectedSpriteArt(
+      sprite.kind,
+      sprite.label,
+      sprite.color,
+      screenX,
+      Math.min(VIEW3D_Y + VIEW3D_H + spriteH * 0.2, baseY),
+      spriteW,
+      spriteH,
+      sprite.hpRatio,
+    );
+    ctx.restore();
+  };
+
+  for (let col = startCol; col <= endCol + 1; col += 1) {
+    const visible = col <= endCol && forward < firstPersonDepth[col] + 0.14;
+    if (visible && runStart < 0) runStart = col;
+    if (!visible && runStart >= 0) {
+      drawRun(runStart, col - 1);
+      runStart = -1;
+    }
+  }
+}
+
+function drawRealisticEntities(player, cameraAngle, horizon, projection) {
+  const sprites = [
+    { c: state.heart.c, r: state.heart.r, label: "HJÄRTA", color: "#fb7185", kind: "heart", boost: 1.18, hpRatio: state.heart.hp / state.heart.maxHp },
+    ...state.players
+      .filter((other) => other.id !== player.id)
+      .map((other) => ({ c: other.c, r: other.r, label: `P${other.id}`, color: other.color, kind: "player", boost: 1, hpRatio: other.hp / other.maxHp })),
+    ...state.skeletons.map((skeleton) => ({ c: skeleton.c, r: skeleton.r, label: "SKELETT", color: "#f8fafc", kind: "skeleton", boost: 0.9, hpRatio: skeleton.hp / skeleton.maxHp })),
+    ...state.enemies.map((enemy) => ({
+      c: enemy.c,
+      r: enemy.r,
+      label: enemy.type === "boss" ? "BOSS" : enemy.type === "flying" ? "FLYGARE" : "FIENDE",
+      color: enemy.type === "boss" ? "#ef4444" : enemy.type === "flying" ? "#d946ef" : "#7c3aed",
+      kind: enemy.type === "boss" ? "boss" : enemy.type === "flying" ? "flying" : "enemy",
+      boost: enemy.type === "boss" ? 1.5 : 1,
+      hpRatio: enemy.hp / enemy.maxHp,
+    })),
+    ...currentWorld().lava.map((cell) => ({ ...cell, label: "LAVA", color: "#f97316", kind: "floor", boost: 1.1, hpRatio: 1 })),
+    ...(state.portalOpen ? [{ ...currentWorld().portal, label: "PORTAL", color: "#a855f7", kind: "floor", boost: 1.4, hpRatio: 1 }] : []),
+  ];
+
+  sprites
+    .map((sprite) => ({
+      ...sprite,
+      forward: Math.cos(cameraAngle) * (sprite.c - player.c) + Math.sin(cameraAngle) * (sprite.r - player.r),
+    }))
+    .sort((a, b) => b.forward - a.forward)
+    .forEach((sprite) => drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection));
+}
+
+function drawFirstPersonHands() {
+  const bottom = VIEW3D_Y + VIEW3D_H;
+  const skin = ctx.createLinearGradient(0, bottom - 95, 0, bottom);
+  skin.addColorStop(0, "#e7b585");
+  skin.addColorStop(1, "#9b6540");
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.moveTo(VIEW3D_X + 125, bottom);
+  ctx.quadraticCurveTo(VIEW3D_X + 165, bottom - 76, VIEW3D_X + 224, bottom - 38);
+  ctx.lineTo(VIEW3D_X + 247, bottom);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(VIEW3D_X + VIEW3D_W - 125, bottom);
+  ctx.quadraticCurveTo(VIEW3D_X + VIEW3D_W - 165, bottom - 76, VIEW3D_X + VIEW3D_W - 224, bottom - 38);
+  ctx.lineTo(VIEW3D_X + VIEW3D_W - 247, bottom);
+  ctx.closePath();
+  ctx.fill();
+
+  if (state.hasSword) {
+    const swordX = VIEW3D_X + VIEW3D_W * 0.7;
+    ctx.save();
+    ctx.translate(swordX, bottom - 35);
+    ctx.rotate(-0.24);
+    const blade = ctx.createLinearGradient(-12, 0, 18, 0);
+    blade.addColorStop(0, "#64748b");
+    blade.addColorStop(0.46, "#f8fafc");
+    blade.addColorStop(1, "#94a3b8");
+    ctx.fillStyle = blade;
+    ctx.beginPath();
+    ctx.moveTo(-10, 0);
+    ctx.lineTo(-5, -168);
+    ctx.lineTo(0, -188);
+    ctx.lineTo(8, -166);
+    ctx.lineTo(11, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(-34, -4, 68, 10);
+    ctx.fillStyle = "#4b2e1f";
+    ctx.fillRect(-8, 4, 16, 55);
+    ctx.restore();
+  }
+}
+
+function drawRealisticFirstPersonView() {
+  const player = state.players[0];
+  if (!player) return;
+  const cameraAngle = angleFromDir(player.dir);
+  const horizon = VIEW3D_Y + VIEW3D_H * 0.46;
+  const projection = (VIEW3D_W / 2) / Math.tan(VIEW3D_FOV / 2);
+  const columnWidth = VIEW3D_W / VIEW3D_COLS;
+
+  ctx.save();
+  roundRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H, 9);
+  ctx.clip();
+  drawRealisticSky(horizon);
+  drawRealisticFloor(horizon, player);
+
+  for (let i = 0; i < VIEW3D_COLS; i += 1) {
+    const cameraX = (i + 0.5) / VIEW3D_COLS - 0.5;
+    const rayAngle = cameraAngle + cameraX * VIEW3D_FOV;
+    const hit = castRealisticWallRay(rayAngle, player);
+    const forwardDistance = Math.max(VIEW3D_NEAR, hit.distance * Math.cos(rayAngle - cameraAngle));
+    firstPersonDepth[i] = forwardDistance;
+    const sliceH = Math.min(VIEW3D_H * 2.25, projection * VIEW3D_WALL_HEIGHT / forwardDistance);
+    const wallY = horizon - sliceH * (1 - VIEW3D_CAMERA_HEIGHT);
+    const x = VIEW3D_X + i * columnWidth;
+    ctx.fillStyle = realisticWallColor(hit, forwardDistance);
+    ctx.fillRect(x, wallY, columnWidth + 1, sliceH);
+
+    const material = hit.material.name;
+    if (material === "wood") {
+      ctx.fillStyle = `rgba(39,20,9,${Math.min(0.45, 0.15 + forwardDistance * 0.018)})`;
+      for (let seam = 1; seam < 4; seam += 1) {
+        ctx.fillRect(x, wallY + sliceH * seam / 4, columnWidth + 1, Math.max(1, sliceH * 0.008));
+      }
+    } else if (material === "stone" || material === "temple" || material === "boundary") {
+      ctx.fillStyle = `rgba(24,30,32,${Math.min(0.36, 0.1 + forwardDistance * 0.016)})`;
+      for (let seam = 1; seam < 5; seam += 1) {
+        ctx.fillRect(x, wallY + sliceH * seam / 5, columnWidth + 1, Math.max(1, sliceH * 0.006));
+      }
+    }
+
+    const fogAlpha = Math.min(0.62, Math.max(0, (forwardDistance - 4) / 17));
+    if (fogAlpha > 0) {
+      ctx.fillStyle = state.phase === "night"
+        ? `rgba(34,53,70,${fogAlpha})`
+        : `rgba(198,216,211,${fogAlpha})`;
+      ctx.fillRect(x, wallY, columnWidth + 1, sliceH);
+    }
+  }
+
+  drawRealisticEntities(player, cameraAngle, horizon, projection);
+  drawFirstPersonHands();
+
+  const vignette = ctx.createRadialGradient(
+    VIEW3D_X + VIEW3D_W / 2,
+    VIEW3D_Y + VIEW3D_H * 0.48,
+    VIEW3D_H * 0.12,
+    VIEW3D_X + VIEW3D_W / 2,
+    VIEW3D_Y + VIEW3D_H * 0.48,
+    VIEW3D_W * 0.54,
+  );
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(0.72, "rgba(0,0,0,0.08)");
+  vignette.addColorStop(1, state.phase === "night" ? "rgba(0,0,0,0.56)" : "rgba(0,0,0,0.34)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H);
+
+  const cx = VIEW3D_X + VIEW3D_W / 2;
+  const cy = VIEW3D_Y + VIEW3D_H / 2;
+  ctx.strokeStyle = "rgba(255,255,255,0.72)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy);
+  ctx.lineTo(cx - 3, cy);
+  ctx.moveTo(cx + 3, cy);
+  ctx.lineTo(cx + 10, cy);
+  ctx.moveTo(cx, cy - 10);
+  ctx.lineTo(cx, cy - 3);
+  ctx.moveTo(cx, cy + 3);
+  ctx.lineTo(cx, cy + 10);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(5,12,18,0.55)";
+  roundRect(VIEW3D_X + 14, VIEW3D_Y + 14, 150, 44, 7);
+  ctx.fill();
+  drawText(state.phase === "night" ? "NATTVY" : "DAGSVY", VIEW3D_X + 28, VIEW3D_Y + 31, 14, "#f8fafc", "left", "900");
+  drawText(`P1 • ${player.dir}`, VIEW3D_X + 28, VIEW3D_Y + 49, 12, "#dbeafe", "left", "700");
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = "#0b1720";
+  ctx.lineWidth = 8;
+  roundRect(VIEW3D_X, VIEW3D_Y, VIEW3D_W, VIEW3D_H, 9);
+  ctx.stroke();
+  ctx.strokeStyle = state.phase === "night" ? "#6489a4" : "#b7c6bd";
+  ctx.lineWidth = 2;
+  roundRect(VIEW3D_X + 4, VIEW3D_Y + 4, VIEW3D_W - 8, VIEW3D_H - 8, 7);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawBlocks() {
   for (const [blockKey, block] of state.blocks.entries()) {
     const [c, r] = blockKey.split(",").map(Number);
@@ -2084,7 +2680,7 @@ function render() {
       drawEnemies();
       drawPlayers();
     } else {
-      drawFirstPersonView();
+      drawRealisticFirstPersonView();
     }
     drawToolPanel();
     drawHotbar();
@@ -2164,6 +2760,10 @@ function handlePointer(event) {
     return;
   }
 
+  useMapToolAt(point);
+}
+
+function useMapToolAt(point) {
   if (state.mode !== "playing" || state.shopOpen) return;
   const cell = cellFromPoint(point.x, point.y);
   if (!cell) return;
@@ -2207,7 +2807,10 @@ function touchId(touch) {
 function handleTouchStart(event) {
   event.preventDefault();
   for (const touch of event.changedTouches) {
-    startDragControl(touchId(touch), touchToCanvas(touch));
+    const point = touchToCanvas(touch);
+    if (!startDragControl(touchId(touch), point)) {
+      useMapToolAt(point);
+    }
   }
 }
 
@@ -2543,14 +3146,17 @@ window.advanceTime = (ms) => {
 
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("keydown", handleKey, { passive: false });
-canvas.addEventListener("pointerdown", handlePointer, { passive: false });
-canvas.addEventListener("pointermove", handlePointerMove, { passive: false });
-canvas.addEventListener("pointerup", stopPointerJoystick, { passive: false });
-canvas.addEventListener("pointercancel", stopPointerJoystick, { passive: false });
-canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
-canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
-canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
-canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+if ("PointerEvent" in window) {
+  canvas.addEventListener("pointerdown", handlePointer, { passive: false });
+  canvas.addEventListener("pointermove", handlePointerMove, { passive: false });
+  canvas.addEventListener("pointerup", stopPointerJoystick, { passive: false });
+  canvas.addEventListener("pointercancel", stopPointerJoystick, { passive: false });
+} else {
+  canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+  canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+  canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+  canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+}
 document.addEventListener("fullscreenchange", resizeCanvas);
 
 resizeCanvas();

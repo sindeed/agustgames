@@ -241,3 +241,15 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   Dragstyrningen är åter begränsad till den runda spaken, men touch-stödet för
   spaken finns kvar. Verifierat att touch-drag på spelbilden inte startar joystick
   och inte flyttar spelaren, medan drag på runda spaken fortfarande flyttar.
+- Survivor iPad-knappfix: Pointer Events och Touch Events registreras inte längre
+  samtidigt. Moderna iPads använder Pointer Events och äldre enheter får Touch
+  Events som reserv, så samma tryck kan inte växla Shop/Bygg/Hjärta/Radera två
+  gånger eller råka genomföra två köp.
+- Survivor har fått en mycket verkligare förstapersonsvy med snabb DDA-raycasting,
+  korrekt djup och väggskymning, dagsljus/sol/moln, natt/måne/stjärnor, dimma,
+  perspektivmark med gräs eller sten, texturerade trä-/sten-/pilväggar, händer,
+  svärd, sikte och formritade hjärtan, fiender, bossar, flygare och skelett.
+- Verifierat lokalt: dag i värld 1, natt med synligt hjärta och fiende, värld 2,
+  kart-/byggläge och Blockshop renderas utan konsolfel. iPad-test passerar både
+  Pointer Events och äldre Touch Events-reserv; ett tryck kör varje knapp en gång,
+  köp dras bara en gång och touch-spaken fungerar fortfarande.
