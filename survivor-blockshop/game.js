@@ -704,7 +704,7 @@ function isMapView() {
 }
 
 function usesSplitScreen() {
-  return state.playersWanted > 1 && state.players.length > 1;
+  return state.playersWanted > 1 && state.players.length > 1 && !state.botPlayerId;
 }
 
 function firstPersonViewFor(playerId) {
@@ -713,7 +713,7 @@ function firstPersonViewFor(playerId) {
 }
 
 function firstPersonViewEntries() {
-  return state.players.map((player) => ({
+  return state.players.filter((player) => !player.isBot).map((player) => ({
     player,
     view: firstPersonViewFor(player.id),
     depth: firstPersonDepthBuffers[player.id - 1] || firstPersonDepthBuffers[0],
@@ -3399,7 +3399,7 @@ function renderGameToText() {
   const activeBotTarget = state.botTargetEnemyId
     ? state.enemies.find((enemy) => enemy.id === state.botTargetEnemyId) || null
     : null;
-  const cameras = state.players.map((player) => {
+  const cameras = state.players.filter((player) => !player.isBot).map((player) => {
     const forward = forwardDirectionFor(player);
     const view = firstPersonViewFor(player.id);
     return {

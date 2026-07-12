@@ -282,3 +282,10 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   kontrollrensning vid Shop/Bygg, botens nattdödande, värld 2-säkerhet och hela
   1P-flödet fungerar utan konsol- eller sidfel. Split-, bot- och kartvyer har
   granskats visuellt och är korrekt klippta utan överlapp.
+- Korrigering av botläget: botens egen förstapersonsbild visas inte längre. `1 +
+  bot` visar bara P1:s fullstora kamera, medan boten fortfarande syns som figur i
+  världen, har liv i HUD:en och fortsätter vakta/slåss själv. Delad skärm används
+  endast när två människor spelar.
+- Lokalt regressionstest med spelklienten visar en enda fullstor P1-kamera i
+  botläget och fortsatt två korrekt klippta kameror när två människor spelar,
+  utan konsol- eller sidfel.
