@@ -253,3 +253,6 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   kart-/byggläge och Blockshop renderas utan konsolfel. iPad-test passerar både
   Pointer Events och äldre Touch Events-reserv; ett tryck kör varje knapp en gång,
   köp dras bara en gång och touch-spaken fungerar fortfarande.
+- Survivor-länkarna till `game.js` och `style.css` har fått en versionsmarkering,
+  så Safari på iPad tvingas hämta den nya verkligare versionen i stället för en
+  gammal cachad fil.
