@@ -586,6 +586,7 @@ function groundRouteToHeartExists(start) {
       .map((dir) => ({ c: state.heart.c + dir.dx, r: state.heart.r + dir.dy }))
       .filter((cell) => inBounds(cell.c, cell.r))
       .filter((cell) => !isTerrainWall(cell.c, cell.r))
+      .filter((cell) => !isLava(cell.c, cell.r))
       .filter((cell) => !state.blocks.has(key(cell.c, cell.r)))
       .map((cell) => key(cell.c, cell.r)),
   );
@@ -604,7 +605,7 @@ function groundRouteToHeartExists(start) {
       const r = current.r + dir.dy;
       const cellKey = key(c, r);
       if (visited.has(cellKey)) continue;
-      if (!inBounds(c, r) || isTerrainWall(c, r)) continue;
+      if (!inBounds(c, r) || isTerrainWall(c, r) || isLava(c, r)) continue;
       if (state.blocks.has(cellKey) || sameCell({ c, r }, state.heart)) continue;
       visited.add(cellKey);
       queue.push({ c, r });
@@ -874,6 +875,7 @@ function killEnemy(enemy) {
 function passableForEnemy(c, r, enemy) {
   if (!inBounds(c, r)) return false;
   if (enemy.type !== "flying" && isTerrainWall(c, r)) return false;
+  if (enemy.type !== "flying" && isLava(c, r)) return false;
   if (enemy.type !== "flying" && state.blocks.has(key(c, r))) return false;
   if (enemy.type !== "flying" && skeletonAt(c, r)) return false;
   return true;
@@ -1041,7 +1043,7 @@ function triggerSkeletonsForEnemy(enemy) {
 
 function nearestEnemyForSkeleton(skeleton) {
   return state.enemies
-    .slice()
+    .filter((enemy) => enemy.type !== "boss")
     .sort((a, b) => manhattan(skeleton, a) - manhattan(skeleton, b) || a.id - b.id)[0] || null;
 }
 
@@ -1294,7 +1296,7 @@ function updateProjectiles(dt) {
 }
 
 function spawnEnemy(type, cell) {
-  const spawn = findOpenSpawn(cell);
+  const spawn = findOpenSpawn(cell, type);
   const enemy = {
     id: state.nextEnemyId,
     type,
@@ -1311,7 +1313,7 @@ function spawnEnemy(type, cell) {
   state.enemies.push(enemy);
 }
 
-function findOpenSpawn(cell) {
+function findOpenSpawn(cell, type) {
   const candidates = [
     cell,
     { c: cell.c - 1, r: cell.r },
@@ -1323,6 +1325,7 @@ function findOpenSpawn(cell) {
   for (const candidate of candidates) {
     if (!inBounds(candidate.c, candidate.r)) continue;
     if (isTerrainWall(candidate.c, candidate.r)) continue;
+    if (type !== "flying" && isLava(candidate.c, candidate.r)) continue;
     if (state.blocks.has(key(candidate.c, candidate.r))) continue;
     if (sameCell(candidate, state.heart)) continue;
     if (playerAt(candidate.c, candidate.r)) continue;
@@ -1373,24 +1376,28 @@ function updateSpawns() {
   const world = currentWorld();
 
   if (state.world === 2) {
-    const interval = state.day === 1 ? 1 : 3;
+    if (state.day === 3) {
+      if (!state.bossSpawned) {
+        spawnEnemy("boss", world.spawns.f1);
+        state.bossSpawned = true;
+        setMessage("Bossen kom från F1! Bara svärdet kan skada den.", 3);
+      }
+      return;
+    }
+
     while (state.phaseElapsed >= state.spawnCursor) {
       if (state.day === 1) {
         spawnEnemy("normal", world.spawns.f1);
       } else if (state.day === 2) {
-        spawnEnemy("normal", world.spawns.f1);
-        spawnEnemy("normal", world.spawns.f2);
-      } else if (state.day === 3) {
-        spawnEnemy("normal", world.spawns.f1);
-        spawnEnemy("flying", world.spawns.f2);
-      } else if (state.day === 4) {
         spawnEnemy("flying", world.spawns.f1);
+      } else if (state.day === 4) {
+        spawnEnemy("normal", world.spawns.f1);
         spawnEnemy("normal", world.spawns.f2);
       } else if (state.day === 5) {
         spawnEnemy("flying", world.spawns.f1);
         spawnEnemy("flying", world.spawns.f2);
       }
-      state.spawnCursor += interval;
+      state.spawnCursor += 1;
       if (state.spawnCursor > NIGHT_LENGTH) break;
     }
     return;

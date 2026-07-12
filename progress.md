@@ -305,3 +305,17 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   befintlig markfiende tas bort utan att förbrukas. Trä, sten och pilblock är
   testade, flygfiender ger inga falska stopp och ordinarie köp/byggflöde fungerar
   visuellt utan konsol- eller sidfel.
+- Värld 2:s markfiender och boss kan inte längre gå eller reservspawna på lava;
+  flygfiender kan fortfarande flyga över den. Byggkontrollen räknar också lava
+  som blockerad när den säkerställer en öppen markväg till hjärtat.
+- Värld 2:s nattvågor är ändrade: natt 1 vanlig fiende från F1 varje sekund,
+  natt 2 flygfiende från F1 varje sekund, natt 3 en svärdskänslig boss från F1,
+  natt 4 en vanlig fiende från vardera F1/F2 varje sekund och natt 5 en
+  flygfiende från vardera F1/F2 varje sekund. Därefter öppnas portalen. Bossen
+  kan inte skadas av hand, bot, pilblock eller skelett.
+- Deterministiskt verifierat över hela 30-sekundersvågor: natt 1/2 ger 30 rätt
+  fiender, natt 3 exakt en boss, natt 4/5 ger 30 från vardera F1 och F2 och ingen
+  extra spawn sker vid nattens slut. Markfiende och boss väljer A-korridoren i
+  stället för lava, reservspawn följer samma regel, bossen kräver tre svärdslag
+  och portalen avslutar värld 2 efter natt 5. Tidigare direktattack och
+  blockvägskontroll passerar fortsatt utan konsol- eller sidfel.
