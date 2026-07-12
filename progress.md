@@ -256,3 +256,13 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Survivor-länkarna till `game.js` och `style.css` har fått en versionsmarkering,
   så Safari på iPad tvingas hämta den nya verkligare versionen i stället för en
   gammal cachad fil.
+- Survivor P1 har nu fri förstapersonskamera: dra i själva 3D-bilden för att se
+  åt sidorna och upp/ner utan att spelaren flyttas. Yaw är helt fri och pitch är
+  säkert begränsad så himmel och mark alltid kan renderas.
+- P1-spaken är nu endast FRAMÅT. Vänster-, höger- och neddrag flyttar inte
+  spelaren; uppdrag går framåt i den rutnätsriktning kameran tittar och stannar
+  direkt när fingret släpps. P2:s separata fyrvägskontroll är oförändrad.
+- Verifierat med simulerad iPad-touch i både Pointer Events och äldre Touch Events:
+  fri look ändrar kamera men inte position, framåt följer kameran efter vridning,
+  sid-/bakåtdrag ignoreras, släpp stoppar rörelsen, och Shop/Bygg/köp/placering
+  fortsätter fungera utan dubbeltryck eller konsolfel.

@@ -33,6 +33,9 @@ const ARROW_DAMAGE = 0.5;
 const SKELETON_ATTACK_INTERVAL = 1;
 const SKELETON_DAMAGE = 0.5;
 const SKELETON_HP = 0.5;
+const LOOK_YAW_SENSITIVITY = 0.0055;
+const LOOK_PITCH_SENSITIVITY = 0.0035;
+const MAX_LOOK_PITCH = 0.32;
 
 const WORLD_DEFS = [
   {
@@ -126,6 +129,7 @@ function tileRadius(a, b) {
 let uiButtons = [];
 let joystickZones = [];
 const activeJoysticks = new Map();
+const activeLookDrags = new Map();
 const firstPersonDepth = new Float32Array(VIEW3D_COLS);
 let lastTime = 0;
 let dpr = 1;
@@ -379,16 +383,21 @@ function setupWorld(worldId, playersWanted, keepProgress = false) {
   state.nextSkeletonId = 1;
   state.heart = { c: world.heartStart.c, r: world.heartStart.r, hp: 3, maxHp: 3 };
   state.players = [];
+  activeJoysticks.clear();
+  activeLookDrags.clear();
 
   for (let i = 0; i < playersWanted; i += 1) {
     const start = world.playerStarts[i] || world.playerStarts[0];
+    const startDir = i === 0 ? "left" : "up";
     state.players.push({
       id: i + 1,
       c: start.c,
       r: start.r,
       hp: 3,
       maxHp: 3,
-      dir: i === 0 ? "left" : "up",
+      dir: startDir,
+      lookYaw: angleFromDir(startDir),
+      lookPitch: 0,
       attackCooldown: 0,
       stepCooldown: 0,
       color: i === 0 ? "#37d3ff" : "#ffd447",
@@ -640,6 +649,36 @@ function angleFromDir(name) {
   return -Math.PI / 2;
 }
 
+function normalizeAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function cameraAngleFor(player) {
+  return Number.isFinite(player?.lookYaw) ? player.lookYaw : angleFromDir(player?.dir);
+}
+
+function forwardDirectionFor(player) {
+  const angle = cameraAngleFor(player);
+  const x = Math.cos(angle);
+  const y = Math.sin(angle);
+  if (Math.abs(x) >= Math.abs(y)) {
+    return x >= 0 ? DIRS[1] : DIRS[3];
+  }
+  return y >= 0 ? DIRS[2] : DIRS[0];
+}
+
+function movePlayerForward(player) {
+  if (!player) return;
+  const direction = forwardDirectionFor(player);
+  tryMovePlayer(player, direction.dx, direction.dy);
+}
+
+function turnPlayerView(player, amount) {
+  if (!player) return;
+  player.lookYaw = normalizeAngle(cameraAngleFor(player) + amount);
+  player.dir = forwardDirectionFor(player).name;
+}
+
 function isMapView() {
   return state.shopOpen || state.activeTool !== "none";
 }
@@ -658,6 +697,15 @@ function updateJoystick(pointerId, point) {
   if (!joystick) return;
   const rawDx = point.x - joystick.centerX;
   const rawDy = point.y - joystick.centerY;
+  const player = state.players[joystick.playerId - 1];
+  if (joystick.playerId === 1) {
+    const forwardAmount = Math.max(0, -rawDy);
+    joystick.knobX = joystick.centerX;
+    joystick.knobY = joystick.centerY - Math.min(34, forwardAmount);
+    joystick.forwardActive = rawDy < -14;
+    joystick.direction = joystick.forwardActive ? forwardDirectionFor(player) : null;
+    return;
+  }
   const distance = Math.hypot(rawDx, rawDy);
   const maxDistance = 34;
   const scale = distance > maxDistance ? maxDistance / distance : 1;
@@ -671,7 +719,12 @@ function movePlayersFromJoysticks() {
   for (const joystick of activeJoysticks.values()) {
     const player = state.players[joystick.playerId - 1];
     if (!player || !joystick.direction) continue;
-    tryMovePlayer(player, joystick.direction.dx, joystick.direction.dy);
+    if (joystick.playerId === 1) {
+      joystick.direction = forwardDirectionFor(player);
+      movePlayerForward(player);
+    } else {
+      tryMovePlayer(player, joystick.direction.dx, joystick.direction.dy);
+    }
   }
 }
 
@@ -2099,9 +2152,9 @@ function drawFirstPersonHands() {
 function drawRealisticFirstPersonView() {
   const player = state.players[0];
   if (!player) return;
-  const cameraAngle = angleFromDir(player.dir);
-  const horizon = VIEW3D_Y + VIEW3D_H * 0.46;
+  const cameraAngle = cameraAngleFor(player);
   const projection = (VIEW3D_W / 2) / Math.tan(VIEW3D_FOV / 2);
+  const horizon = VIEW3D_Y + VIEW3D_H * 0.46 + Math.tan(player.lookPitch || 0) * projection;
   const columnWidth = VIEW3D_W / VIEW3D_COLS;
 
   ctx.save();
@@ -2177,10 +2230,10 @@ function drawRealisticFirstPersonView() {
   ctx.stroke();
 
   ctx.fillStyle = "rgba(5,12,18,0.55)";
-  roundRect(VIEW3D_X + 14, VIEW3D_Y + 14, 150, 44, 7);
+  roundRect(VIEW3D_X + 14, VIEW3D_Y + 14, 190, 44, 7);
   ctx.fill();
-  drawText(state.phase === "night" ? "NATTVY" : "DAGSVY", VIEW3D_X + 28, VIEW3D_Y + 31, 14, "#f8fafc", "left", "900");
-  drawText(`P1 • ${player.dir}`, VIEW3D_X + 28, VIEW3D_Y + 49, 12, "#dbeafe", "left", "700");
+  drawText("DRA BILDEN FÖR ATT TITTA", VIEW3D_X + 28, VIEW3D_Y + 31, 12, "#f8fafc", "left", "900");
+  drawText("Spak: bara framåt", VIEW3D_X + 28, VIEW3D_Y + 49, 11, "#dbeafe", "left", "700");
   ctx.restore();
 
   ctx.save();
@@ -2565,7 +2618,7 @@ function drawDpad(playerId, x, y) {
   const centerX = x + 63;
   const centerY = y + 63;
   joystickZones.push({ playerId, x: x - 8, y: y - 8, w: 142, h: 112, centerX, centerY });
-  drawText(`P${playerId}`, x + 47, y - 15, 15, "#e0f2fe", "center", "900");
+  drawText(playerId === 1 ? "P1 FRAMÅT" : `P${playerId}`, centerX, y - 4, 14, "#e0f2fe", "center", "900");
   ctx.save();
   ctx.fillStyle = "rgba(147, 197, 253, 0.34)";
   ctx.beginPath();
@@ -2577,10 +2630,19 @@ function drawDpad(playerId, x, y) {
   ctx.strokeStyle = "rgba(15, 23, 42, 0.45)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(centerX - 38, centerY);
-  ctx.lineTo(centerX + 38, centerY);
-  ctx.moveTo(centerX, centerY - 38);
-  ctx.lineTo(centerX, centerY + 38);
+  if (playerId === 1) {
+    ctx.moveTo(centerX, centerY + 30);
+    ctx.lineTo(centerX, centerY - 30);
+    ctx.moveTo(centerX, centerY - 30);
+    ctx.lineTo(centerX - 13, centerY - 16);
+    ctx.moveTo(centerX, centerY - 30);
+    ctx.lineTo(centerX + 13, centerY - 16);
+  } else {
+    ctx.moveTo(centerX - 38, centerY);
+    ctx.lineTo(centerX + 38, centerY);
+    ctx.moveTo(centerX, centerY - 38);
+    ctx.lineTo(centerX, centerY + 38);
+  }
   ctx.stroke();
   ctx.restore();
   drawJoystickKnob(playerId, centerX, centerY);
@@ -2629,7 +2691,7 @@ function drawMenu() {
   pushButton("start-w2-1", 282, 488, 206, 58, "1 spelare", "#fb923c", { textColor: "#431407" });
   pushButton("start-w2-2", 536, 488, 206, 58, "2 spelare", "#f97316", { textColor: "#431407" });
 
-  drawText("P1: WASD + Space", VIEW_W / 2, 570, 17, "#e0f2fe", "center", "800");
+  drawText("P1: dra bilden + spak framåt", VIEW_W / 2, 570, 17, "#e0f2fe", "center", "800");
   drawText("P2: pilar + Enter", VIEW_W / 2, 598, 17, "#fef3c7", "center", "800");
 }
 
@@ -2718,6 +2780,31 @@ function joystickZoneAt(x, y) {
   return null;
 }
 
+function isLookDragPoint(x, y) {
+  return state.mode === "playing"
+    && !isMapView()
+    && x >= VIEW3D_X
+    && y >= VIEW3D_Y
+    && x <= VIEW3D_X + VIEW3D_W
+    && y <= VIEW3D_Y + VIEW3D_H;
+}
+
+function updateLookDrag(id, point) {
+  const drag = activeLookDrags.get(id);
+  const player = state.players[0];
+  if (!drag || !player) return;
+  const dx = point.x - drag.lastX;
+  const dy = point.y - drag.lastY;
+  drag.lastX = point.x;
+  drag.lastY = point.y;
+  player.lookYaw = normalizeAngle(cameraAngleFor(player) + dx * LOOK_YAW_SENSITIVITY);
+  player.lookPitch = Math.max(
+    -MAX_LOOK_PITCH,
+    Math.min(MAX_LOOK_PITCH, (player.lookPitch || 0) - dy * LOOK_PITCH_SENSITIVITY),
+  );
+  player.dir = forwardDirectionFor(player).name;
+}
+
 function pointerToCanvas(event) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -2746,6 +2833,15 @@ function startDragControl(id, point) {
     });
     updateJoystick(id, point);
     movePlayersFromJoysticks();
+    render();
+    return true;
+  }
+  if (isLookDragPoint(point.x, point.y)) {
+    activeLookDrags.set(id, {
+      playerId: 1,
+      lastX: point.x,
+      lastY: point.y,
+    });
     render();
     return true;
   }
@@ -2779,16 +2875,21 @@ function useMapToolAt(point) {
 }
 
 function handlePointerMove(event) {
-  if (!activeJoysticks.has(event.pointerId)) return;
+  const hasJoystick = activeJoysticks.has(event.pointerId);
+  const hasLookDrag = activeLookDrags.has(event.pointerId);
+  if (!hasJoystick && !hasLookDrag) return;
   event.preventDefault();
-  updateJoystick(event.pointerId, pointerToCanvas(event));
+  const point = pointerToCanvas(event);
+  if (hasJoystick) updateJoystick(event.pointerId, point);
+  if (hasLookDrag) updateLookDrag(event.pointerId, point);
   render();
 }
 
-function stopPointerJoystick(event) {
-  if (!activeJoysticks.has(event.pointerId)) return;
+function stopPointerControl(event) {
+  const stoppedJoystick = activeJoysticks.delete(event.pointerId);
+  const stoppedLookDrag = activeLookDrags.delete(event.pointerId);
+  if (!stoppedJoystick && !stoppedLookDrag) return;
   event.preventDefault();
-  activeJoysticks.delete(event.pointerId);
   render();
 }
 
@@ -2818,8 +2919,12 @@ function handleTouchMove(event) {
   let handled = false;
   for (const touch of event.changedTouches) {
     const id = touchId(touch);
-    if (!activeJoysticks.has(id)) continue;
-    updateJoystick(id, touchToCanvas(touch));
+    const hasJoystick = activeJoysticks.has(id);
+    const hasLookDrag = activeLookDrags.has(id);
+    if (!hasJoystick && !hasLookDrag) continue;
+    const point = touchToCanvas(touch);
+    if (hasJoystick) updateJoystick(id, point);
+    if (hasLookDrag) updateLookDrag(id, point);
     handled = true;
   }
   if (handled) {
@@ -2832,9 +2937,8 @@ function handleTouchEnd(event) {
   let handled = false;
   for (const touch of event.changedTouches) {
     const id = touchId(touch);
-    if (!activeJoysticks.has(id)) continue;
-    activeJoysticks.delete(id);
-    handled = true;
+    if (activeJoysticks.delete(id)) handled = true;
+    if (activeLookDrags.delete(id)) handled = true;
   }
   if (handled) {
     event.preventDefault();
@@ -2974,38 +3078,36 @@ function handleKey(event) {
   switch (event.key) {
     case "w":
     case "W":
-      tryMovePlayer(p1, 0, -1);
+      movePlayerForward(p1);
       break;
     case "s":
     case "S":
-      tryMovePlayer(p1, 0, 1);
       break;
     case "a":
     case "A":
-      tryMovePlayer(p1, -1, 0);
+      turnPlayerView(p1, -Math.PI / 8);
       break;
     case "d":
     case "D":
-      tryMovePlayer(p1, 1, 0);
+      turnPlayerView(p1, Math.PI / 8);
       break;
     case " ":
       attack(p1);
       break;
     case "ArrowUp":
       if (p2) tryMovePlayer(p2, 0, -1);
-      else tryMovePlayer(p1, 0, -1);
+      else movePlayerForward(p1);
       break;
     case "ArrowDown":
       if (p2) tryMovePlayer(p2, 0, 1);
-      else tryMovePlayer(p1, 0, 1);
       break;
     case "ArrowLeft":
       if (p2) tryMovePlayer(p2, -1, 0);
-      else tryMovePlayer(p1, -1, 0);
+      else turnPlayerView(p1, -Math.PI / 8);
       break;
     case "ArrowRight":
       if (p2) tryMovePlayer(p2, 1, 0);
-      else tryMovePlayer(p1, 1, 0);
+      else turnPlayerView(p1, Math.PI / 8);
       break;
     case "Enter":
       if (p2) attack(p2);
@@ -3072,6 +3174,8 @@ function gameLoop(timestamp) {
 }
 
 function renderGameToText() {
+  const cameraPlayer = state.players[0];
+  const cameraForward = cameraPlayer ? forwardDirectionFor(cameraPlayer) : null;
   const payload = {
     coordinateSystem: "tile grid, origin top-left, c increases right, r increases down",
     mode: state.mode,
@@ -3084,6 +3188,13 @@ function renderGameToText() {
     money: state.money,
     hasSword: state.hasSword,
     cameraView: isMapView() ? "map" : "firstPerson3d",
+    controlMode: "drag image to look; P1 movement is forward only",
+    camera: cameraPlayer ? {
+      yawRadians: Number(cameraAngleFor(cameraPlayer).toFixed(3)),
+      pitchRadians: Number((cameraPlayer.lookPitch || 0).toFixed(3)),
+      forward: { dx: cameraForward.dx, dy: cameraForward.dy, name: cameraForward.name },
+      dragging: activeLookDrags.size > 0,
+    } : null,
     joysticks: Array.from(activeJoysticks.values()).map((joystick) => ({
       playerId: joystick.playerId,
       direction: joystick.direction ? joystick.direction.name : "center",
@@ -3099,6 +3210,8 @@ function renderGameToText() {
       r: player.r,
       hp: player.hp,
       dir: player.dir,
+      lookYaw: Number(cameraAngleFor(player).toFixed(3)),
+      lookPitch: Number((player.lookPitch || 0).toFixed(3)),
     })),
     enemies: state.enemies.slice(0, 20).map((enemy) => ({
       id: enemy.id,
@@ -3149,8 +3262,8 @@ window.addEventListener("keydown", handleKey, { passive: false });
 if ("PointerEvent" in window) {
   canvas.addEventListener("pointerdown", handlePointer, { passive: false });
   canvas.addEventListener("pointermove", handlePointerMove, { passive: false });
-  canvas.addEventListener("pointerup", stopPointerJoystick, { passive: false });
-  canvas.addEventListener("pointercancel", stopPointerJoystick, { passive: false });
+  canvas.addEventListener("pointerup", stopPointerControl, { passive: false });
+  canvas.addEventListener("pointercancel", stopPointerControl, { passive: false });
 } else {
   canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
   canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
