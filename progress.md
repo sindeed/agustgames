@@ -327,3 +327,10 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   flygande fiende och 14 efter boss, med rätt meddelanden och utan dubbla
   belöningar, konsolfel eller sidfel. Värld 2:s vågor, lava, bosskydd och portal
   passerar fortfarande hela regressionstestet.
+- Survivor-menyn har fått en stor grön `Freewar`-knapp högst upp. Knappen kan
+  tryckas på och visar en ljus markering samt textstate `Freewar valt.`, men
+  stannar säkert i menyn tills reglerna för det nya läget är bestämda.
+- Verifierat med den ordinarie spelklienten i iPad-landskap: Freewar-knappen
+  syns helt utan överlapp, tryck ger markering och textstate `Freewar valt.`,
+  och den befintliga Värld 1-knappen startar fortsatt spelet utan konsol- eller
+  sidfel.

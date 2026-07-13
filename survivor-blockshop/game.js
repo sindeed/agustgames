@@ -2914,6 +2914,10 @@ function drawJoystickKnob(playerId, centerX, centerY) {
 
 function drawMenu() {
   drawBackground();
+  pushButton("freewar", 397, 24, 230, 52, "Freewar", "#22c55e", {
+    textColor: "#052e16",
+    outline: state.message === "Freewar valt." ? "#dcfce7" : null,
+  });
   ctx.fillStyle = "rgba(15, 23, 42, 0.72)";
   roundRect(166, 92, 692, 520, 8);
   ctx.fill();
@@ -3199,6 +3203,10 @@ function handleTouchEnd(event) {
 }
 
 function handleButton(id) {
+  if (id === "freewar") {
+    setMessage("Freewar valt.", 2.5);
+    return;
+  }
   if (id === "start-w1-1") {
     startGame(1, 1);
     return;
