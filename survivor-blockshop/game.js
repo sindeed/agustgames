@@ -150,6 +150,8 @@ function clearActiveControls() {
 
 const state = {
   mode: "menu",
+  menuPage: "main",
+  freewarBotCount: null,
   world: 1,
   playersWanted: 1,
   botPlayerId: null,
@@ -370,6 +372,8 @@ function setMessage(text, seconds = 2.8) {
 }
 
 function startGame(playersWanted, worldId = 1, botPlayerId = null) {
+  state.menuPage = "main";
+  state.freewarBotCount = null;
   setupWorld(worldId, playersWanted, false, botPlayerId);
 }
 
@@ -2914,10 +2918,12 @@ function drawJoystickKnob(playerId, centerX, centerY) {
 
 function drawMenu() {
   drawBackground();
-  pushButton("freewar", 397, 24, 230, 52, "Freewar", "#22c55e", {
-    textColor: "#052e16",
-    outline: state.message === "Freewar valt." ? "#dcfce7" : null,
-  });
+  if (state.menuPage === "freewar") {
+    drawFreewarMenu();
+    return;
+  }
+
+  pushButton("freewar", 397, 24, 230, 52, "Freewar", "#22c55e", { textColor: "#052e16" });
   ctx.fillStyle = "rgba(15, 23, 42, 0.72)";
   roundRect(166, 92, 692, 520, 8);
   ctx.fill();
@@ -2942,6 +2948,50 @@ function drawMenu() {
 
   drawText("P1/P2: dra sin bild + spak framåt", VIEW_W / 2, 570, 16, "#e0f2fe", "center", "800");
   drawText("Bot: försvarar hjärtat själv", VIEW_W / 2, 598, 16, "#d1fae5", "center", "800");
+}
+
+function drawFreewarMenu() {
+  ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
+  roundRect(166, 92, 692, 520, 8);
+  ctx.fill();
+  ctx.strokeStyle = "#86efac";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  drawText("Freewar", VIEW_W / 2, 170, 50, "#4ade80", "center", "900");
+  drawText("Välj hur många botar", VIEW_W / 2, 232, 25, "#f8fafc", "center", "800");
+
+  const choices = [
+    { count: 2, x: 226, color: "#86efac" },
+    { count: 5, x: 427, color: "#4ade80" },
+    { count: 8, x: 628, color: "#22c55e" },
+  ];
+  for (const choice of choices) {
+    pushButton(
+      `freewar-bots-${choice.count}`,
+      choice.x,
+      300,
+      170,
+      72,
+      `${choice.count} botar`,
+      choice.color,
+      {
+        textColor: "#052e16",
+        outline: state.freewarBotCount === choice.count ? "#fef9c3" : null,
+      },
+    );
+  }
+
+  drawText(
+    state.freewarBotCount ? `${state.freewarBotCount} botar valda.` : "Tryck på ett av valen.",
+    VIEW_W / 2,
+    424,
+    20,
+    state.freewarBotCount ? "#fef08a" : "#d1fae5",
+    "center",
+    "800",
+  );
+  pushButton("freewar-back", 397, 486, 230, 58, "Tillbaka", "#cbd5e1", { textColor: "#0f172a" });
 }
 
 function drawEndScreen(title, subtitle) {
@@ -3204,7 +3254,21 @@ function handleTouchEnd(event) {
 
 function handleButton(id) {
   if (id === "freewar") {
-    setMessage("Freewar valt.", 2.5);
+    state.menuPage = "freewar";
+    setMessage("Välj 2, 5 eller 8 botar.", 2.5);
+    return;
+  }
+  if (id === "freewar-back") {
+    state.menuPage = "main";
+    setMessage("Välj hur många som spelar.", 2.5);
+    return;
+  }
+  if (id.startsWith("freewar-bots-")) {
+    const botCount = Number(id.split("-").pop());
+    if ([2, 5, 8].includes(botCount)) {
+      state.freewarBotCount = botCount;
+      setMessage(`${botCount} botar valda.`, 2.5);
+    }
     return;
   }
   if (id === "start-w1-1") {
@@ -3234,6 +3298,8 @@ function handleButton(id) {
   if (id === "restart") {
     clearActiveControls();
     state.mode = "menu";
+    state.menuPage = "main";
+    state.freewarBotCount = null;
     state.world = 1;
     state.botPlayerId = null;
     state.message = "Välj hur många som spelar.";
@@ -3322,12 +3388,17 @@ function handleKey(event) {
   }
 
   if (state.mode === "menu") {
-    if (event.key === "1") startGame(1, 1);
-    if (event.key === "2") startGame(2, 1);
-    if (event.key === "3") startGame(1, 2);
-    if (event.key === "4") startGame(2, 2);
-    if (event.key === "5") startGame(2, 1, 2);
-    if (event.key === "6") startGame(2, 2, 2);
+    if (state.menuPage === "freewar") {
+      if (["2", "5", "8"].includes(event.key)) handleButton(`freewar-bots-${event.key}`);
+      if (event.key === "Escape") handleButton("freewar-back");
+    } else {
+      if (event.key === "1") startGame(1, 1);
+      if (event.key === "2") startGame(2, 1);
+      if (event.key === "3") startGame(1, 2);
+      if (event.key === "4") startGame(2, 2);
+      if (event.key === "5") startGame(2, 1, 2);
+      if (event.key === "6") startGame(2, 2, 2);
+    }
     render();
     return;
   }
@@ -3475,6 +3546,8 @@ function renderGameToText() {
   const payload = {
     coordinateSystem: "tile grid, origin top-left, c increases right, r increases down",
     mode: state.mode,
+    menuPage: state.menuPage,
+    freewarBotCount: state.freewarBotCount,
     world: state.world,
     worldName: currentWorld().name,
     day: state.day,

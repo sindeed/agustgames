@@ -334,3 +334,9 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   syns helt utan överlapp, tryck ger markering och textstate `Freewar valt.`,
   och den befintliga Värld 1-knappen startar fortsatt spelet utan konsol- eller
   sidfel.
+- Freewar-knappen öppnar nu en egen meny med tre stora tryckbara val: `2 botar`,
+  `5 botar` och `8 botar`. Det valda antalet markeras tydligt, och en
+  `Tillbaka`-knapp leder tillbaka till den vanliga Survivor-menyn.
+- Verifierat i iPad-landskap med den ordinarie spelklienten: alla tre botvalen
+  registreras korrekt, `8 botar` syns markerat utan överlapp i menyn, och
+  `Tillbaka` följt av Värld 1 startar fortsatt spelet utan konsol- eller sidfel.
