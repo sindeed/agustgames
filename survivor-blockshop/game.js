@@ -33,6 +33,8 @@ const NIGHT_LENGTH = 30;
 const ENEMY_ATTACK_INTERVAL = 1;
 const ENEMY_REWARD = 2;
 const BOSS_REWARD = 4;
+const FREEWAR_START_MONEY = 50;
+const FREEWAR_BOT_REWARD = 10;
 const PLAYER_CHASE_RANGE = 2;
 const ARROW_SHOT_INTERVAL = 3;
 const ARROW_DAMAGE = 0.5;
@@ -639,7 +641,7 @@ function startFreewar(botCount) {
   state.portalOpen = false;
   state.shopOpen = false;
   state.activeTool = "none";
-  state.money = 10;
+  state.money = FREEWAR_START_MONEY;
   state.hasSword = false;
   state.selectedSlot = 0;
   state.inventory = [];
@@ -1216,10 +1218,12 @@ function damageFreewarPlayer(attacker, target, amount) {
     return;
   }
 
-  if (attacker?.id === 1 && target.id !== 1) state.money += ENEMY_REWARD;
+  const humanKilledBot = attacker?.id === 1 && target.id !== 1;
+  if (humanKilledBot) state.money += FREEWAR_BOT_REWARD;
   const homeHeart = heartForPlayer(target.id);
   if (homeHeart?.hp > 0) {
     respawnFreewarPlayer(target, target.id === 1 ? "Du började om vid ditt hjärta." : "");
+    if (humanKilledBot) setMessage(`Bot ${target.id - 1} dödad! +${FREEWAR_BOT_REWARD} pengar.`, 2.2);
     return;
   }
 
@@ -1227,6 +1231,7 @@ function damageFreewarPlayer(attacker, target, amount) {
   target.c = -99;
   target.r = -99;
   if (target.id === 1) setMessage("Du är utslagen ur Freewar.", 5);
+  else if (humanKilledBot) setMessage(`Bot ${target.id - 1} ute! +${FREEWAR_BOT_REWARD} pengar.`, 2.5);
   else setMessage(`Bot ${target.id - 1} är utslagen!`, 2.5);
   finishFreewarIfNeeded();
 }

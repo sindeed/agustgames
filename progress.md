@@ -385,3 +385,8 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   vinnare, botvinnare, åskådarläge, avstängda kontroller och flera omstarter utan
   tillståndsläckor, konsolfel eller sidfel. Safari-token är nu
   `20260714-freewar-last-standing`.
+- Freewar-ekonomin börjar nu på 50 pengar. Varje gång människan dödar en bot får
+  laget exakt 10 pengar, både när botens hjärta lever och den återuppstår och när
+  boten slås ut helt. Deterministiskt test gav 50 → 60 → 70 → 80 efter tre
+  botdödar, med synligt `+10 pengar`-meddelande och utan konsol- eller sidfel.
+  Safari-token är uppdaterad till `20260714-freewar-money-50`.
