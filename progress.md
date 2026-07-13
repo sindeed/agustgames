@@ -340,3 +340,48 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
 - Verifierat i iPad-landskap med den ordinarie spelklienten: alla tre botvalen
   registreras korrekt, `8 botar` syns markerat utan överlapp i menyn, och
   `Tillbaka` följt av Värld 1 startar fortsatt spelet utan konsol- eller sidfel.
+- Agust godkände Freewar-kartan. Den är nu inlagd som ett 15×15-fotavtryck med
+  tretton sammanhängande 3×3-markgrupper: mänsklig mittbas, fyra inre gångar och
+  åtta yttre botbaser. Alla nio baserna har öppna ingångar och varsitt hjärta
+  med 3 liv; kartvyn skalar separat så de vanliga 9×9-världarna inte ändras.
+- Första iPad-landskapstestet startar Freewar med 8 botar, visar hela den
+  godkända kartformen, nio spelare och nio hjärtan utan konsol- eller sidfel.
+  Freewar-HUD, dagbyggande, natt-AI och den särskilda shoppen återstår i nästa
+  del av bygget.
+- Freewar är nu spelbart direkt från valen `2 botar`, `5 botar` och `8 botar`.
+  Människan startar i mittbasen och varje deltagare har en egen bas, ett hjärta
+  med 3 liv, en spelare med 3 liv och återuppstår så länge hjärtat lever.
+- Endast i Freewar varar både dag och natt exakt 60 sekunder. På dagen bygger
+  botarna staggerade trä-/sten-/pilförsvar utan att stänga in sig själva; på
+  natten får en roterande bot människan som mål medan övriga botar krigar mot
+  varandra, bryter fientliga block, slår spelare och förstör hjärtan.
+- Freewar-shoppen har trä 5, sten 5, pilblock 20, lava 20, lavablockare 20 och
+  svärd 40. Lava kan läggas på fri mark, lavablockaren tar bort den och ett
+  vanligt byggblock ersätter lavan med säker mark. Survivor-priserna är helt
+  separata och oförändrade.
+- Basernas ingångar har fått en andra öppning så en försvarare inte kan låsa
+  hjärtat genom att stå i dörren. Alla bas-spawnrutor är byggskyddade, och
+  respawn söker utåt efter närmaste säkra ruta i stället för att kunna hamna i
+  lava, ett block eller en annan spelare.
+- Verifierat med ordinarie spelklient och riktade deterministiska tester: alla
+  botval startar rätt antal spelare/hjärtan, människan kan köpa och placera
+  block, lava/lavablockare/ersättningsblock fungerar, och 2 respektive 8 botar
+  lämnar baserna, slåss, skadar spelare/hjärtan och går vidare till dag 2 efter
+  en hel natt. Kart-, shop-, första person- och nattvyer har granskats visuellt
+  utan konsol- eller sidfel.
+- Survival-regression godkänd i värld 1 och 2: kameradrag, endast-framåt-spak,
+  shop, byggkarta och värld 2:s åtta lavarutor fungerar; sten kostar fortfarande
+  15 i Survivor. Safari-resurserna har ny Freewar-cachemarkering inför publicering.
+- Freewar följer nu sist-kvar-regeln för alla deltagare. Om människan slås ut
+  fortsätter matchen i en åskådarkarta där botarna fortfarande bygger och krigar;
+  spelarens rörelse-, attack-, shop-, bygg- och raderingskontroller är då avstängda.
+  När exakt en deltagare återstår visas rätt vinnare, både `Du vann Freewar!` och
+  exempelvis `Bot 5 vann Freewar!`.
+- `Ny match` leder direkt tillbaka till Freewars val med 2, 5 eller 8 botar, så
+  obegränsat många matcher kan startas med valfritt antal. Menyn förklarar också
+  att botvalen tillsammans med spelaren ger totalt 3, 6 eller 9 deltagare.
+- Naturliga simuleringar med 2, 5 och 8 botar har alla fortsatt efter människans
+  utslagning och nått en ensam botvinnare. Separata tester har verifierat mänsklig
+  vinnare, botvinnare, åskådarläge, avstängda kontroller och flera omstarter utan
+  tillståndsläckor, konsolfel eller sidfel. Safari-token är nu
+  `20260714-freewar-last-standing`.
