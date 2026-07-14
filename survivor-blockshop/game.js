@@ -35,6 +35,10 @@ const ENEMY_REWARD = 2;
 const BOSS_REWARD = 4;
 const FREEWAR_START_MONEY = 50;
 const FREEWAR_BOT_REWARD = 10;
+const BOW_DAMAGE = 0.5;
+const BOW_RANGE = 10;
+const BOW_SHOT_COOLDOWN = 0.55;
+const BOW_PROJECTILE_LIFE = 0.28;
 const PLAYER_CHASE_RANGE = 2;
 const ARROW_SHOT_INTERVAL = 3;
 const ARROW_DAMAGE = 0.5;
@@ -179,6 +183,7 @@ const PRICES = {
   healer: 2,
   heartHeal: 30,
   sword: 40,
+  bow: 50,
 };
 
 const FREEWAR_PRICES = {
@@ -188,6 +193,7 @@ const FREEWAR_PRICES = {
   lava: 20,
   lavaBlocker: 20,
   sword: 40,
+  bow: 50,
 };
 
 const FREEWAR_BOT_BUILD_MATERIALS = ["wood", "stone", "arrow", "lava"];
@@ -265,6 +271,7 @@ const state = {
   shopOpen: false,
   money: 10,
   hasSword: false,
+  hasBow: false,
   selectedSlot: 0,
   inventory: [],
   players: [],
@@ -545,6 +552,7 @@ function setupWorld(worldId, playersWanted, keepProgress = false, botPlayerId = 
   if (!keepProgress) {
     state.money = 10;
     state.hasSword = false;
+    state.hasBow = false;
     state.selectedSlot = 0;
     state.inventory = [];
   }
@@ -574,6 +582,8 @@ function setupWorld(worldId, playersWanted, keepProgress = false, botPlayerId = 
       isBot: i + 1 === botPlayerId,
       botMoveTimer: 0,
       attackCooldown: 0,
+      bowCooldown: 0,
+      bowFlash: 0,
       stepCooldown: 0,
       color: i === 0 ? "#37d3ff" : "#ffd447",
       dark: i === 0 ? "#0e7490" : "#b45309",
@@ -616,6 +626,7 @@ function startFreewar(botCount) {
   state.activeTool = "none";
   state.money = FREEWAR_START_MONEY;
   state.hasSword = false;
+  state.hasBow = false;
   state.selectedSlot = 0;
   state.inventory = [];
   state.blocks = new Map();
@@ -663,6 +674,8 @@ function startFreewar(botCount) {
       botTargetId: null,
       botGoal: null,
       attackCooldown: 0,
+      bowCooldown: 0,
+      bowFlash: 0,
       stepCooldown: 0,
       color: colors[index][0],
       dark: colors[index][1],
@@ -738,6 +751,22 @@ function buy(type) {
 
   if (type === "heartHeal") {
     buyHeartHeal();
+    return;
+  }
+
+  if (type === "bow") {
+    const bowPrice = priceFor("bow");
+    if (state.hasBow) {
+      setMessage("Pilbågen är redan köpt.", 2);
+      return;
+    }
+    if (state.money < bowPrice) {
+      setMessage(`Pilbågen kostar ${bowPrice} kronor.`, 2);
+      return;
+    }
+    state.money -= bowPrice;
+    state.hasBow = true;
+    setMessage("Pilbåge köpt! Pilarna tar aldrig slut.", 3);
     return;
   }
 
@@ -1159,6 +1188,7 @@ function respawnFreewarPlayer(player, reason = "") {
   player.r = spawn.r;
   player.hp = player.maxHp;
   player.attackCooldown = 0;
+  player.bowCooldown = 0;
   player.stepCooldown = 0;
   player.botGoal = null;
   if (player.id === 1) {
@@ -1246,6 +1276,100 @@ function damageFreewarHeart(attacker, heart, amount) {
     setMessage("Ditt hjärta är förstört – du kan inte börja om mer!", 5);
   } else {
     setMessage(`Bot ${heart.ownerId - 1}:s hjärta förstördes.`, 2.5);
+  }
+}
+
+function addBowProjectile(player, c, r) {
+  state.projectiles.push({
+    kind: "bow",
+    fromC: player.c,
+    fromR: player.r,
+    toC: c,
+    toR: r,
+    life: BOW_PROJECTILE_LIFE,
+    maxLife: BOW_PROJECTILE_LIFE,
+  });
+  player.bowFlash = BOW_PROJECTILE_LIFE;
+}
+
+function bowAimForTarget(player, target, angle) {
+  const dx = target.c - player.c;
+  const dy = target.r - player.r;
+  return {
+    ...target,
+    forward: Math.cos(angle) * dx + Math.sin(angle) * dy,
+    side: Math.abs(-Math.sin(angle) * dx + Math.cos(angle) * dy),
+  };
+}
+
+function bowEndpointAtDistance(player, angle, distance) {
+  const { cols, rows } = gridDimensions();
+  return {
+    c: Math.max(0, Math.min(cols - 1, Math.floor(player.c + 0.5 + Math.cos(angle) * distance))),
+    r: Math.max(0, Math.min(rows - 1, Math.floor(player.r + 0.5 + Math.sin(angle) * distance))),
+  };
+}
+
+function shootBow(player) {
+  if (!player || state.mode !== "playing" || state.shopOpen) return;
+  if (!state.hasBow) {
+    if (player.id === 1) setMessage("Köp pilbågen i Blockshop först.", 2);
+    return;
+  }
+  if (isFreewar() && (player.eliminated || state.phase !== "night")) {
+    if (player.id === 1 && state.phase === "day") setMessage("På dagen bygger man. Skjut på natten.", 2);
+    return;
+  }
+  if ((player.bowCooldown || 0) > 0) return;
+  player.bowCooldown = BOW_SHOT_COOLDOWN;
+  const angle = cameraAngleFor(player);
+  const wallHit = castRealisticWallRay(angle, player);
+  const maxTargetDistance = Math.min(BOW_RANGE, wallHit.distance + 0.25);
+  const targets = isFreewar()
+    ? [
+      ...activeFreewarPlayers()
+        .filter((other) => other.id !== player.id)
+        .map((other) => ({ ...other, bowKind: "player" })),
+      ...activeHearts()
+        .filter((heart) => heart.hp > 0)
+        .map((heart) => ({ ...heart, bowKind: "heart" })),
+    ]
+    : state.enemies.map((enemy) => ({ ...enemy, bowKind: "enemy" }));
+  const target = targets
+    .map((candidate) => bowAimForTarget(player, candidate, angle))
+    .filter((candidate) => candidate.forward > 0.15 && candidate.forward <= maxTargetDistance)
+    .filter((candidate) => candidate.side <= 0.46)
+    .sort((a, b) => a.forward - b.forward || a.side - b.side || (a.id || a.ownerId) - (b.id || b.ownerId))[0] || null;
+
+  if (target) {
+    addBowProjectile(player, target.c, target.r);
+    if (target.bowKind === "heart") {
+      if (player.id === 1) setMessage("Pilen fastnade i ett hjärta.", 1);
+      return;
+    }
+    if (target.bowKind === "player") {
+      if (player.id === 1) setMessage(`Pilen träffade Bot ${target.id - 1}!`, 1.2);
+      const targetPlayer = state.players.find((other) => other.id === target.id);
+      if (targetPlayer) damageFreewarPlayer(player, targetPlayer, BOW_DAMAGE);
+      return;
+    }
+    if (target.type === "boss") {
+      if (player.id === 1) setMessage("Bossen kan bara skadas med svärd!", 1.8);
+      return;
+    }
+    if (player.id === 1) setMessage("Pilen träffade fienden!", 1.1);
+    const targetEnemy = state.enemies.find((enemy) => enemy.id === target.id);
+    if (targetEnemy) damageEnemy(targetEnemy, BOW_DAMAGE);
+    return;
+  }
+
+  const hitWallInRange = wallHit.distance <= BOW_RANGE;
+  const endpoint = hitWallInRange && inBounds(wallHit.c, wallHit.r)
+    ? { c: wallHit.c, r: wallHit.r }
+    : bowEndpointAtDistance(player, angle, hitWallInRange ? Math.max(0.1, wallHit.distance - 0.01) : BOW_RANGE);
+  addBowProjectile(player, endpoint.c, endpoint.r);
+  if (player.id === 1) {
+    setMessage(hitWallInRange ? (wallHit.block ? "Pilen träffade ett block." : "Pilen träffade väggen.") : "Pilen träffade inget.", 0.9);
   }
 }
 
@@ -2338,6 +2462,8 @@ function updateFreewar(dt) {
   state.messageTimer = Math.max(0, state.messageTimer - dt);
   for (const player of state.players) {
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
+    player.bowCooldown = Math.max(0, (player.bowCooldown || 0) - dt);
+    player.bowFlash = Math.max(0, (player.bowFlash || 0) - dt);
     player.stepCooldown = Math.max(0, player.stepCooldown - dt);
   }
   movePlayersFromJoysticks();
@@ -2367,6 +2493,8 @@ function update(dt) {
   state.messageTimer = Math.max(0, state.messageTimer - dt);
   for (const player of state.players) {
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
+    player.bowCooldown = Math.max(0, (player.bowCooldown || 0) - dt);
+    player.bowFlash = Math.max(0, (player.bowFlash || 0) - dt);
     player.stepCooldown = Math.max(0, player.stepCooldown - dt);
   }
   movePlayersFromJoysticks();
@@ -3149,7 +3277,7 @@ function drawRealisticEntities(player, cameraAngle, horizon, projection, view, d
     .forEach((sprite) => drawRealisticBillboard(player, cameraAngle, sprite, horizon, projection, view, depthBuffer));
 }
 
-function drawFirstPersonHands(view) {
+function drawFirstPersonHands(player, view) {
   const bottom = view.y + view.h;
   const scale = Math.min(1, view.h / 360);
   const skin = ctx.createLinearGradient(0, bottom - 95 * scale, 0, bottom);
@@ -3168,6 +3296,40 @@ function drawFirstPersonHands(view) {
   ctx.lineTo(view.x + view.w * 0.63, bottom);
   ctx.closePath();
   ctx.fill();
+
+  if (state.hasBow) {
+    const bowX = view.x + view.w * 0.31;
+    ctx.save();
+    ctx.translate(bowX, bottom - 18 * scale);
+    ctx.strokeStyle = "#7c2d12";
+    ctx.lineWidth = 8 * scale;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, -158 * scale);
+    ctx.quadraticCurveTo(-54 * scale, -79 * scale, 0, 0);
+    ctx.stroke();
+    ctx.strokeStyle = "#fef3c7";
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(0, -158 * scale);
+    ctx.lineTo(18 * scale, -79 * scale);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+    ctx.strokeStyle = player?.bowFlash > 0 ? "#fde047" : "#d6d3d1";
+    ctx.lineWidth = (player?.bowFlash > 0 ? 5 : 3) * scale;
+    ctx.beginPath();
+    ctx.moveTo(18 * scale, -62 * scale);
+    ctx.lineTo(18 * scale, -172 * scale);
+    ctx.stroke();
+    ctx.fillStyle = player?.bowFlash > 0 ? "#fef08a" : "#e5e7eb";
+    ctx.beginPath();
+    ctx.moveTo(18 * scale, -184 * scale);
+    ctx.lineTo(9 * scale, -166 * scale);
+    ctx.lineTo(27 * scale, -166 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
 
   if (state.hasSword) {
     const swordX = view.x + view.w * 0.7;
@@ -3245,7 +3407,7 @@ function drawRealisticFirstPersonView(player, view, depthBuffer) {
   }
 
   drawRealisticEntities(player, cameraAngle, horizon, projection, view, depthBuffer);
-  drawFirstPersonHands(view);
+  drawFirstPersonHands(player, view);
 
   const vignette = ctx.createRadialGradient(
     view.x + view.w / 2,
@@ -3351,15 +3513,23 @@ function drawProjectiles() {
   for (const projectile of state.projectiles) {
     const from = centerOf(projectile.fromC, projectile.fromR);
     const to = centerOf(projectile.toC, projectile.toR);
-    const alpha = Math.max(0.15, Math.min(1, projectile.life / 0.18));
+    const alpha = Math.max(0.15, Math.min(1, projectile.life / (projectile.maxLife || 0.18)));
+    const projectileColor = projectile.kind === "bow" ? "#fb923c" : "#facc15";
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = "#facc15";
+    ctx.strokeStyle = projectileColor;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
-    ctx.fillStyle = "#fef08a";
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - Math.cos(angle - 0.5) * 14, to.y - Math.sin(angle - 0.5) * 14);
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - Math.cos(angle + 0.5) * 14, to.y - Math.sin(angle + 0.5) * 14);
+    ctx.stroke();
+    ctx.fillStyle = projectile.kind === "bow" ? "#ffedd5" : "#fef08a";
     ctx.fillRect(to.x - 5, to.y - 5, 10, 10);
   }
   ctx.restore();
@@ -3667,9 +3837,9 @@ function drawFreewarToolPanel() {
 
 function drawShop() {
   if (!state.shopOpen) return;
-  const x = 114;
+  const x = 60;
   const y = 70;
-  const w = 690;
+  const w = 904;
   const h = 590;
   ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
   roundRect(x, y, w, h, 8);
@@ -3681,28 +3851,30 @@ function drawShop() {
   drawText(`Pengar: ${state.money}`, x + w - 32, y + 42, 22, "#fde68a", "right", "900");
 
   if (isFreewar()) {
-    drawShopItem("buy-wood", x + 36, y + 86, 190, 140, "Träblock", `${priceFor("wood")} kr`, "#c46b34", "5 slag");
-    drawShopItem("buy-stone", x + 250, y + 86, 190, 140, "Stenblock", `${priceFor("stone")} kr`, "#8d99a6", "10 slag");
-    drawShopItem("buy-sword", x + 464, y + 86, 190, 140, "Svärd", `${priceFor("sword")} kr`, "#facc15", "Slår hårdare");
-    drawShopItem("buy-arrow", x + 36, y + 250, 190, 140, "Pilblock", `${priceFor("arrow")} kr`, "#38bdf8", "Skjuter på natten");
-    drawShopItem("buy-lava", x + 250, y + 250, 190, 140, "Lava", `${priceFor("lava")} kr`, "#f97316", "Farlig mark");
-    drawShopItem("buy-lava-blocker", x + 464, y + 250, 190, 140, "Lavablockare", `${priceFor("lavaBlocker")} kr`, "#67e8f9", "Tar bort lava");
+    drawShopItem("buy-wood", x + 26, y + 86, 190, 140, "Träblock", `${priceFor("wood")} kr`, "#c46b34", "5 slag");
+    drawShopItem("buy-stone", x + 236, y + 86, 190, 140, "Stenblock", `${priceFor("stone")} kr`, "#8d99a6", "10 slag");
+    drawShopItem("buy-sword", x + 446, y + 86, 190, 140, "Svärd", `${priceFor("sword")} kr`, "#facc15", "Slår hårdare");
+    drawShopItem("buy-bow", x + 656, y + 86, 190, 140, "Pilbåge", `${priceFor("bow")} kr`, "#a16207", "Oändliga pilar");
+    drawShopItem("buy-arrow", x + 26, y + 250, 190, 140, "Pilblock", `${priceFor("arrow")} kr`, "#38bdf8", "Skjuter på natten");
+    drawShopItem("buy-lava", x + 236, y + 250, 190, 140, "Lava", `${priceFor("lava")} kr`, "#f97316", "Farlig mark");
+    drawShopItem("buy-lava-blocker", x + 446, y + 250, 190, 140, "Lavablockare", `${priceFor("lavaBlocker")} kr`, "#67e8f9", "Tar bort lava");
   } else {
-    drawShopItem("buy-wood", x + 36, y + 86, 190, 140, "Träblock", "5 kr", "#c46b34", "5 slag");
-    drawShopItem("buy-stone", x + 250, y + 86, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
-    drawShopItem("buy-sword", x + 464, y + 86, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
-    drawShopItem("buy-healer", x + 36, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar spelare");
-    drawShopItem("buy-arrow", x + 250, y + 250, 190, 140, "Pilar", "20 kr", "#38bdf8", "Skjuter var 3s");
-    drawShopItem("buy-heart-heal", x + 464, y + 250, 190, 140, "Hjärtmedicin", "30 kr", "#ef4444", "Helar hjärtat");
+    drawShopItem("buy-wood", x + 26, y + 86, 190, 140, "Träblock", "5 kr", "#c46b34", "5 slag");
+    drawShopItem("buy-stone", x + 236, y + 86, 190, 140, "Stenblock", "15 kr", "#8d99a6", "10 slag");
+    drawShopItem("buy-sword", x + 446, y + 86, 190, 140, "Svärd", "40 kr", "#facc15", "Boss-vapen");
+    drawShopItem("buy-bow", x + 656, y + 86, 190, 140, "Pilbåge", `${priceFor("bow")} kr`, "#a16207", "Oändliga pilar");
+    drawShopItem("buy-healer", x + 26, y + 250, 190, 140, "Healerdryck", "2 kr", "#fb7185", "Helar spelare");
+    drawShopItem("buy-arrow", x + 236, y + 250, 190, 140, "Pilar", "20 kr", "#38bdf8", "Skjuter var 3s");
+    drawShopItem("buy-heart-heal", x + 446, y + 250, 190, 140, "Hjärtmedicin", "30 kr", "#ef4444", "Helar hjärtat");
   }
 
-  pushButton("sell-selected", x + 250, y + 410, 190, 58, "Sälj valt", "#34d399", { small: true });
-  pushButton("close-shop", x + 464, y + 410, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
+  pushButton("sell-selected", x + 446, y + 410, 190, 58, "Sälj valt", "#34d399", { small: true });
+  pushButton("close-shop", x + 656, y + 410, 190, 58, "Stäng", "#f87171", { small: true, textColor: "#fff" });
 
   const stack = currentStack();
   const selectedText = stack ? `Valt: ${itemName(stack.type)} x${stack.count}` : "Valt: inget";
-  drawText(selectedText, x + 38, y + 504, 18, "#f8fafc", "left", "800");
-  drawText(isFreewar() ? "Bygg på dagen. Kriga på natten." : "Shoppen fungerar bara på dagen.", x + 38, y + 534, 15, "#cbd5e1", "left", "700");
+  drawText(selectedText, x + 28, y + 504, 18, "#f8fafc", "left", "800");
+  drawText(isFreewar() ? "Bygg på dagen. Kriga på natten." : "Shoppen fungerar bara på dagen.", x + 28, y + 534, 15, "#cbd5e1", "left", "700");
 }
 
 function drawShopItem(id, x, y, w, h, title, price, color, subtitle) {
@@ -3716,6 +3888,30 @@ function drawShopItem(id, x, y, w, h, title, price, color, subtitle) {
   ctx.fillRect(x + 18, y + 18, 58, 58);
   ctx.fillStyle = "rgba(255,255,255,0.25)";
   ctx.fillRect(x + 27, y + 27, 40, 10);
+  if (id === "buy-bow") {
+    ctx.strokeStyle = "#fef3c7";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x + 35, y + 27);
+    ctx.quadraticCurveTo(x + 65, y + 47, x + 35, y + 69);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 35, y + 27);
+    ctx.lineTo(x + 43, y + 48);
+    ctx.lineTo(x + 35, y + 69);
+    ctx.moveTo(x + 43, y + 48);
+    ctx.lineTo(x + 68, y + 48);
+    ctx.stroke();
+    ctx.fillStyle = "#fff7ed";
+    ctx.beginPath();
+    ctx.moveTo(x + 74, y + 48);
+    ctx.lineTo(x + 64, y + 42);
+    ctx.lineTo(x + 64, y + 54);
+    ctx.closePath();
+    ctx.fill();
+  }
   drawText(title, x + 94, y + 37, title.length > 10 ? 16 : 18, "#fff", "left", "900");
   drawText(price, x + 94, y + 66, 17, "#fde68a", "left", "800");
   drawText(subtitle, x + 18, y + 94, 15, "#cbd5e1", "left", "700");
@@ -3793,8 +3989,10 @@ function drawControls() {
   if (isFreewar() && state.players[0]?.eliminated) return;
   drawDpad(1, 76, 586);
   pushButton("attack-p1", 300, 592, 76, 48, "Slå", "#f472b6", { small: true });
+  if (state.hasBow) pushButton("shoot-p1", 385, 592, 76, 48, "Skjut", "#fb923c", { small: true });
   if (state.playersWanted > 1 && !state.botPlayerId) {
     drawDpad(2, 790, 586);
+    if (state.hasBow) pushButton("shoot-p2", 563, 592, 76, 48, "Skjut", "#fb923c", { small: true });
     pushButton("attack-p2", 648, 592, 76, 48, "Slå", "#f472b6", { small: true });
   }
 }
@@ -4304,6 +4502,10 @@ function handleButton(id) {
     buy("sword");
     return;
   }
+  if (id === "buy-bow") {
+    buy("bow");
+    return;
+  }
   if (id === "buy-healer") {
     buy("healer");
     return;
@@ -4330,6 +4532,14 @@ function handleButton(id) {
   }
   if (id === "attack-p2" && state.players[1] && !state.players[1].isBot) {
     attack(state.players[1]);
+    return;
+  }
+  if (id === "shoot-p1") {
+    shootBow(state.players[0]);
+    return;
+  }
+  if (id === "shoot-p2" && state.players[1] && !state.players[1].isBot) {
+    shootBow(state.players[1]);
     return;
   }
 
@@ -4396,6 +4606,10 @@ function handleKey(event) {
     case " ":
       attack(p1);
       break;
+    case "q":
+    case "Q":
+      shootBow(p1);
+      break;
     case "ArrowUp":
       if (p2 && !p2.isBot) movePlayerForward(p2);
       else movePlayerForward(p1);
@@ -4413,6 +4627,11 @@ function handleKey(event) {
     case "Enter":
       if (p2 && !p2.isBot) attack(p2);
       else attack(p1);
+      break;
+    case "p":
+    case "P":
+      if (p2 && !p2.isBot) shootBow(p2);
+      else shootBow(p1);
       break;
     case "g":
     case "G":
@@ -4511,6 +4730,7 @@ function renderGameToText() {
     portalOpen: state.portalOpen,
     money: state.money,
     hasSword: state.hasSword,
+    hasBow: state.hasBow,
     cameraView: isMapView() ? "map" : "firstPerson3d",
     splitScreen: usesSplitScreen() && !isMapView(),
     player2Control: isFreewar() ? `${state.freewarBotCount} bots` : state.playersWanted < 2 ? "none" : state.botPlayerId ? "bot" : "human",
@@ -4582,6 +4802,8 @@ function renderGameToText() {
       lookYaw: Number(cameraAngleFor(player).toFixed(3)),
       lookPitch: Number((player.lookPitch || 0).toFixed(3)),
       attackCooldown: Number(player.attackCooldown.toFixed(3)),
+      bowCooldown: Number((player.bowCooldown || 0).toFixed(3)),
+      bowFlash: Number((player.bowFlash || 0).toFixed(3)),
       stepCooldown: Number(player.stepCooldown.toFixed(3)),
     })),
     enemies: state.enemies.slice(0, 20).map((enemy) => ({
@@ -4604,10 +4826,12 @@ function renderGameToText() {
       return { c, r, type: block.type, ownerId: block.ownerId || null, hp: block.hp };
     }),
     projectiles: state.projectiles.map((projectile) => ({
+      kind: projectile.kind || "arrowBlock",
       fromC: projectile.fromC,
       fromR: projectile.fromR,
       toC: projectile.toC,
       toR: projectile.toR,
+      life: Number(projectile.life.toFixed(3)),
     })),
     terrainWalls: (isFreewar()
       ? currentWorld().terrainWalls.filter((cell) => isBaseWall(cell.c, cell.r))

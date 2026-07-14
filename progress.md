@@ -415,3 +415,15 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   lava- eller körfel. Bygg/radera på de nedskalade kartrutorna fungerar på touch.
   Oavgjort människa+bot och bot+bot, dag 6 med tre kvar samt vanlig ensam vinnare
   är testade; Survivor-världarna är fortfarande oförändrade 9 × 9.
+- Blockshop har nu en pilbåge för exakt 50 pengar i både Survivor och Freewar.
+  Köpet är permanent under matchen och använder inget pilförråd, så spelaren har
+  hur många pilar som helst. Pilbågen följer kamerans exakta riktning, har en egen
+  `Skjut`-knapp och egen cooldown så `Slå` och svärdet fortfarande kan användas
+  oberoende. Båda mänskliga spelarna får varsin skjutknapp i delad skärm.
+- Pilbågen skadar vanliga fiender och Freewar-botar med ett halvt liv per träff,
+  stoppas av väggar och block och följer Freewars byggfred på dagen. Botdödar ger
+  fortsatt +10 pengar och vanliga Survivor-fiender +2. Bossen stoppar pilen utan
+  skada och kan fortfarande bara dödas med svärd. Köp vid 49/50 pengar,
+  obegränsade skott, räckvidd, diagonal riktning, portalövergång, omstart och
+  tvåspelarknappar är verifierade utan konsol- eller sidfel. Safari-token är
+  `20260714-infinite-bow`.
