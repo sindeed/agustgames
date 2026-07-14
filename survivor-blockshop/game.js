@@ -45,90 +45,61 @@ const LOOK_YAW_SENSITIVITY = 0.0055;
 const LOOK_PITCH_SENSITIVITY = 0.0035;
 const MAX_LOOK_PITCH = 0.32;
 
+const FREEWAR_CHUNK_COLS = 8;
+const FREEWAR_CHUNK_ROWS = 9;
+
+function createFreewarBaseDef(id, name, c, r, dir) {
+  const directions = {
+    up: { dx: 0, dy: -1 },
+    down: { dx: 0, dy: 1 },
+    left: { dx: -1, dy: 0 },
+    right: { dx: 1, dy: 0 },
+  };
+  const forward = directions[dir];
+  const side = { dx: -forward.dy, dy: forward.dx };
+  const back = { dx: -forward.dx, dy: -forward.dy };
+  const wallOffsets = [
+    { dx: back.dx + side.dx, dy: back.dy + side.dy },
+    back,
+    { dx: back.dx - side.dx, dy: back.dy - side.dy },
+    side,
+    { dx: -side.dx, dy: -side.dy },
+    { dx: forward.dx + side.dx, dy: forward.dy + side.dy },
+  ];
+  return {
+    id,
+    name,
+    heart: { c, r },
+    spawn: { c: c + forward.dx, r: r + forward.dy },
+    dir,
+    walls: wallOffsets.map((offset) => ({ c: c + offset.dx, r: r + offset.dy })),
+  };
+}
+
 const FREEWAR_BASE_DEFS = [
-  {
-    id: 1,
-    name: "Din bas",
-    heart: { c: 7, r: 7 },
-    spawn: { c: 7, r: 8 },
-    dir: "down",
-    walls: [{ c: 6, r: 6 }, { c: 7, r: 6 }, { c: 8, r: 6 }, { c: 6, r: 7 }, { c: 8, r: 7 }, { c: 6, r: 8 }],
-  },
-  {
-    id: 2,
-    name: "Norr",
-    heart: { c: 7, r: 1 },
-    spawn: { c: 7, r: 2 },
-    dir: "down",
-    walls: [{ c: 6, r: 0 }, { c: 7, r: 0 }, { c: 8, r: 0 }, { c: 6, r: 1 }, { c: 8, r: 1 }, { c: 6, r: 2 }],
-  },
-  {
-    id: 3,
-    name: "Söder",
-    heart: { c: 7, r: 13 },
-    spawn: { c: 7, r: 12 },
-    dir: "up",
-    walls: [{ c: 6, r: 12 }, { c: 6, r: 13 }, { c: 8, r: 13 }, { c: 6, r: 14 }, { c: 7, r: 14 }, { c: 8, r: 14 }],
-  },
-  {
-    id: 4,
-    name: "Öster",
-    heart: { c: 13, r: 7 },
-    spawn: { c: 12, r: 7 },
-    dir: "left",
-    walls: [{ c: 12, r: 6 }, { c: 13, r: 6 }, { c: 14, r: 6 }, { c: 14, r: 7 }, { c: 13, r: 8 }, { c: 14, r: 8 }],
-  },
-  {
-    id: 5,
-    name: "Väster",
-    heart: { c: 1, r: 7 },
-    spawn: { c: 2, r: 7 },
-    dir: "right",
-    walls: [{ c: 0, r: 6 }, { c: 1, r: 6 }, { c: 2, r: 6 }, { c: 0, r: 7 }, { c: 0, r: 8 }, { c: 1, r: 8 }],
-  },
-  {
-    id: 6,
-    name: "Nordost",
-    heart: { c: 10, r: 4 },
-    spawn: { c: 9, r: 4 },
-    dir: "left",
-    walls: [{ c: 9, r: 3 }, { c: 10, r: 3 }, { c: 11, r: 3 }, { c: 11, r: 4 }, { c: 11, r: 5 }],
-  },
-  {
-    id: 7,
-    name: "Sydost",
-    heart: { c: 10, r: 10 },
-    spawn: { c: 10, r: 9 },
-    dir: "up",
-    walls: [{ c: 11, r: 9 }, { c: 11, r: 10 }, { c: 9, r: 11 }, { c: 10, r: 11 }, { c: 11, r: 11 }],
-  },
-  {
-    id: 8,
-    name: "Sydväst",
-    heart: { c: 4, r: 10 },
-    spawn: { c: 5, r: 10 },
-    dir: "right",
-    walls: [{ c: 3, r: 9 }, { c: 3, r: 10 }, { c: 3, r: 11 }, { c: 4, r: 11 }, { c: 5, r: 11 }],
-  },
-  {
-    id: 9,
-    name: "Nordväst",
-    heart: { c: 4, r: 4 },
-    spawn: { c: 4, r: 5 },
-    dir: "down",
-    walls: [{ c: 3, r: 3 }, { c: 4, r: 3 }, { c: 5, r: 3 }, { c: 3, r: 4 }, { c: 3, r: 5 }],
-  },
+  createFreewarBaseDef(1, "Din bas", 20, 22, "down"),
+  createFreewarBaseDef(2, "Norr", 20, 1, "down"),
+  createFreewarBaseDef(3, "Söder", 20, 43, "up"),
+  createFreewarBaseDef(4, "Öster", 38, 22, "left"),
+  createFreewarBaseDef(5, "Väster", 1, 22, "right"),
+  createFreewarBaseDef(6, "Nordost", 28, 13, "left"),
+  createFreewarBaseDef(7, "Sydost", 28, 31, "up"),
+  createFreewarBaseDef(8, "Sydväst", 12, 31, "right"),
+  createFreewarBaseDef(9, "Nordväst", 12, 13, "down"),
 ];
 
 function createFreewarArenaRows() {
   const chunkMask = ["..#..", ".###.", "#####", ".###.", "..#.."];
-  const cells = Array.from({ length: 15 }, () => Array(15).fill("V"));
+  const cells = Array.from(
+    { length: chunkMask.length * FREEWAR_CHUNK_ROWS },
+    () => Array(chunkMask[0].length * FREEWAR_CHUNK_COLS).fill("V"),
+  );
   for (let chunkR = 0; chunkR < chunkMask.length; chunkR += 1) {
     for (let chunkC = 0; chunkC < chunkMask[chunkR].length; chunkC += 1) {
       if (chunkMask[chunkR][chunkC] !== "#") continue;
-      for (let innerR = 0; innerR < 3; innerR += 1) {
-        for (let innerC = 0; innerC < 3; innerC += 1) {
-          cells[chunkR * 3 + innerR][chunkC * 3 + innerC] = ".";
+      for (let innerR = 0; innerR < FREEWAR_CHUNK_ROWS; innerR += 1) {
+        for (let innerC = 0; innerC < FREEWAR_CHUNK_COLS; innerC += 1) {
+          cells[chunkR * FREEWAR_CHUNK_ROWS + innerR][chunkC * FREEWAR_CHUNK_COLS + innerC] = ".";
         }
       }
     }
@@ -212,12 +183,14 @@ const PRICES = {
 
 const FREEWAR_PRICES = {
   wood: 5,
-  stone: 5,
+  stone: 15,
   arrow: 20,
   lava: 20,
   lavaBlocker: 20,
   sword: 40,
 };
+
+const FREEWAR_BOT_BUILD_MATERIALS = ["wood", "stone", "arrow", "lava"];
 
 const BLOCKS = {
   wood: { name: "Trä", hp: 5, color: "#c46b34", light: "#e89d58", dark: "#7e3f1f" },
@@ -653,7 +626,9 @@ function startFreewar(botCount) {
   state.freewar = {
     botCount,
     winnerId: null,
+    drawWinnerIds: [],
     spectating: false,
+    buildSeed: Math.floor(Math.random() * FREEWAR_BOT_BUILD_MATERIALS.length),
     hearts: selectedBases.map((base, index) => ({
       id: index + 1,
       ownerId: index + 1,
@@ -1148,6 +1123,10 @@ function activeFreewarPlayers() {
   return isFreewar() ? state.players.filter((player) => !player.eliminated) : [];
 }
 
+function freewarPlayerLabel(playerId) {
+  return playerId === 1 ? "Du" : `Bot ${playerId - 1}`;
+}
+
 function findFreewarRespawn(player) {
   const isSafe = (cell) => (
     inBounds(cell.c, cell.r)
@@ -1193,6 +1172,7 @@ function finishFreewarIfNeeded() {
   if (remaining.length === 1) {
     clearActiveControls();
     state.freewar.winnerId = remaining[0].id;
+    state.freewar.drawWinnerIds = [];
     state.freewar.spectating = false;
     state.mode = "freewarWin";
     state.shopOpen = false;
@@ -1208,6 +1188,22 @@ function finishFreewarIfNeeded() {
     setMessage("Du är ute. Botarna fortsätter!", 5);
   }
   return false;
+}
+
+function finishFreewarDrawIfNeeded() {
+  if (state.phase !== "night" || state.day < 5) return false;
+  const remaining = activeFreewarPlayers();
+  if (remaining.length !== 2) return false;
+  clearActiveControls();
+  state.freewar.winnerId = null;
+  state.freewar.drawWinnerIds = remaining.map((player) => player.id);
+  state.freewar.spectating = false;
+  state.mode = "freewarWin";
+  state.shopOpen = false;
+  state.activeTool = "none";
+  const labels = state.freewar.drawWinnerIds.map(freewarPlayerLabel);
+  setMessage(`Oavgjort! ${labels[0]} och ${labels[1]} vann båda.`, 10);
+  return true;
 }
 
 function damageFreewarPlayer(attacker, target, amount) {
@@ -1778,28 +1774,61 @@ function freewarBotBuildSpots(bot) {
   return spots;
 }
 
+function freewarPlayerHasOpenExit(player) {
+  const base = currentWorld().baseDefs.find((item) => item.id === player.baseId);
+  if (!base) return true;
+  const start = { c: player.spawnC, r: player.spawnR };
+  const queue = [start];
+  const visited = new Set([key(start.c, start.r)]);
+  while (queue.length) {
+    const current = queue.shift();
+    if (manhattan(current, base.heart) >= 5) return true;
+    for (const dir of DIRS) {
+      const next = { c: current.c + dir.dx, r: current.r + dir.dy };
+      const nextKey = key(next.c, next.r);
+      if (visited.has(nextKey) || !inBounds(next.c, next.r) || isTerrainWall(next.c, next.r)) continue;
+      if (isLava(next.c, next.r) || state.blocks.has(nextKey) || heartAt(next.c, next.r)) continue;
+      visited.add(nextKey);
+      queue.push(next);
+    }
+  }
+  return false;
+}
+
 function buildFreewarBotDefense(bot) {
   const spots = freewarBotBuildSpots(bot);
   if (!spots.length) return false;
-  const buildOrder = ["wood", "stone", "wood", "arrow", "stone", "wood"];
   for (let offset = 0; offset < spots.length; offset += 1) {
     const index = (bot.botBuildIndex + offset) % spots.length;
     const spot = spots[index];
     const spotKey = key(spot.c, spot.r);
     if (state.blocks.has(spotKey) || isLava(spot.c, spot.r) || heartAt(spot.c, spot.r)) continue;
     if (activeFreewarPlayers().some((player) => player.c === spot.c && player.r === spot.r)) continue;
-    const type = buildOrder[index % buildOrder.length];
-    const info = BLOCKS[type];
-    state.blocks.set(spotKey, {
-      type,
-      ownerId: bot.id,
-      hp: info.hp,
-      maxHp: info.hp,
-      shootTimer: type === "arrow" ? 0 : undefined,
-      shotFlash: 0,
-    });
+    const materialIndex = (state.freewar.buildSeed + bot.id * spots.length + index + state.day - 1)
+      % FREEWAR_BOT_BUILD_MATERIALS.length;
+    const type = FREEWAR_BOT_BUILD_MATERIALS[materialIndex];
+    const playersWithOpenExits = activeFreewarPlayers()
+      .filter((player) => freewarPlayerHasOpenExit(player));
+    if (type === "lava") {
+      state.lavaKeys.add(spotKey);
+    } else {
+      const info = BLOCKS[type];
+      state.blocks.set(spotKey, {
+        type,
+        ownerId: bot.id,
+        hp: info.hp,
+        maxHp: info.hp,
+        shootTimer: type === "arrow" ? 0 : undefined,
+        shotFlash: 0,
+      });
+    }
+    if (playersWithOpenExits.some((player) => !freewarPlayerHasOpenExit(player))) {
+      state.lavaKeys.delete(spotKey);
+      state.blocks.delete(spotKey);
+      continue;
+    }
     bot.botBuildIndex = (index + 1) % spots.length;
-    bot.botGoal = { type: "build", c: spot.c, r: spot.r };
+    bot.botGoal = { type: "build", material: type, c: spot.c, r: spot.r };
     return true;
   }
   return false;
@@ -2316,6 +2345,7 @@ function updateFreewar(dt) {
   state.phaseElapsed += dt;
   if (state.phaseElapsed + 1e-6 >= phaseLength()) {
     if (isDay()) startFreewarNight();
+    else if (finishFreewarDrawIfNeeded()) return;
     else startFreewarDay();
   }
 
@@ -3915,10 +3945,20 @@ function drawEndScreen(title, subtitle, buttonLabel = "Starta om") {
 }
 
 function freewarWinnerTitle() {
+  if (state.freewar?.drawWinnerIds?.length === 2) return "Oavgjort – båda vann!";
   const winnerId = state.freewar?.winnerId;
   if (winnerId === 1) return "Du vann Freewar!";
   if (winnerId) return `Bot ${winnerId - 1} vann Freewar!`;
   return "Freewar är slut!";
+}
+
+function freewarWinnerSubtitle() {
+  const drawWinnerIds = state.freewar?.drawWinnerIds || [];
+  if (drawWinnerIds.length === 2) {
+    const labels = drawWinnerIds.map(freewarPlayerLabel);
+    return `${labels[0]} och ${labels[1]} klarade fem dagar.`;
+  }
+  return "Sist kvar vann matchen.";
 }
 
 function render() {
@@ -3936,7 +3976,7 @@ function render() {
     drawEndScreen(`${currentWorld().name} klar!`, "Fler världar kommer senare.");
     drawButtonsFrom(0);
   } else if (state.mode === "freewarWin") {
-    drawEndScreen(freewarWinnerTitle(), "Sist kvar vann matchen.", "Ny match");
+    drawEndScreen(freewarWinnerTitle(), freewarWinnerSubtitle(), "Ny match");
     drawButtonsFrom(0);
   } else {
     drawBackground();
@@ -4507,6 +4547,10 @@ function renderGameToText() {
     freewar: isFreewar() ? {
       botCount: state.freewar.botCount,
       winnerId: state.freewar.winnerId,
+      drawWinnerIds: state.freewar.drawWinnerIds,
+      drawWinnerLabels: state.freewar.drawWinnerIds.map((playerId) => (
+        playerId === 1 ? "human" : `bot ${playerId - 1}`
+      )),
       winnerLabel: state.freewar.winnerId === 1
         ? "human"
         : state.freewar.winnerId

@@ -390,3 +390,28 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   boten slås ut helt. Deterministiskt test gav 50 → 60 → 70 → 80 efter tre
   botdödar, med synligt `+10 pengar`-meddelande och utan konsol- eller sidfel.
   Safari-token är uppdaterad till `20260714-freewar-money-50`.
+- Sten kostar nu 15 pengar även i Freewar. Botarna varierar sina tre säkra
+  försvarsplatser mellan trä, sten, pilblock och lava med en ny slumpad blandning
+  för varje match; svärd och lavablockare används inte som byggmaterial. Lava kan
+  fortfarande bara tas bort med lavablockaren, och spelaren kan använda den på
+  både egen och botbyggd lava. Safari-token är uppdaterad till
+  `20260714-freewar-varied-builds`.
+- Verifierat lokalt: sex 2-botarsstarter använde varje gång alla fyra material
+  och gav tre olika slumpade layouter. Varje botplacering backas nu automatiskt om
+  den skulle stänga en tidigare öppen väg ut ur någon bas. I 2-, 5- och
+  8-botarsmatcher lämnade alla botar baserna och strid uppstod på natten trots
+  lavan. Shoppen drog 15 för sten; raderingsverktyget lämnade botlava kvar medan
+  en lavablockare tog bort den.
+- Freewar har nu en femdygnsregel: när natt 5 tar slut och exakt två deltagare är
+  kvar avslutas matchen oavgjort och båda visas som vinnare. En ensam deltagare
+  vinner fortfarande direkt enligt sist-kvar-regeln, medan tre eller fler kvar
+  fortsätter till dag 6.
+- Freewar-världen är utökad från 15 × 15 till 40 × 45 rutor: exakt åtta gånger
+  större kartyta. Samma diamantform och nio baser finns kvar, men baserna ligger
+  nu mycket längre ifrån varandra. Safari-token är nu
+  `20260714-freewar-varied-builds-draw5-big8`.
+- Den stora kartan är verifierad med 2, 5 och 8 botar: samtliga fyra material
+  byggdes, alla botar lämnade baserna, strid uppstod och fasbyten fortsatte utan
+  lava- eller körfel. Bygg/radera på de nedskalade kartrutorna fungerar på touch.
+  Oavgjort människa+bot och bot+bot, dag 6 med tre kvar samt vanlig ensam vinnare
+  är testade; Survivor-världarna är fortfarande oförändrade 9 × 9.
