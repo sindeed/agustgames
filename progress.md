@@ -539,3 +539,15 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   fot, 12 mot 10 i bil och 13,2 mot 11 i helikopter. Hela Wilder-v3-regressionen
   passerar fortfarande, inklusive roller, galleria, strid, fritagning, fordon,
   tillträdesregler och båda vinstlägena.
+- Wilder-v5: vart och ett av de tio vanliga husens kassaskåp är nu
+  kopplat till människan med samma nummer. Spelar- och bottjuvar registrerar en
+  riktig husstöld, får kassaskåpets 50 pengar och visar vem pengarna stals från.
+  Safari-cachetoken är `20260715-wilder-big-city-v5`.
+- Wilder-v5 sluttestad utan konsol- eller sidfel: en bot-tjuv öppnade dörren,
+  gick från gatan in i Hus 1 och stal 50 från människa-1 efter 8,7 sekunder.
+  Tjuvens pengar ökade 10 → 60, stadens stulna summa 0 → 50 och nio fulla
+  kassaskåp återstod. Spelartjuven klarar samma stöld, medan en vanlig människa
+  stoppas. Den officiella klienten, hela Wilder-v3-regressionen och v4-farttestet
+  passerar fortfarande. En naturlig botsimulering stal dessutom alla 500 pengar
+  från de tio husen, besegrade bossen och nådde tjuvvinsten utan webbläsarfel;
+  båda vinstlägena är kvar.

@@ -87,6 +87,7 @@
     events: [],
     mallReceipt: '',
     boss: { x: PLACES.boss.x, y: PLACES.boss.y, health: 20, maxHealth: 20, defeated: false, cooldown: 0 },
+    lastHouseTheft: null,
     jailCells: [[11.5, 102.5], [15.5, 102.5], [19.5, 102.5], [23.5, 102.5], [27.5, 102.5]]
       .map(([x, y], index) => ({ index, x, y, occupant: null })),
     cameraBob: 0,
@@ -133,7 +134,8 @@
     }
   }
   state.safes = structures.filter(s => s.type === 'house').map((s, i) => ({
-    id: `safe-${i + 1}`, house: i + 1, x: s.x + 3.5, y: s.y + 3.5, code: SAFE_CODES[i], money: 50, opened: false,
+    id: `safe-${i + 1}`, house: i + 1, ownerId: `människa-${i + 1}`,
+    x: s.x + 3.5, y: s.y + 3.5, code: SAFE_CODES[i], money: 50, opened: false,
   }));
   state.vehicles = [
     { id: 'police-car', type: 'car', label: 'polisbil', x: 13.5, y: 112.5, health: 10, maxHealth: 10, owner: 'polis', driverId: null, reservedBy: null, altitude: 0, destroyed: false },
@@ -259,6 +261,24 @@
   function recordEvent(type, details = {}) {
     state.events.push({ time: +state.time.toFixed(2), type, ...details });
     if (state.events.length > 36) state.events.splice(0, state.events.length - 36);
+  }
+
+  function stealHouseSafe(thief, safe) {
+    if (!thief || thief.role !== 'tjuv' || !safe || safe.opened) return null;
+    safe.opened = true;
+    thief.money += safe.money;
+    state.stolen += safe.money;
+    const theft = {
+      time: +state.time.toFixed(2),
+      thief: thief.id,
+      homeowner: safe.ownerId,
+      house: safe.house,
+      money: safe.money,
+    };
+    state.lastHouseTheft = theft;
+    recordEvent('safe-opened', theft);
+    checkWin();
+    return theft;
   }
 
   function chooseRole(role) {
@@ -1232,9 +1252,8 @@
       }
       if (mission.type === 'note' && close < .8) { b.inventory.codes = true; state.thiefCodesKnown = true; b.pathTimer = 0; }
       if (mission.type === 'safe' && close < .75 && !mission.target.opened) {
-        mission.target.opened = true; b.money += 50; state.stolen += 50; b.pathTimer = 0;
-        recordEvent('safe-opened', { thief: b.id, house: mission.target.house, money: 50 });
-        showMessage(`${b.id} öppnade kassaskåpet i Hus ${mission.target.house}!`, 2.2); checkWin();
+        const theft = stealHouseSafe(b, mission.target); b.pathTimer = 0;
+        if (theft) showMessage(`${b.id} stal ${theft.money} pengar från människan i Hus ${theft.house}!`, 3);
       }
       if (mission.type === 'key' && close < .75 && (!state.jailKeyHolder || state.jailKeyHolder === b.id)) {
         b.inventory.jailKey = true; state.jailKeyHolder = b.id; b.pathTimer = 0;
@@ -1381,8 +1400,9 @@
     if (safe) {
       if (p.role !== 'tjuv') { showMessage('Bara tjuvarna kan öppna kassaskåp'); return; }
       if (!p.inventory.codes) { showMessage('Du behöver kodlappen från polishuset'); return; }
-      safe.opened = true; p.money += safe.money; state.stolen += safe.money;
-      showMessage(`Kod ${safe.code}! Du stal 50 pengar från Hus ${safe.house}`, 4); checkWin(); return;
+      const theft = stealHouseSafe(p, safe);
+      if (theft) showMessage(`Kod ${safe.code}! Du stal ${theft.money} pengar från människan i Hus ${theft.house}`, 4);
+      return;
     }
     if (Math.hypot(p.x - PLACES.codeNote.x, p.y - PLACES.codeNote.y) < 1.45) {
       p.inventory.codes = true; state.thiefCodesKnown ||= p.role === 'tjuv'; state.codesOpen = true; return;
@@ -1587,7 +1607,7 @@
       codesOpen: state.codesOpen,
       thiefCodesKnown: state.thiefCodesKnown,
       jailKeyHolder: state.jailKeyHolder,
-      unopenedSafes: state.safes.filter(s => !s.opened).map(s => ({ house: s.house, x: s.x, y: s.y, money: s.money })),
+      unopenedSafes: state.safes.filter(s => !s.opened).map(s => ({ house: s.house, homeowner: s.ownerId, x: s.x, y: s.y, money: s.money })),
       jailCells: state.jailCells.map(cell => ({ number: cell.index + 1, occupant: cell.occupant, x: cell.x, y: cell.y })),
       vehicles: state.vehicles.map(v => ({
         id: v.id, type: v.type, x: +v.x.toFixed(1), y: +v.y.toFixed(1), altitude: +(v.altitude || 0).toFixed(1),
@@ -1598,6 +1618,7 @@
     accessRules: { allRolesCanEnterOrdinaryHouses: true, policeCanEnterHideout: false, thievesCanEnterPoliceStation: true },
     combatRules: { handDamage: HAND_DAMAGE, batonDamage: BATON_DAMAGE, faceOffDelay: FACE_OFF_DELAY, policeAttackSeconds: ATTACK_INTERVAL.polis, thiefAttackSeconds: ATTACK_INTERVAL.tjuv },
     movementRules: { policeBot: BOT_MOVE_SPEED.polis, thiefBot: BOT_MOVE_SPEED.tjuv, thiefSpeedMultiplier: 1.2 },
+    lastHouseTheft: state.lastHouseTheft,
     lastCapture: state.lastCapture,
     lastRescue: state.lastRescue,
     recentEvents: state.events.slice(-12),
@@ -1612,7 +1633,7 @@
   };
   window.__wilderTest = {
     state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, chooseBotGoal, prepareBotTravel,
-    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES,
+    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, stealHouseSafe, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES,
   };
   window.__wilderFallback = window.__wilderTest;
 
