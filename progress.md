@@ -474,3 +474,36 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   de 20 personerna ännu. En riktig knappsats för att själv skriva in varje
   kassaskåpskod kan vara nästa spelmekanik; v1 öppnar skåpet automatiskt efter
   att tjuven har läst kodlappen.
+- Ny Wilder-beställning: gallerian ska öppnas när spelaren går in, gripande polis
+  ska få exakt 10 pengar, både spelaren och bot-tjuvar ska kunna gripas/fritas,
+  poliser får inte gå in i tjuvhuset, och staden/husen ska bli mycket större och
+  verkligare.
+- Pågående storstadsuppdatering: kartan är nu 152 × 120 = 18 240 rutor, exakt
+  tio gånger den gamla kartytan. De tio vanliga husen är 15 × 12 = 180 rutor,
+  exakt fem gånger den gamla husytan. Polishus och tjuvhus är 27 × 20 (exakt 5×)
+  och gallerian 27 × 18 (cirka 5×). Alla 13 byggnader finns kvar.
+- Nya regler inlagda: gallerian öppnas automatiskt en gång per inträde, bara den
+  gripande polisen får +10, poliser blockeras från tjuvhuset även genom öppen
+  dörr, och tjuvbotar måste fysiskt hämta nyckeln och nå cellerna för att frita
+  en eller flera kamrater. Den gamla magiska 12-sekundersfritagningen är borttagen.
+- Första verklighetspasset inlagt: världsankrade vägar, vägmarkeringar,
+  övergångsställen, trottoarer och gräs; sol, moln, skyline och dimma; högre
+  fönsterfasader; lokal radar; två rum och möbler i villorna; träd, lampor,
+  bänkar, brandposter samt förstapersonshänder/fordonsinstrument. Gallerian har
+  en ny illustrerad butiksskärm. Syntaxkontroll och diffkontroll passerar;
+  fullständig webbläsarprovning återstår.
+- Sluttest för Wilder storstadsv2 godkänt i Chromium och iPad-landskap utan
+  konsol- eller sidfel. Verifierat: 152 × 120 rutor (exakt 10×), alla tio
+  15 × 12-hus (exakt 5×), 13 byggnader, 20 personer/19 botar och exakta
+  rollantal; galleria vid inträde/återinträde; rollpriser; alla rollers väg in i
+  alla vanliga hus; tjuvens väg in i polishuset; polis- och botpolisblockering
+  vid tjuvhuset även genom öppen dörr; helikopter kan inte landa där.
+- Gripande är testat åt alla håll: spelarpolis och annan botpolis får bara sin
+  egen +10-belöning, spelartjuven kan gripas, och fem gripanden ger polisvinst.
+  Botfritagningen hämtar nyckeln och når cellerna före fritagning; den gamla
+  fjärrfritagningen sker inte, och spelartjuven kan frita flera vänner samtidigt.
+- Naturliga botsimuleringar godkända på den stora kartan: aktiva poliser når
+  polisvinst med fem fångade tjuvar; med poliser utslagna köper tjuvarna klubbor,
+  öppnar alla tio kassaskåp för 500, besegrar 20-livsbossen och vinner. Den
+  optimerade vägberäkningen simulerade 120 sekunder på cirka 0,5 sekunder i
+  testmiljön. Safari-cachetoken är `20260715-wilder-big-city-v2`.
