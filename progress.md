@@ -530,3 +530,12 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   botmatch gav polisvinst; med poliser utslagna stal tjuvarna 500, använde båda
   fordonstyperna och besegrade bossen. Safari-cachetoken är
   `20260715-wilder-big-city-v3`.
+- Wilder-v4: tjuvbotarnas grundfart är nu exakt 20 % högre än polisbotarnas på
+  fot, i bil och i helikopter. Fartregeln gäller alla tjuvuppdrag, även flykt,
+  fritagning, shopping, kassaskåp och bosskamp. Safari-cachetoken är
+  `20260715-wilder-big-city-v4`.
+- Wilder-v4 sluttestad med den officiella Playwright-klienten utan konsol- eller
+  sidfel. I två sekunders kapplöpningar hann tjuven 3 mot polisens 2,5 rutor på
+  fot, 12 mot 10 i bil och 13,2 mot 11 i helikopter. Hela Wilder-v3-regressionen
+  passerar fortfarande, inklusive roller, galleria, strid, fritagning, fordon,
+  tillträdesregler och båda vinstlägena.

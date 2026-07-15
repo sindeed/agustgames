@@ -20,6 +20,11 @@
   const BATON_DAMAGE = 1;
   const FACE_OFF_DELAY = 1;
   const ATTACK_INTERVAL = Object.freeze({ polis: 1, tjuv: 0.5, människa: 0.75 });
+  const BOT_MOVE_SPEED = Object.freeze({
+    polis: Object.freeze({ foot: 1.25, car: 5, helicopter: 5.5 }),
+    tjuv: Object.freeze({ foot: 1.5, car: 6, helicopter: 6.6 }),
+    människa: Object.freeze({ foot: 0.72, car: 4.7, helicopter: 5.6 }),
+  });
   const ITEM_PRICE = Object.freeze({ baton: 10, car: 20, helicopter: 30 });
   const map = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(0));
   const doors = new Map();
@@ -41,6 +46,7 @@
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
   const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const botMoveSpeed = (bot, movement = 'foot') => BOT_MOVE_SPEED[bot.role]?.[movement] ?? BOT_MOVE_SPEED.människa[movement];
   const SAFE_CODES = ['2413', '8052', '7316', '4290', '1538', '6742', '3905', '8174', '5621', '9463'];
   const PLACES = {
     police: { x: 8, y: 86, w: 27, h: 20, doorX: 21 },
@@ -1122,7 +1128,7 @@
         if (!vehicle.reservedBy) vehicle.reservedBy = bot.id;
         if (vehicle.reservedBy === bot.id) {
           bot.pendingVehicleId = vehicle.id;
-          return { type: 'enter-vehicle', target: vehicle, x: vehicle.x, y: vehicle.y, speed: 1.35, transportOnly: true };
+          return { type: 'enter-vehicle', target: vehicle, x: vehicle.x, y: vehicle.y, speed: botMoveSpeed(bot), transportOnly: true };
         }
       }
       return mission;
@@ -1133,7 +1139,7 @@
       type: bot.vehicle === 'car' ? `drive-${mission.type}` : `fly-${mission.type}`,
       x: destination.x,
       y: destination.y,
-      speed: bot.vehicle === 'car' ? (bot.role === 'polis' ? 5.15 : 4.7) : (bot.role === 'polis' ? 5.85 : 5.6),
+      speed: botMoveSpeed(bot, bot.vehicle === 'car' ? 'car' : 'helicopter'),
       transportOnly: true,
       mission,
       moving: mission.type === 'chase' || mission.type === 'fight',
@@ -1174,24 +1180,24 @@
           target: thief,
           x: waitsOutsideHideout ? hideout.door.x + .5 : thief.x,
           y: waitsOutsideHideout ? hideout.door.y + 1.7 : thief.y,
-          speed: 1.35,
+          speed: botMoveSpeed(b),
         };
       }
     }
     if (b.role === 'tjuv') {
       if (state.jailedThieves > 0) {
-        if (b.inventory.jailKey) return { type: 'release', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: 1.3 };
-        if (!state.jailKeyHolder || state.jailKeyHolder === b.id) return { type: 'key', x: PLACES.jailKey.x, y: PLACES.jailKey.y, speed: 1.3 };
-        return { type: 'rescue-support', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: 1.28 };
+        if (b.inventory.jailKey) return { type: 'release', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: botMoveSpeed(b) };
+        if (!state.jailKeyHolder || state.jailKeyHolder === b.id) return { type: 'key', x: PLACES.jailKey.x, y: PLACES.jailKey.y, speed: botMoveSpeed(b) };
+        return { type: 'rescue-support', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: botMoveSpeed(b) };
       }
       const nearbyPolice = nearestActive('polis', b, 2.4);
-      if (nearbyPolice) return { type: 'fight', target: nearbyPolice, x: nearbyPolice.x, y: nearbyPolice.y, speed: 1.2 };
+      if (nearbyPolice) return { type: 'fight', target: nearbyPolice, x: nearbyPolice.x, y: nearbyPolice.y, speed: botMoveSpeed(b) };
       const shoppingItem = botShoppingItem(b);
-      if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: 1.05 };
-      if (!state.thiefCodesKnown) return { type: 'note', x: PLACES.codeNote.x, y: PLACES.codeNote.y, speed: 1.12 };
+      if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: botMoveSpeed(b) };
+      if (!state.thiefCodesKnown) return { type: 'note', x: PLACES.codeNote.x, y: PLACES.codeNote.y, speed: botMoveSpeed(b) };
       const safe = state.safes.filter(item => !item.opened).sort((a, c) => distance(b, a) - distance(b, c))[0];
-      if (safe) return { type: 'safe', target: safe, x: safe.x, y: safe.y, speed: 1.12 };
-      if (!state.boss.defeated) return { type: 'boss', target: state.boss, x: state.boss.x, y: state.boss.y, speed: 1.25 };
+      if (safe) return { type: 'safe', target: safe, x: safe.x, y: safe.y, speed: botMoveSpeed(b) };
+      if (!state.boss.defeated) return { type: 'boss', target: state.boss, x: state.boss.x, y: state.boss.y, speed: botMoveSpeed(b) };
     }
     if (b.role === 'människa') {
       const attacker = b.lastDamage && state.time - b.lastDamage.time < 8 ? personById(b.lastDamage.attacker) : null;
@@ -1202,7 +1208,7 @@
       if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: 1.05 };
     }
     if (!b.wanderTarget || distance(b, b.wanderTarget) < .6) b.wanderTarget = randomFreeTarget(b);
-    return { type: 'wander', x: b.wanderTarget.x, y: b.wanderTarget.y, speed: .72 };
+    return { type: 'wander', x: b.wanderTarget.x, y: b.wanderTarget.y, speed: botMoveSpeed(b) };
   }
 
   function updateBots(dt) {
@@ -1591,6 +1597,7 @@
     policeTeam: [state.player, ...state.bots].filter(person => person?.role === 'polis').map(person => ({ id: person.id, money: person.money, captures: person.captures || 0 })),
     accessRules: { allRolesCanEnterOrdinaryHouses: true, policeCanEnterHideout: false, thievesCanEnterPoliceStation: true },
     combatRules: { handDamage: HAND_DAMAGE, batonDamage: BATON_DAMAGE, faceOffDelay: FACE_OFF_DELAY, policeAttackSeconds: ATTACK_INTERVAL.polis, thiefAttackSeconds: ATTACK_INTERVAL.tjuv },
+    movementRules: { policeBot: BOT_MOVE_SPEED.polis, thiefBot: BOT_MOVE_SPEED.tjuv, thiefSpeedMultiplier: 1.2 },
     lastCapture: state.lastCapture,
     lastRescue: state.lastRescue,
     recentEvents: state.events.slice(-12),
@@ -1605,7 +1612,7 @@
   };
   window.__wilderTest = {
     state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, chooseBotGoal, prepareBotTravel,
-    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, render, doors, structures, places: PLACES,
+    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES,
   };
   window.__wilderFallback = window.__wilderTest;
 
