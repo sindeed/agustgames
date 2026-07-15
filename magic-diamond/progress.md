@@ -14,6 +14,7 @@ Additional requests:
 - The castle contains a magic-opened secret feast room.
 - A live minimap and full M-key map show the player's current position.
 - The adventure is viewed and controlled from first person.
+- On touch screens, dragging across the game view turns the first-person camera.
 
 ## Work log
 
@@ -25,8 +26,10 @@ Additional requests:
 - 2026-07-15: Rebuilt exploration as a first-person view with perspective terrain, walls, depth-clipped characters and items, mouse/keyboard/touch look controls, visible hands and weapons, riding ears/reins, a swimming waterline, and camera-relative objectives.
 - 2026-07-15: Tuned close-up character, monster, crystal, pickup, and particle scaling after screenshot review; the first official first-person Playwright smoke test opened Aster's dialogue with matching text state and no browser errors.
 - 2026-07-15: Passed 40 first-person browser regression checks plus an isolated pointer-lock branch check: movement/look/strafe, pause and focused controls, mouse attacks and magic, Aster dialogue, combat, horses, swimming, tornado, castle secret room, maps, desktop/mobile layouts, and the complete quest through the victory screen. All reviewed screenshots were clear and no browser errors were reported.
+- 2026-07-15: Added direct canvas drag/swipe-to-look with normalized touch sensitivity, multi-touch compatibility, pointer capture/cancellation, mouse-drag fallback, and synthetic-click protection. Touch players now receive a short swipe instruction when the adventure starts.
+- 2026-07-15: Passed the official browser smoke test and 26 real CDP touch/control checks covering swipe direction and sensitivity, taps/dead zone, vertical gestures, scrolling, map/dialog/pause cancellation, two-finger move-and-look, touch-button isolation, mouse-drag fallback, pointer-lock click safety, temporary hints, and desktop/mobile layouts. Reviewed all new screenshots; no browser errors occurred.
 
 ## TODO
 
-- First-person version complete and ready to publish.
+- Swipe-to-look version complete and ready to publish.
 - Future polish ideas: more quests, more monster types, music, and save slots.

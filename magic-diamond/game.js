@@ -53,6 +53,20 @@
   var audioContext = null;
   var selectedCharacter = "girl";
   var prefersReducedMotion = Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  var touchInputAvailable = Boolean(
+    (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || navigator.maxTouchPoints > 0
+  );
+  var screenLook = {
+    pointerId: null,
+    pointerType: "",
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    pendingDx: 0,
+    moved: false
+  };
+  var suppressMouseClickUntil = 0;
+  var lastNonMousePointerAt = -Infinity;
 
   function clamp(value, low, high) {
     return Math.max(low, Math.min(high, value));
@@ -491,6 +505,7 @@
   function setMode(mode) {
     state.mode = mode;
     if (mode !== "playing") {
+      cancelScreenLook();
       state.mapOpen = false;
       mapButton.textContent = "🗺️";
       mapButton.setAttribute("aria-label", "Open world map");
@@ -509,7 +524,9 @@
     mapButton.setAttribute("aria-label", "Open world map");
     syncCamera();
     setMode("playing");
-    showToast("FIRST PERSON • Click to look • W/S walk • E talks", 4.2);
+    showToast(touchInputAvailable ?
+      "FIRST PERSON • SWIPE ↔ TO LOOK • ▲/▼ WALK • ✋ USE" :
+      "FIRST PERSON • Click to look • W/S walk • E talks", 4.2);
     unlockAudio();
     playTone(392, 0.12, "sine", 0.05);
     canvas.focus();
@@ -530,7 +547,10 @@
   function toggleWorldMap() {
     if (state.mode !== "playing" || state.dialog) return;
     state.mapOpen = !state.mapOpen;
-    if (state.mapOpen) releasePointerLock();
+    if (state.mapOpen) {
+      cancelScreenLook();
+      releasePointerLock();
+    }
     document.body.classList.toggle("map-open", state.mapOpen);
     keys.clear();
     mapButton.textContent = state.mapOpen ? "✕" : "🗺️";
@@ -681,6 +701,7 @@
   }
 
   function openDialog(speaker, pages, onClose) {
+    cancelScreenLook();
     state.dialog = {
       speaker: speaker,
       pages: pages,
@@ -4300,6 +4321,43 @@
     }
   }
 
+  function canScreenLook() {
+    return state && state.mode === "playing" && !state.dialog && !state.mapOpen;
+  }
+
+  function clearScreenLook(releaseCapture) {
+    var pointerId = screenLook.pointerId;
+    screenLook.pointerId = null;
+    screenLook.pointerType = "";
+    screenLook.pendingDx = 0;
+    screenLook.moved = false;
+    if (releaseCapture && pointerId !== null && canvas.hasPointerCapture && canvas.releasePointerCapture &&
+        canvas.hasPointerCapture(pointerId)) {
+      canvas.releasePointerCapture(pointerId);
+    }
+  }
+
+  function cancelScreenLook() {
+    if (screenLook.pointerId === null) return;
+    if (screenLook.pointerType === "mouse" && screenLook.moved) {
+      suppressMouseClickUntil = performance.now() + 350;
+    } else if (screenLook.pointerType !== "mouse") {
+      lastNonMousePointerAt = performance.now();
+    }
+    clearScreenLook(true);
+  }
+
+  function finishScreenLook(event) {
+    if (event.pointerId !== screenLook.pointerId) return;
+    if (screenLook.pointerType === "mouse") {
+      if (screenLook.moved) suppressMouseClickUntil = performance.now() + 350;
+    } else {
+      lastNonMousePointerAt = performance.now();
+      event.preventDefault();
+    }
+    clearScreenLook(false);
+  }
+
   function releasePointerLock() {
     if (document.pointerLockElement === canvas && document.exitPointerLock) {
       document.exitPointerLock();
@@ -4452,16 +4510,59 @@
   });
   canvas.addEventListener("pointerdown", function (event) {
     canvas.focus();
-    if (event.pointerType !== "mouse" || state.mode !== "playing" || state.dialog || state.mapOpen) return;
-    if (document.pointerLockElement === canvas) {
+    if (event.pointerType === "mouse" && document.pointerLockElement === canvas) {
+      if (!canScreenLook()) return;
       event.preventDefault();
       if (event.button === 0) useSelectedWeapon();
       if (event.button === 2) castMagic();
       return;
     }
+    if (!canScreenLook() || screenLook.pointerId !== null) return;
+    var pointerType = event.pointerType || "mouse";
+    if (pointerType !== "touch" && event.button !== 0) return;
+    screenLook.pointerId = event.pointerId;
+    screenLook.pointerType = pointerType;
+    screenLook.startX = event.clientX;
+    screenLook.startY = event.clientY;
+    screenLook.lastX = event.clientX;
+    screenLook.pendingDx = 0;
+    screenLook.moved = false;
+    if (pointerType !== "mouse") {
+      lastNonMousePointerAt = performance.now();
+      event.preventDefault();
+    }
+    if (canvas.setPointerCapture) canvas.setPointerCapture(event.pointerId);
+  }, { passive: false });
+  canvas.addEventListener("pointermove", function (event) {
+    if (event.pointerId !== screenLook.pointerId) return;
+    if (!canScreenLook() || document.pointerLockElement === canvas) {
+      cancelScreenLook();
+      return;
+    }
+    if (screenLook.pointerType !== "mouse") event.preventDefault();
+    screenLook.pendingDx += event.clientX - screenLook.lastX;
+    screenLook.lastX = event.clientX;
+    var distance = Math.hypot(event.clientX - screenLook.startX, event.clientY - screenLook.startY);
+    if (!screenLook.moved && distance < 5) return;
+    screenLook.moved = true;
+    var canvasWidth = Math.max(1, canvas.getBoundingClientRect().width);
+    var turnPerWidth = screenLook.pointerType === "mouse" ? Math.PI * 0.75 : Math.PI * 1.05;
+    setPlayerViewAngle(state.player.viewAngle + screenLook.pendingDx / canvasWidth * turnPerWidth);
+    screenLook.pendingDx = 0;
+  }, { passive: false });
+  canvas.addEventListener("pointerup", finishScreenLook, { passive: false });
+  canvas.addEventListener("pointercancel", finishScreenLook, { passive: false });
+  canvas.addEventListener("lostpointercapture", function (event) {
+    if (event.pointerId === screenLook.pointerId) clearScreenLook(false);
   });
   canvas.addEventListener("click", function (event) {
-    if (event.pointerType && event.pointerType !== "mouse") return;
+    var fromTouch = event.sourceCapabilities && event.sourceCapabilities.firesTouchEvents;
+    if (performance.now() < suppressMouseClickUntil || fromTouch ||
+        (event.pointerType && event.pointerType !== "mouse") ||
+        (!event.pointerType && performance.now() - lastNonMousePointerAt < 700)) {
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0 || state.mode !== "playing" || state.dialog || state.mapOpen) return;
     if (document.pointerLockElement !== canvas && canvas.requestPointerLock) {
       var lockRequest = canvas.requestPointerLock();
@@ -4475,21 +4576,30 @@
     if (document.pointerLockElement !== canvas || state.mode !== "playing" || state.mapOpen || state.dialog) return;
     setPlayerViewAngle(state.player.viewAngle + event.movementX * 0.00235);
   });
-  document.addEventListener("pointerlockchange", render);
+  document.addEventListener("pointerlockchange", function () {
+    cancelScreenLook();
+    render();
+  });
   document.addEventListener("pointerlockerror", function () {
     if (state.mode === "playing") showToast("Mouse look unavailable — use ← → to turn.", 2.2);
   });
   window.addEventListener("keydown", handleKeyDown, { passive: false });
   window.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("blur", function () { keys.clear(); });
+  window.addEventListener("blur", function () {
+    keys.clear();
+    cancelScreenLook();
+  });
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) keys.clear();
+    if (document.hidden) {
+      keys.clear();
+      cancelScreenLook();
+    }
   });
   document.addEventListener("fullscreenchange", function () {
     fullscreenButton.textContent = document.fullscreenElement ? "↙" : "⛶";
   });
 
-  if (window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0) {
+  if (touchInputAvailable) {
     document.body.classList.add("touch");
   }
 
@@ -4525,7 +4635,12 @@
         mode: "first-person",
         yawDegrees: Math.round(state.player.viewAngle * 180 / Math.PI),
         fieldOfViewDegrees: 70,
-        pointerLocked: document.pointerLockElement === canvas
+        pointerLocked: document.pointerLockElement === canvas,
+        dragToLook: true,
+        lookDragActive: screenLook.pointerId !== null,
+        lookPointerType: screenLook.pointerType || null,
+        lookInputMode: document.pointerLockElement === canvas ? "pointer-lock" :
+          (screenLook.pointerId !== null ? "canvas-drag" : "keys")
       },
       quest: {
         stage: state.questStage,
