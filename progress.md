@@ -551,3 +551,18 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   passerar fortfarande. En naturlig botsimulering stal dessutom alla 500 pengar
   från de tio husen, besegrade bossen och nådde tjuvvinsten utan webbläsarfel;
   båda vinstlägena är kvar.
+- Ny Wilder-beställning: människorna ska arbeta med att vakta sina kassaskåp.
+  Spelaren är alltid Människa 1 med Hus 1 som hem och ska få en knapp som
+  teleporterar hem när spelaren är borta.
+- Wilder-v6: Människa 1 startar inne i Hus 1 och får en 🏠 Hem-knapp
+  (samt H på tangentbord) som bara visas borta från hemmet. Människa 2–10 är
+  kopplade till Hus 2–10; botarna köper fortfarande bil men återvänder sedan till
+  sitt kassaskåp och slåss mot en aktiv tjuv inne i det egna huset. Safari-token
+  är `20260715-wilder-big-city-v6`.
+- Wilder-v6 sluttestad med den officiella spelklienten utan konsol- eller sidfel.
+  Hem-knappen är dold hemma och för andra roller, syns ute i staden, landar säkert
+  i Hus 1, stänger gallerian, lämnar bilen kvar och blockeras under svimning.
+  Alla tio husmappningar är verifierade. En vakt prioriterar en riktig inkräktare,
+  väntar en sekund, gör 0,5 skada per handslag och svimmar tjuven utan fängelse.
+  Husstöld-, fart-, fordons-, fritagnings- och båda vinsttesterna passerar; med
+  poliserna utslagna stal botarna fortfarande 500 och nådde tjuvvinsten.

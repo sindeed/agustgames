@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Wilder: The Big City">
   <meta name="theme-color" content="#101820">
   <title>Wilder: The Big City</title>
-  <link rel="stylesheet" href="style.css?v=20260715-wilder-big-city-v5">
+  <link rel="stylesheet" href="style.css?v=20260715-wilder-big-city-v6">
 </head>
 <body>
   <main class="game-shell" aria-label="Wilder: The Big City">
@@ -49,6 +49,8 @@
               <li><strong>Botar:</strong> de handlar själva, kör bilar, flyger helikopter och väntar en sekund före ett slagsmål.</li>
               <li><strong>Tjuvbotar:</strong> springer, kör och flyger 20 % snabbare än polisbotarna.</li>
               <li><strong>Husstölder:</strong> tjuvbotarna går in i människornas hus och stjäl 50 pengar ur varje kassaskåp.</li>
+              <li><strong>Människor:</strong> varje människobot vaktar kassaskåpet i sitt eget hus och försöker stoppa tjuvar.</li>
+              <li><strong>Ditt hem:</strong> spelar du som Människa 1 är Hus 1 ditt. Tryck på 🏠 Hem eller H för att teleportera hem när du är borta.</li>
               <li><strong>Räddning:</strong> när en tjuv fångas försöker alla fria tjuvar hjälpa till direkt.</li>
             </ul>
             <p class="keyboard-help">Med tangentbord: WASD, piltangenter, E och mellanslag.</p>
@@ -56,6 +58,10 @@
         </details>
 
         <div class="utility-buttons">
+          <button id="home-btn" class="utility-button" type="button" aria-label="Teleportera hem till Hus 1" hidden>
+            <span aria-hidden="true">🏠</span>
+            <span class="utility-label">Hem</span>
+          </button>
           <button id="sound-btn" class="utility-button" type="button" aria-label="Slå av eller på ljudet">
             <span aria-hidden="true">🔊</span>
             <span class="utility-label">Ljud</span>
@@ -125,6 +131,6 @@
     </section>
   </main>
 
-  <script src="game.js?v=20260715-wilder-big-city-v5"></script>
+  <script src="game.js?v=20260715-wilder-big-city-v6"></script>
 </body>
 </html>

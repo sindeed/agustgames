@@ -234,6 +234,10 @@ button {
   cursor: pointer;
 }
 
+.utility-button[hidden] {
+  display: none;
+}
+
 .utility-button span:first-child {
   font-size: 18px;
 }

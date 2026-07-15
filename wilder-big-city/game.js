@@ -4,6 +4,7 @@
 
   const canvas = document.getElementById('game');
   if (!canvas) return;
+  const homeButton = document.getElementById('home-btn');
   const gameFrame = canvas.closest('.game-frame') || canvas;
   const ctx = canvas.getContext('2d', { alpha: false });
   const TAU = Math.PI * 2;
@@ -61,6 +62,7 @@
     policeSpawn: { x: 21.5, y: 112.5 },
     thiefSpawn: { x: 130.5, y: 112.5 },
   };
+  const PLAYER_HOME = Object.freeze({ house: 1, id: 'house-1', x: 10.5, y: 8.5, angle: Math.PI });
   const HORIZONTAL_ROADS = [{ center: 27, half: 6 }, { center: 72, half: 7 }, { center: 112, half: 6 }];
   const VERTICAL_ROADS = [{ center: 27, half: 5 }, { center: 56, half: 5 }, { center: 85, half: 5 }, { center: 114, half: 5 }];
 
@@ -88,6 +90,7 @@
     mallReceipt: '',
     boss: { x: PLACES.boss.x, y: PLACES.boss.y, health: 20, maxHealth: 20, defeated: false, cooldown: 0 },
     lastHouseTheft: null,
+    lastHomeTeleport: null,
     jailCells: [[11.5, 102.5], [15.5, 102.5], [19.5, 102.5], [23.5, 102.5], [27.5, 102.5]]
       .map(([x, y], index) => ({ index, x, y, occupant: null })),
     cameraBob: 0,
@@ -285,7 +288,7 @@
     const starts = {
       polis: { x: PLACES.policeSpawn.x, y: PLACES.policeSpawn.y, angle: 0, money: 10, baton: true, car: true, helicopter: true },
       tjuv: { x: PLACES.thiefSpawn.x, y: PLACES.thiefSpawn.y, angle: Math.PI, money: 10, baton: false, car: false, helicopter: false },
-      människa: { x: 76.5, y: 64.5, angle: -Math.PI / 2, money: 20, baton: false, car: false, helicopter: false },
+      människa: { x: PLAYER_HOME.x, y: PLAYER_HOME.y, angle: PLAYER_HOME.angle, money: 20, baton: false, car: false, helicopter: false },
     };
     const s = starts[role];
     state.player = {
@@ -298,7 +301,7 @@
     state.mode = 'playing';
     state.messageUntil = 0;
     makeBots(role);
-    showMessage(role === 'polis' ? 'Du är polis: fånga alla fem tjuvar!' : role === 'tjuv' ? 'Du är tjuv: hitta koderna och stjäl 500 pengar!' : 'Du bor i Wilder. Utforska den stora staden!', 5);
+    showMessage(role === 'polis' ? 'Du är polis: fånga alla fem tjuvar!' : role === 'tjuv' ? 'Du är tjuv: hitta koderna och stjäl 500 pengar!' : 'Du är Människa 1. Hus 1 är ditt hem och du vaktar kassaskåpet!', 6);
     canvas.focus();
   }
 
@@ -309,7 +312,7 @@
     const spawns = {
       polis: [[21, 112], [12, 112], [16, 112], [27, 112], [32, 112]],
       tjuv: [[130, 112], [120, 112], [125, 112], [135, 112], [140, 112]],
-      människa: [[76, 64], [13, 25], [42, 25], [71, 25], [100, 25], [129, 25], [13, 65], [42, 65], [100, 65], [129, 65]],
+      människa: [[12, 25], [41, 25], [70, 25], [99, 25], [128, 25], [12, 65], [41, 65], [70, 65], [99, 65], [128, 65]],
     };
     Object.entries(totals).forEach(([role, count]) => {
       const roleSpawns = playerRole === role ? spawns[role].slice(1) : spawns[role];
@@ -391,7 +394,7 @@
     const roles = [
       { role: 'polis', title: 'POLIS', count: '3 poliser', color: '#2f79d3', key: '1', note: 'Bil, helikopter och klubba' },
       { role: 'tjuv', title: 'TJUV', count: '5 tjuvar', color: '#a73c47', key: '2', note: 'Stjäl 500 pengar' },
-      { role: 'människa', title: 'MÄNNISKA', count: '10 människor', color: '#36966a', key: '3', note: 'Lev och utforska staden' },
+      { role: 'människa', title: 'MÄNNISKA', count: '10 människor', color: '#36966a', key: '3', note: 'Hus 1 blir ditt hem' },
     ];
     state.roleButtons = [];
     roles.forEach((r, i) => {
@@ -993,6 +996,20 @@
     return state.bots.find(person => person.id === id) || null;
   }
 
+  function homeSafeFor(person) {
+    if (!person || person.role !== 'människa') return null;
+    return state.safes.find(safe => safe.ownerId === person.id) || null;
+  }
+
+  function activeThiefInHome(homeowner, safe = homeSafeFor(homeowner)) {
+    if (!safe) return null;
+    const homeId = `house-${safe.house}`;
+    return [state.player, ...state.bots]
+      .filter(person => person && person.role === 'tjuv' && !person.jailed && person.unconsciousUntil <= state.time
+        && !person.vehicleId && (person.altitude || 0) <= .6 && currentBuildingAt(person.x, person.y)?.id === homeId)
+      .sort((a, b) => distance(homeowner, a) - distance(homeowner, b))[0] || null;
+  }
+
   function resetBotFaceOff(bot) {
     bot.combatTargetId = null;
     bot.faceOffStartedAt = null;
@@ -1220,12 +1237,16 @@
       if (!state.boss.defeated) return { type: 'boss', target: state.boss, x: state.boss.x, y: state.boss.y, speed: botMoveSpeed(b) };
     }
     if (b.role === 'människa') {
+      const homeSafe = homeSafeFor(b);
+      const intruder = activeThiefInHome(b, homeSafe);
+      if (intruder) return { type: 'fight', target: intruder, x: intruder.x, y: intruder.y, speed: 1.08, guardingHouse: homeSafe.house };
       const attacker = b.lastDamage && state.time - b.lastDamage.time < 8 ? personById(b.lastDamage.attacker) : null;
       if (attacker && !attacker.jailed && attacker.unconsciousUntil <= state.time && distance(b, attacker) < 6) {
         return { type: 'fight', target: attacker, x: attacker.x, y: attacker.y, speed: 1.08 };
       }
       const shoppingItem = botShoppingItem(b);
       if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: 1.05 };
+      if (homeSafe) return { type: 'guard-safe', target: homeSafe, x: homeSafe.x + .85, y: homeSafe.y, speed: botMoveSpeed(b), guardingHouse: homeSafe.house };
     }
     if (!b.wanderTarget || distance(b, b.wanderTarget) < .6) b.wanderTarget = randomFreeTarget(b);
     return { type: 'wander', x: b.wanderTarget.x, y: b.wanderTarget.y, speed: botMoveSpeed(b) };
@@ -1355,8 +1376,47 @@
     if (state.mode !== oldMode) playTone(740, .45, 'triangle');
   }
 
+  function homeTeleportAvailable() {
+    const p = state.player;
+    return state.mode === 'playing' && p?.role === 'människa' && !p.jailed && p.unconsciousUntil <= state.time
+      && currentBuildingAt(p.x, p.y)?.id !== PLAYER_HOME.id;
+  }
+
+  function syncHomeButton() {
+    if (!homeButton) return;
+    const available = homeTeleportAvailable();
+    homeButton.hidden = !available;
+    homeButton.disabled = !available;
+  }
+
+  function teleportPlayerHome() {
+    const p = state.player;
+    if (!p || p.role !== 'människa' || state.mode !== 'playing') return false;
+    if (p.jailed || p.unconsciousUntil > state.time) return false;
+    if (currentBuildingAt(p.x, p.y)?.id === PLAYER_HOME.id) {
+      showMessage('Du är redan hemma i Hus 1!', 2);
+      return false;
+    }
+    state.shopOpen = false;
+    state.codesOpen = false;
+    const parkedVehicle = p.vehicleId ? exitVehicle(p, 'home-teleport') : null;
+    p.x = PLAYER_HOME.x;
+    p.y = PLAYER_HOME.y;
+    p.angle = PLAYER_HOME.angle;
+    p.pitch = 0;
+    p.altitude = 0;
+    state.cameraBob = 0;
+    state.lastBuildingId = PLAYER_HOME.id;
+    state.lastHomeTeleport = { time: +state.time.toFixed(2), person: p.id, house: PLAYER_HOME.house, parkedVehicle: parkedVehicle?.id || null };
+    recordEvent('home-teleport', state.lastHomeTeleport);
+    showMessage(`Du teleporterades hem till Hus ${PLAYER_HOME.house}!${parkedVehicle ? ' Ditt fordon står kvar.' : ''}`, 4);
+    render();
+    return true;
+  }
+
   function render() {
     if (state.mode === 'role-select') drawRoleSelect(); else drawWorld();
+    syncHomeButton();
   }
 
   function interact() {
@@ -1498,6 +1558,7 @@
     if (state.mode === 'role-select' && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) chooseRole({ Digit1: 'polis', Digit2: 'tjuv', Digit3: 'människa' }[e.code]);
     if (state.shopOpen && ['Digit1', 'Digit2', 'Digit3'].includes(e.code) && !e.repeat) buy({ Digit1: 'baton', Digit2: 'car', Digit3: 'helicopter' }[e.code]);
     if ((e.code === 'KeyE' || e.code === 'Enter') && !e.repeat) interact();
+    if (e.code === 'KeyH' && !e.repeat) teleportPlayerHome();
     if (e.code === 'Space' && !e.repeat) { e.preventDefault(); attack(); }
     if (e.code === 'KeyF' && !e.repeat) { if (!document.fullscreenElement) gameFrame.requestFullscreen?.(); else document.exitFullscreen?.(); }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -1545,6 +1606,7 @@
     const release = e => { e.preventDefault(); if (code) keys[code] = false; else if (action === 'up') keys.FlyUp = false; else if (action === 'down') keys.FlyDown = false; };
     button.addEventListener('pointerdown', press); button.addEventListener('pointerup', release); button.addEventListener('pointercancel', release); button.addEventListener('pointerleave', release);
   });
+  homeButton?.addEventListener('click', teleportPlayerHome);
   document.getElementById('fullscreen-btn')?.addEventListener('click', () => { if (!document.fullscreenElement) gameFrame.requestFullscreen?.(); else document.exitFullscreen?.(); });
   document.getElementById('sound-btn')?.addEventListener('click', event => {
     soundOn = !soundOn;
@@ -1573,6 +1635,7 @@
       unconsciousSeconds: Math.max(0, +(state.player.unconsciousUntil - state.time).toFixed(1)),
       currentBuilding: state.player.altitude > .6 ? null : currentBuildingAt(state.player.x, state.player.y)?.id || null,
       inventory: state.player.inventory,
+      home: state.player.role === 'människa' ? { id: PLAYER_HOME.id, house: PLAYER_HOME.house, x: PLAYER_HOME.x, y: PLAYER_HOME.y, teleportAvailable: homeTeleportAvailable() } : null,
     },
     city: {
       people: state.player ? 1 + state.bots.length : TOTAL_PEOPLE,
@@ -1598,7 +1661,7 @@
     bots: state.bots.map(b => ({
       id: b.id, role: b.role, x: +b.x.toFixed(1), y: +b.y.toFixed(1), health: b.health, money: b.money, goal: b.goal,
       jailed: b.jailed, vehicle: b.vehicle, vehicleId: b.vehicleId, altitude: +b.altitude.toFixed(1), preferredVehicle: b.preferredVehicle,
-      inventory: b.inventory, faceOffTarget: b.combatTargetId,
+      inventory: b.inventory, faceOffTarget: b.combatTargetId, homeHouse: homeSafeFor(b)?.house || null,
     })),
     interactives: state.player ? {
       shopOpen: state.shopOpen,
@@ -1618,7 +1681,9 @@
     accessRules: { allRolesCanEnterOrdinaryHouses: true, policeCanEnterHideout: false, thievesCanEnterPoliceStation: true },
     combatRules: { handDamage: HAND_DAMAGE, batonDamage: BATON_DAMAGE, faceOffDelay: FACE_OFF_DELAY, policeAttackSeconds: ATTACK_INTERVAL.polis, thiefAttackSeconds: ATTACK_INTERVAL.tjuv },
     movementRules: { policeBot: BOT_MOVE_SPEED.polis, thiefBot: BOT_MOVE_SPEED.tjuv, thiefSpeedMultiplier: 1.2 },
+    guardRules: { civilianBotsGuardOwnSafe: true, humanPlayerId: 'människa-1', humanPlayerHome: PLAYER_HOME.id, homeTeleportKey: 'H' },
     lastHouseTheft: state.lastHouseTheft,
+    lastHomeTeleport: state.lastHomeTeleport,
     lastCapture: state.lastCapture,
     lastRescue: state.lastRescue,
     recentEvents: state.events.slice(-12),
@@ -1633,7 +1698,8 @@
   };
   window.__wilderTest = {
     state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, chooseBotGoal, prepareBotTravel,
-    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, stealHouseSafe, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES,
+    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, stealHouseSafe, homeSafeFor, activeThiefInHome,
+    homeTeleportAvailable, teleportPlayerHome, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES, playerHome: PLAYER_HOME,
   };
   window.__wilderFallback = window.__wilderTest;
 
