@@ -16,7 +16,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 |------|------|-------------|
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |
 | Survivor of Days | [`survivor-blockshop/`](survivor-blockshop/) | Bygg en bas, handla block i Blockshop och skydda hjärtat i fem dygn. |
-| Wilder: The Big City | [`wilder-big-city/`](wilder-big-city/) | Utforska den stora staden Wilder i förstapersons-3D. Välj en av 20 personer (5 poliser, 5 tjuvar och 10 vanliga människor), kör fordon och besök stadens 13 byggnader. |
+| Wilder: The Big City | [`wilder-big-city/`](wilder-big-city/) | Utforska den stora staden Wilder i förstapersons-3D. Välj en av 18 personer (3 poliser, 5 tjuvar och 10 vanliga människor), kör fordon och besök stadens 13 byggnader. |
 
 ## Struktur
 

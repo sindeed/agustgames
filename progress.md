@@ -507,3 +507,26 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   öppnar alla tio kassaskåp för 500, besegrar 20-livsbossen och vinner. Den
   optimerade vägberäkningen simulerade 120 sekunder på cirka 0,5 sekunder i
   testmiljön. Safari-cachetoken är `20260715-wilder-big-city-v2`.
+- Ny Wilder-beställning: exakt tre poliser, fem tjuvar och tio vanliga människor;
+  alla fria tjuvar ska börja rädda direkt när någon fängslas; botar ska kunna
+  handla och använda bil/helikopter; alla får slå med handen för 0,5 skada.
+  Polis och tjuv väntar en sekund när de möts. Tjuvar slår sedan var 0,5 sekund
+  och poliser var 1 sekund, så en jämn botduell vinns av tjuven.
+- Pågående Wilder-v3: rollantalet är 3/5/10 (18 personer och 17 botar), handslag
+  och halva liv är inlagda, botdueller har separat mötestimer, och alla tjuvar
+  prioriterar nyckel/celler vid första fångsten. Botfordon har nu förare,
+  reservation, höjd, köp och transportmål. Syntaxkontroll och fullständig
+  webbläsarprovning återstår efter integrationen.
+- Wilder-v3 sluttestad: exakt 18 personer/17 botar och 3/5/10 roller; handslag
+  gör 0,5 skada; båda botarna väntar en sekund, tjuven slår därefter var 0,5 s
+  och polisen var 1 s, så tjuven vinner en jämn duell. Spelar- och botpoliser
+  kan fortfarande gripa och rätt polis får +10.
+- Alla fria tjuvar väljer räddningsmål direkt. Verifierat hela kedjan nyckel →
+  stöd vid cellerna → alla fångar fria. Tjuvbotar köper klubba och ett eget
+  bil- eller helikopterval; människobotar köper bil; polisbotar använder de två
+  gemensamma polisfordonen. Förare/reservationer städas vid gripande och explosion.
+- Regressioner godkända för galleria, alla tio hus, tjuvhusspärr, båda vinstlägen,
+  iPad-landskap och den officiella Playwright-klienten utan konsolfel. Naturlig
+  botmatch gav polisvinst; med poliser utslagna stal tjuvarna 500, använde båda
+  fordonstyperna och besegrade bossen. Safari-cachetoken är
+  `20260715-wilder-big-city-v3`.

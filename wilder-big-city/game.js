@@ -14,6 +14,13 @@
   const MAP_H = 120;
   const CITY_AREA_SCALE = 10;
   const HOUSE_AREA_SCALE = 5;
+  const ROLE_TOTALS = Object.freeze({ polis: 3, tjuv: 5, människa: 10 });
+  const TOTAL_PEOPLE = Object.values(ROLE_TOTALS).reduce((sum, count) => sum + count, 0);
+  const HAND_DAMAGE = 0.5;
+  const BATON_DAMAGE = 1;
+  const FACE_OFF_DELAY = 1;
+  const ATTACK_INTERVAL = Object.freeze({ polis: 1, tjuv: 0.5, människa: 0.75 });
+  const ITEM_PRICE = Object.freeze({ baton: 10, car: 20, helicopter: 30 });
   const map = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(0));
   const doors = new Map();
   const structures = [];
@@ -58,7 +65,7 @@
     messageUntil: Infinity,
     player: null,
     bots: [],
-    roleCounts: { polis: 5, tjuv: 5, människa: 10 },
+    roleCounts: { ...ROLE_TOTALS },
     shopOpen: false,
     mallVisits: 0,
     lastBuildingId: null,
@@ -70,6 +77,8 @@
     thiefCodesKnown: false,
     jailKeyHolder: null,
     lastCapture: null,
+    lastRescue: null,
+    events: [],
     mallReceipt: '',
     boss: { x: PLACES.boss.x, y: PLACES.boss.y, health: 20, maxHealth: 20, defeated: false, cooldown: 0 },
     jailCells: [[11.5, 102.5], [15.5, 102.5], [19.5, 102.5], [23.5, 102.5], [27.5, 102.5]]
@@ -121,10 +130,10 @@
     id: `safe-${i + 1}`, house: i + 1, x: s.x + 3.5, y: s.y + 3.5, code: SAFE_CODES[i], money: 50, opened: false,
   }));
   state.vehicles = [
-    { id: 'police-car', type: 'car', label: 'polisbil', x: 13.5, y: 112.5, health: 10, maxHealth: 10, owner: 'polis', destroyed: false },
-    { id: 'police-heli', type: 'helicopter', label: 'polishelikopter', x: 31.5, y: 112.5, health: 10, maxHealth: 10, owner: 'polis', destroyed: false },
-    { id: 'shop-car', type: 'car', label: 'bil', x: 68.5, y: 112.5, health: 10, maxHealth: 10, owner: null, destroyed: false },
-    { id: 'shop-heli', type: 'helicopter', label: 'helikopter', x: 84.5, y: 112.5, health: 10, maxHealth: 10, owner: null, destroyed: false },
+    { id: 'police-car', type: 'car', label: 'polisbil', x: 13.5, y: 112.5, health: 10, maxHealth: 10, owner: 'polis', driverId: null, reservedBy: null, altitude: 0, destroyed: false },
+    { id: 'police-heli', type: 'helicopter', label: 'polishelikopter', x: 31.5, y: 112.5, health: 10, maxHealth: 10, owner: 'polis', driverId: null, reservedBy: null, altitude: 0, destroyed: false },
+    { id: 'shop-car', type: 'car', label: 'bil', x: 68.5, y: 112.5, health: 10, maxHealth: 10, owner: null, driverId: null, reservedBy: null, altitude: 0, destroyed: false },
+    { id: 'shop-heli', type: 'helicopter', label: 'helikopter', x: 84.5, y: 112.5, health: 10, maxHealth: 10, owner: null, driverId: null, reservedBy: null, altitude: 0, destroyed: false },
   ];
   const furniture = [];
   for (const house of structures.filter(building => building.type === 'house')) {
@@ -241,6 +250,11 @@
     state.messageUntil = state.time + seconds;
   }
 
+  function recordEvent(type, details = {}) {
+    state.events.push({ time: +state.time.toFixed(2), type, ...details });
+    if (state.events.length > 36) state.events.splice(0, state.events.length - 36);
+  }
+
   function chooseRole(role) {
     const starts = {
       polis: { x: PLACES.policeSpawn.x, y: PLACES.policeSpawn.y, angle: 0, money: 10, baton: true, car: true, helicopter: true },
@@ -252,7 +266,8 @@
       id: `${role}-1`, role, x: s.x, y: s.y, angle: s.angle, health: 3, maxHealth: 3, money: s.money,
       captures: 0,
       inventory: { baton: s.baton, car: s.car, helicopter: s.helicopter, codes: role === 'polis', jailKey: false },
-      vehicle: null, vehicleId: null, altitude: 0, pitch: 0, attackCooldown: 0, unconsciousUntil: 0, jailed: false, jailCell: null,
+      vehicle: null, vehicleId: null, altitude: 0, pitch: 0, attackCooldown: 0, attackSwingUntil: 0,
+      unconsciousUntil: 0, jailed: false, jailCell: null,
     };
     state.mode = 'playing';
     state.messageUntil = 0;
@@ -262,7 +277,7 @@
   }
 
   function makeBots(playerRole) {
-    const totals = { polis: 5, tjuv: 5, människa: 10 };
+    const totals = { ...ROLE_TOTALS };
     totals[playerRole]--;
     state.bots = [];
     const spawns = {
@@ -285,11 +300,22 @@
           maxHealth: 3,
           money: role === 'människa' ? 20 : 10,
           captures: 0,
-          inventory: { baton: role === 'polis', codes: role === 'polis', jailKey: false },
+          inventory: { baton: role === 'polis', car: role === 'polis', helicopter: role === 'polis', codes: role === 'polis', jailKey: false },
+          preferredVehicle: role === 'människa' ? 'car' : role === 'tjuv' ? (number % 2 ? 'car' : 'helicopter') : (number % 2 ? 'helicopter' : 'car'),
+          vehicle: null,
+          vehicleId: null,
+          altitude: 0,
+          pendingVehicleId: null,
+          vehicleUseUntil: 0,
           jailed: false,
           jailCell: null,
           unconsciousUntil: 0,
           cooldown: random(),
+          combatTargetId: null,
+          faceOffStartedAt: null,
+          nextMeleeAt: Infinity,
+          lastAttackAt: null,
+          lastDamage: null,
           targetX: p[0],
           targetY: p[1],
           goal: 'vandrar',
@@ -337,7 +363,7 @@
     ctx.font = `700 ${Math.round(h * 0.033)}px system-ui`; ctx.fillStyle = '#bce6ff'; ctx.fillText('THE BIG CITY', w / 2, h * 0.225);
     ctx.font = `600 ${Math.round(h * 0.026)}px system-ui`; ctx.fillStyle = '#fff'; ctx.fillText('Vem vill du vara?', w / 2, h * 0.31);
     const roles = [
-      { role: 'polis', title: 'POLIS', count: '5 poliser', color: '#2f79d3', key: '1', note: 'Bil, helikopter och klubba' },
+      { role: 'polis', title: 'POLIS', count: '3 poliser', color: '#2f79d3', key: '1', note: 'Bil, helikopter och klubba' },
       { role: 'tjuv', title: 'TJUV', count: '5 tjuvar', color: '#a73c47', key: '2', note: 'Stjäl 500 pengar' },
       { role: 'människa', title: 'MÄNNISKA', count: '10 människor', color: '#36966a', key: '3', note: 'Lev och utforska staden' },
     ];
@@ -524,7 +550,7 @@
   function drawSprites(horizon) {
     const sprites = [];
     structures.forEach(s => sprites.push({ kind: 'sign', x: s.door.x + .5, y: s.door.y + 1.1, label: s.label, color: s.type === 'police' ? '#2f78d0' : s.type === 'hideout' ? '#a23d48' : s.type === 'shop' ? '#e5a92d' : '#3c5968' }));
-    state.bots.filter(b => !b.jailed).forEach(b => sprites.push({ kind: 'bot', ...b }));
+    state.bots.filter(b => !b.jailed && !b.vehicleId).forEach(b => sprites.push({ kind: 'bot', ...b }));
     state.safes.filter(s => !s.opened).forEach(s => sprites.push({ kind: 'safe', ...s }));
     state.vehicles.filter(v => !v.destroyed && v.id !== state.player.vehicleId).forEach(v => sprites.push({ kind: 'vehicle', ...v }));
     furniture.forEach(item => sprites.push({ ...item }));
@@ -544,7 +570,8 @@
         ctx.strokeStyle = s.color; ctx.lineWidth = 3; ctx.strokeRect(pr.screenX - tw / 2, horizon - pr.size * .65, tw, fs + 10);
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(s.label, pr.screenX, horizon - pr.size * .65 + fs + 2);
       } else if (s.kind === 'vehicle') {
-        const sh = clamp(pr.size * .62, 14, canvas.height), sw = sh * (s.type === 'car' ? 1.45 : 1.8), y = horizon - sh * .2;
+        const sh = clamp(pr.size * .62, 14, canvas.height), sw = sh * (s.type === 'car' ? 1.45 : 1.8);
+        const y = horizon - sh * .2 - (s.type === 'helicopter' ? (s.altitude || 0) * sh * .55 : 0);
         ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(pr.screenX, y + sh * .77, sw * .55, sh * .15, 0, 0, TAU); ctx.fill();
         ctx.fillStyle = s.owner === 'polis' ? '#1d65b5' : '#d54d3f';
         if (s.type === 'car') {
@@ -625,6 +652,16 @@
         else { ctx.beginPath(); ctx.arc(pr.screenX, y + sh * .13, sw * .43, Math.PI, TAU); ctx.fill(); }
         ctx.fillStyle = '#192126'; ctx.fillRect(pr.screenX - sw * .19, y + sh * .18, sw * .08, sh * .04); ctx.fillRect(pr.screenX + sw * .11, y + sh * .18, sw * .08, sh * .04);
         ctx.fillStyle = '#17202a'; ctx.fillRect(pr.screenX - sw * .42, y + sh * .78, sw * .34, sh * .24); ctx.fillRect(pr.screenX + sw * .08, y + sh * .78, sw * .34, sh * .24);
+        if (s.inventory?.baton) {
+          ctx.strokeStyle = '#253038'; ctx.lineWidth = Math.max(2, sw * .1); ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(pr.screenX + sw * .62, y + sh * .46); ctx.lineTo(pr.screenX + sw * .9, y + sh * .74); ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        const healthWidth = sw * 1.45;
+        ctx.fillStyle = '#872e36'; ctx.fillRect(pr.screenX - healthWidth / 2, y - 10, healthWidth, 5);
+        ctx.fillStyle = '#55d36d'; ctx.fillRect(pr.screenX - healthWidth / 2, y - 10, healthWidth * s.health / s.maxHealth, 5);
+        if (s.faceOffStartedAt !== null && state.time < s.nextMeleeAt) {
+          ctx.fillStyle = '#ffcf55'; ctx.font = `900 ${clamp(sh * .18, 10, 22)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText('!', pr.screenX, y - 15);
+        }
       }
     }
   }
@@ -639,8 +676,9 @@
       return;
     }
     const swing = Math.sin(state.time * 8) * state.cameraBob * 4;
+    const punch = state.time < p.attackSwingUntil ? h * .1 : 0;
     ctx.fillStyle = '#d5a17c';
-    ctx.beginPath(); ctx.ellipse(w * .22 + swing, h * .97, w * .055, h * .17, -.42, 0, TAU); ctx.ellipse(w * .78 - swing, h * .97, w * .055, h * .17, .42, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(w * .22 + swing, h * .97, w * .055, h * .17, -.42, 0, TAU); ctx.ellipse(w * .78 - swing, h * .97 - punch, w * .055, h * .17, .42, 0, TAU); ctx.fill();
     if (p.inventory.baton) {
       ctx.strokeStyle = '#1e272d'; ctx.lineWidth = Math.max(9, h * .025); ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(w * .8 - swing, h * .94); ctx.lineTo(w * .88 - swing, h * .65); ctx.stroke(); ctx.lineCap = 'butt';
@@ -654,7 +692,11 @@
     ctx.fillStyle = 'rgba(5,13,19,.78)'; ctx.fillRect(18, hudTop, 245, 76);
     ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.max(16, h * .029)}px system-ui`; ctx.fillText(`${p.role.toUpperCase()} 1`, 32, hudTop + 29);
     ctx.font = `700 ${Math.max(13, h * .022)}px system-ui`; ctx.fillStyle = '#ffd461'; ctx.fillText(`${p.money} pengar`, 32, hudTop + 58);
-    ctx.fillStyle = '#e34c53'; for (let i = 0; i < 3; i++) { ctx.globalAlpha = i < p.health ? 1 : .2; ctx.fillRect(150 + i * 29, hudTop + 42, 21, 12); } ctx.globalAlpha = 1;
+    for (let i = 0; i < 3; i++) {
+      const fill = clamp(p.health - i, 0, 1), bx = 150 + i * 29;
+      ctx.fillStyle = 'rgba(227,76,83,.2)'; ctx.fillRect(bx, hudTop + 42, 21, 12);
+      ctx.fillStyle = '#e34c53'; ctx.fillRect(bx, hudTop + 42, 21 * fill, 12);
+    }
     ctx.fillStyle = 'rgba(5,13,19,.78)'; ctx.fillRect(w - 258, hudTop, 240, 76);
     ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.max(13, h * .019)}px system-ui`;
     ctx.fillText(`Tjuvar i fängelse: ${state.jailedThieves}/5`, w - 240, hudTop + 27);
@@ -770,6 +812,7 @@
     if (state.mode !== 'playing' || !state.player) return;
     const p = state.player;
     p.attackCooldown = Math.max(0, p.attackCooldown - dt);
+    if (p.attackCooldown < 1e-6) p.attackCooldown = 0;
     const enteredBuilding = p.altitude > .6 ? null : currentBuildingAt(p.x, p.y);
     if (enteredBuilding?.id === 'shop' && state.lastBuildingId !== 'shop') {
       state.shopOpen = true;
@@ -801,7 +844,7 @@
     if (canPersonStand(p, p.x, ny, p.vehicle ? .34 : .23, flying)) p.y = ny;
     if (p.vehicleId) {
       const vehicle = state.vehicles.find(v => v.id === p.vehicleId);
-      if (vehicle) { vehicle.x = p.x; vehicle.y = p.y; }
+      if (vehicle) { vehicle.x = p.x; vehicle.y = p.y; vehicle.altitude = p.altitude; }
     }
     state.boss.cooldown = Math.max(0, state.boss.cooldown - dt);
     if (p.role === 'tjuv' && !state.boss.defeated && distance(p, state.boss) < 1.55 && state.boss.cooldown <= 0) {
@@ -820,13 +863,14 @@
     updateBots(dt);
   }
 
-  function botWalkable(x, y, person = null) {
+  function botWalkable(x, y, person = null, movement = 'foot') {
     if (x < 1 || y < 1 || x >= MAP_W - 1 || y >= MAP_H - 1) return false;
+    if (movement === 'car') return groundZones[y * MAP_W + x] === 1 && map[y][x] === 0;
     if (person && !canEnterBuilding(person, currentBuildingAt(x + .5, y + .5))) return false;
     return map[y][x] === 0 || map[y][x] === 3;
   }
 
-  function findBotPath(fromX, fromY, toX, toY, person = null) {
+  function findBotPath(fromX, fromY, toX, toY, person = null, movement = 'foot') {
     const sx = clamp(Math.floor(fromX), 1, MAP_W - 2), sy = clamp(Math.floor(fromY), 1, MAP_H - 2);
     const gx = clamp(Math.floor(toX), 1, MAP_W - 2), gy = clamp(Math.floor(toY), 1, MAP_H - 2);
     if (++pathGeneration >= 2147483647) { pathVisited.fill(0); pathGeneration = 1; }
@@ -837,7 +881,7 @@
       const current = pathQueue[head++], cx = current % MAP_W, cy = Math.floor(current / MAP_W);
       for (const [dx, dy] of directions) {
         const nx = cx + dx, ny = cy + dy, next = ny * MAP_W + nx;
-        if (!botWalkable(nx, ny, person) || pathVisited[next] === generation) continue;
+        if (!botWalkable(nx, ny, person, movement) || pathVisited[next] === generation) continue;
         pathVisited[next] = generation; pathPrevious[next] = current; pathQueue[tail++] = next;
       }
     }
@@ -855,12 +899,42 @@
     return { x: 24.5, y: 22.5 };
   }
 
+  const roadDropoffCache = new Map();
+  function nearestRoadPoint(x, y) {
+    const key = `${Math.floor(x)},${Math.floor(y)}`;
+    if (roadDropoffCache.has(key)) return roadDropoffCache.get(key);
+    const cx = clamp(Math.floor(x), 1, MAP_W - 2), cy = clamp(Math.floor(y), 1, MAP_H - 2);
+    let best = null, bestDistance = Infinity;
+    for (let radius = 0; radius <= 24 && !best; radius++) {
+      for (let yy = Math.max(1, cy - radius); yy <= Math.min(MAP_H - 2, cy + radius); yy++) {
+        for (let xx = Math.max(1, cx - radius); xx <= Math.min(MAP_W - 2, cx + radius); xx++) {
+          if (Math.max(Math.abs(xx - cx), Math.abs(yy - cy)) !== radius || !botWalkable(xx, yy, null, 'car')) continue;
+          const d = Math.hypot(xx + .5 - x, yy + .5 - y);
+          if (d < bestDistance) { bestDistance = d; best = { x: xx + .5, y: yy + .5 }; }
+        }
+      }
+    }
+    best ||= { x: clamp(x, 1.5, MAP_W - 1.5), y: clamp(y, 1.5, MAP_H - 1.5) };
+    roadDropoffCache.set(key, best);
+    return best;
+  }
+
   function moveBotTo(b, target, dt, speed) {
+    if (b.vehicle === 'helicopter') {
+      const angle = Math.atan2(target.y - b.y, target.x - b.x);
+      b.angle = angle;
+      b.altitude = Math.max(1.15, b.altitude);
+      b.x = clamp(b.x + Math.cos(angle) * speed * dt, .5, MAP_W - .5);
+      b.y = clamp(b.y + Math.sin(angle) * speed * dt, .5, MAP_H - .5);
+      const helicopter = state.vehicles.find(vehicle => vehicle.id === b.vehicleId);
+      if (helicopter) { helicopter.x = b.x; helicopter.y = b.y; helicopter.altitude = b.altitude; }
+      return;
+    }
     b.pathTimer -= dt;
     const movingTarget = target.type === 'chase' || target.type === 'fight';
     const targetShift = movingTarget ? 1.25 : .7;
     if (b.pathTimer <= 0 || Math.hypot(target.x - b.targetX, target.y - b.targetY) > targetShift) {
-      b.path = findBotPath(b.x, b.y, target.x, target.y, b);
+      b.path = findBotPath(b.x, b.y, target.x, target.y, b, b.vehicle === 'car' ? 'car' : 'foot');
       b.targetX = target.x; b.targetY = target.y; b.pathTimer = movingTarget ? .7 + random() * .2 : 1.65 + random() * .45;
     }
     let waypoint = b.path[0] || target;
@@ -869,8 +943,15 @@
     if (door && !(b.role === 'polis' && door.buildingType === 'hideout')) door.open = true;
     const angle = Math.atan2(waypoint.y - b.y, waypoint.x - b.x); b.angle = angle;
     const nx = b.x + Math.cos(angle) * speed * dt, ny = b.y + Math.sin(angle) * speed * dt;
-    if (canPersonStand(b, nx, b.y, .18)) b.x = nx; else b.pathTimer = 0;
-    if (canPersonStand(b, b.x, ny, .18)) b.y = ny; else b.pathTimer = 0;
+    const canMove = b.vehicle === 'car'
+      ? (xx, yy) => botWalkable(Math.floor(xx), Math.floor(yy), b, 'car')
+      : (xx, yy) => canPersonStand(b, xx, yy, .18);
+    if (canMove(nx, b.y)) b.x = nx; else b.pathTimer = 0;
+    if (canMove(b.x, ny)) b.y = ny; else b.pathTimer = 0;
+    if (b.vehicleId) {
+      const vehicle = state.vehicles.find(candidate => candidate.id === b.vehicleId);
+      if (vehicle) { vehicle.x = b.x; vehicle.y = b.y; vehicle.altitude = 0; }
+    }
   }
 
   function nearestActive(role, from, maxDistance = Infinity) {
@@ -879,6 +960,184 @@
     let best = null, bestDistance = maxDistance;
     for (const person of candidates) { const d = distance(from, person); if (d < bestDistance) { best = person; bestDistance = d; } }
     return best;
+  }
+
+  function personById(id) {
+    if (state.player?.id === id) return state.player;
+    return state.bots.find(person => person.id === id) || null;
+  }
+
+  function resetBotFaceOff(bot) {
+    bot.combatTargetId = null;
+    bot.faceOffStartedAt = null;
+    bot.nextMeleeAt = Infinity;
+  }
+
+  function botMeleeReady(bot, target, interval) {
+    if (bot.combatTargetId !== target.id || bot.faceOffStartedAt === null) {
+      bot.combatTargetId = target.id;
+      bot.faceOffStartedAt = state.time;
+      bot.nextMeleeAt = state.time + FACE_OFF_DELAY;
+      recordEvent('face-off', { attacker: bot.id, target: target.id, wait: FACE_OFF_DELAY });
+      return false;
+    }
+    if (state.time + 1e-6 < bot.nextMeleeAt) return false;
+    bot.lastAttackAt = state.time;
+    bot.nextMeleeAt = state.time + interval;
+    return true;
+  }
+
+  function damagePerson(attacker, target, damage, source = 'hand') {
+    if (!target || target.jailed || target.unconsciousUntil > state.time) return false;
+    target.health = Math.max(0, +(target.health - damage).toFixed(2));
+    target.lastDamage = { time: state.time, attacker: attacker?.id || 'okänd', damage, source };
+    recordEvent('hit', { attacker: attacker?.id || 'okänd', target: target.id, damage, source, health: target.health });
+    if (target.health > 0) return true;
+    if (attacker?.role === 'polis' && target.role === 'tjuv') {
+      jailThief(target, attacker);
+      return true;
+    }
+    const seconds = target.role === 'polis' ? 10 : 5;
+    target.health = 3;
+    target.unconsciousUntil = state.time + seconds;
+    if (target !== state.player) resetBotFaceOff(target);
+    recordEvent('unconscious', { person: target.id, seconds, winner: attacker?.id || null });
+    if (target === state.player) showMessage(`Du svimmade i ${seconds} sekunder!`, 3);
+    else showMessage(`${target.id} svimmade i ${seconds} sekunder!`, 2.5);
+    return true;
+  }
+
+  function exitVehicle(person, reason = 'parked') {
+    if (!person?.vehicleId) return null;
+    const vehicle = state.vehicles.find(candidate => candidate.id === person.vehicleId);
+    if (vehicle) {
+      vehicle.x = person.x;
+      vehicle.y = person.y;
+      vehicle.altitude = 0;
+      vehicle.driverId = null;
+      vehicle.reservedBy = null;
+    }
+    const oldId = person.vehicleId;
+    person.vehicle = null;
+    person.vehicleId = null;
+    person.altitude = 0;
+    if ('pendingVehicleId' in person) person.pendingVehicleId = null;
+    recordEvent('vehicle-exit', { person: person.id, vehicle: oldId, reason });
+    return vehicle;
+  }
+
+  function enterBotVehicle(bot, vehicle) {
+    if (!vehicle || vehicle.destroyed || vehicle.driverId || (vehicle.reservedBy && vehicle.reservedBy !== bot.id)) return false;
+    vehicle.driverId = bot.id;
+    vehicle.reservedBy = null;
+    bot.vehicle = vehicle.type;
+    bot.vehicleId = vehicle.id;
+    bot.pendingVehicleId = null;
+    bot.x = vehicle.x;
+    bot.y = vehicle.y;
+    bot.altitude = vehicle.type === 'helicopter' ? 1.15 : 0;
+    vehicle.altitude = bot.altitude;
+    bot.vehicleUseUntil = state.time + 8;
+    bot.path = [];
+    bot.pathTimer = 0;
+    recordEvent('vehicle-enter', { person: bot.id, vehicle: vehicle.id, vehicleType: vehicle.type });
+    return true;
+  }
+
+  function deliverBotVehicle(bot, type) {
+    const existing = state.vehicles.find(vehicle => vehicle.owner === bot.id && vehicle.type === type && !vehicle.destroyed);
+    if (existing) { bot.pendingVehicleId = existing.id; return existing; }
+    const delivered = state.vehicles.filter(vehicle => typeof vehicle.owner === 'string' && vehicle.owner.includes('-') && !vehicle.id.startsWith('police-')).length;
+    const x = 37.5 + (delivered % 8) * 3;
+    const y = 108.5 + Math.floor(delivered / 8) * 3;
+    const vehicle = {
+      id: `${bot.id}-${type}`,
+      type,
+      label: `${bot.id}s ${type === 'car' ? 'bil' : 'helikopter'}`,
+      x,
+      y,
+      health: 10,
+      maxHealth: 10,
+      owner: bot.id,
+      driverId: null,
+      reservedBy: bot.id,
+      altitude: 0,
+      destroyed: false,
+    };
+    state.vehicles.push(vehicle);
+    bot.pendingVehicleId = vehicle.id;
+    return vehicle;
+  }
+
+  function roleCanBuy(person, item) {
+    return !(person.role === 'människa' && (item === 'baton' || item === 'helicopter'));
+  }
+
+  function tryPurchase(person, item, isBot = false) {
+    const price = ITEM_PRICE[item];
+    if (!price || !roleCanBuy(person, item) || person.inventory[item] || person.money < price) return false;
+    person.money -= price;
+    person.inventory[item] = true;
+    if (isBot && (item === 'car' || item === 'helicopter')) deliverBotVehicle(person, item);
+    if (!isBot && item === 'car') state.vehicles.find(vehicle => vehicle.id === 'shop-car').owner = 'player';
+    if (!isBot && item === 'helicopter') state.vehicles.find(vehicle => vehicle.id === 'shop-heli').owner = 'player';
+    recordEvent('purchase', { buyer: person.id, item, price, money: person.money });
+    return true;
+  }
+
+  function botShoppingItem(bot) {
+    if (bot.role === 'människa') return !bot.inventory.car && bot.money >= ITEM_PRICE.car ? 'car' : null;
+    if (bot.role !== 'tjuv') return null;
+    if (!bot.inventory.baton && bot.money >= ITEM_PRICE.baton) return 'baton';
+    const preferred = bot.preferredVehicle;
+    if (!bot.inventory[preferred] && bot.money >= ITEM_PRICE[preferred]) return preferred;
+    return null;
+  }
+
+  function ownedAvailableVehicle(bot) {
+    const allowed = state.vehicles.filter(vehicle => {
+      const owned = vehicle.owner === bot.id || (bot.role === 'polis' && vehicle.owner === 'polis');
+      return owned && !vehicle.destroyed && !vehicle.driverId && (!vehicle.reservedBy || vehicle.reservedBy === bot.id) && bot.inventory[vehicle.type];
+    });
+    allowed.sort((a, b) => {
+      const aPreferred = a.type === bot.preferredVehicle ? 0 : 1;
+      const bPreferred = b.type === bot.preferredVehicle ? 0 : 1;
+      return aPreferred - bPreferred || distance(bot, a) - distance(bot, b);
+    });
+    return allowed[0] || null;
+  }
+
+  function outdoorPointFor(goal) {
+    const target = goal.target && typeof goal.target.x === 'number' ? goal.target : goal;
+    const building = currentBuildingAt(target.x, target.y);
+    if (!building) return { x: target.x, y: target.y };
+    return { x: building.door.x + .5, y: building.door.y + 1.8 };
+  }
+
+  function prepareBotTravel(bot, mission) {
+    if (!bot.vehicle) {
+      let vehicle = bot.pendingVehicleId && state.vehicles.find(candidate => candidate.id === bot.pendingVehicleId && !candidate.destroyed);
+      if (!vehicle && distance(bot, mission) > 18) vehicle = ownedAvailableVehicle(bot);
+      if (vehicle) {
+        if (!vehicle.reservedBy) vehicle.reservedBy = bot.id;
+        if (vehicle.reservedBy === bot.id) {
+          bot.pendingVehicleId = vehicle.id;
+          return { type: 'enter-vehicle', target: vehicle, x: vehicle.x, y: vehicle.y, speed: 1.35, transportOnly: true };
+        }
+      }
+      return mission;
+    }
+    const outside = outdoorPointFor(mission);
+    const destination = bot.vehicle === 'car' ? nearestRoadPoint(outside.x, outside.y) : outside;
+    return {
+      type: bot.vehicle === 'car' ? `drive-${mission.type}` : `fly-${mission.type}`,
+      x: destination.x,
+      y: destination.y,
+      speed: bot.vehicle === 'car' ? (bot.role === 'polis' ? 5.15 : 4.7) : (bot.role === 'polis' ? 5.85 : 5.6),
+      transportOnly: true,
+      mission,
+      moving: mission.type === 'chase' || mission.type === 'fight',
+    };
   }
 
   function freeAllThieves(rescuer) {
@@ -896,7 +1155,11 @@
     state.jailedThieves = Math.max(0, state.jailedThieves - freed);
     state.jailKeyHolder = null; state.player.inventory.jailKey = false;
     for (const thief of state.bots.filter(person => person.role === 'tjuv')) thief.inventory.jailKey = false;
-    if (freed) showMessage(`${rescuer} befriade ${freed} tjuv${freed === 1 ? '' : 'ar'}!`, 5);
+    if (freed) {
+      state.lastRescue = { time: +state.time.toFixed(2), rescuer, freed };
+      recordEvent('rescue', state.lastRescue);
+      showMessage(`${rescuer} befriade ${freed} tjuv${freed === 1 ? '' : 'ar'}!`, 5);
+    }
     return freed;
   }
 
@@ -916,17 +1179,27 @@
       }
     }
     if (b.role === 'tjuv') {
-      const nearbyPolice = b.inventory.baton ? nearestActive('polis', b, 2.4) : null;
-      if (nearbyPolice) return { type: 'fight', target: nearbyPolice, x: nearbyPolice.x, y: nearbyPolice.y, speed: 1.2 };
       if (state.jailedThieves > 0) {
         if (b.inventory.jailKey) return { type: 'release', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: 1.3 };
         if (!state.jailKeyHolder || state.jailKeyHolder === b.id) return { type: 'key', x: PLACES.jailKey.x, y: PLACES.jailKey.y, speed: 1.3 };
+        return { type: 'rescue-support', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: 1.28 };
       }
-      if (!b.inventory.baton) return { type: 'shop', x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: 1.05 };
+      const nearbyPolice = nearestActive('polis', b, 2.4);
+      if (nearbyPolice) return { type: 'fight', target: nearbyPolice, x: nearbyPolice.x, y: nearbyPolice.y, speed: 1.2 };
+      const shoppingItem = botShoppingItem(b);
+      if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: 1.05 };
       if (!state.thiefCodesKnown) return { type: 'note', x: PLACES.codeNote.x, y: PLACES.codeNote.y, speed: 1.12 };
       const safe = state.safes.filter(item => !item.opened).sort((a, c) => distance(b, a) - distance(b, c))[0];
       if (safe) return { type: 'safe', target: safe, x: safe.x, y: safe.y, speed: 1.12 };
       if (!state.boss.defeated) return { type: 'boss', target: state.boss, x: state.boss.x, y: state.boss.y, speed: 1.25 };
+    }
+    if (b.role === 'människa') {
+      const attacker = b.lastDamage && state.time - b.lastDamage.time < 8 ? personById(b.lastDamage.attacker) : null;
+      if (attacker && !attacker.jailed && attacker.unconsciousUntil <= state.time && distance(b, attacker) < 6) {
+        return { type: 'fight', target: attacker, x: attacker.x, y: attacker.y, speed: 1.08 };
+      }
+      const shoppingItem = botShoppingItem(b);
+      if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: 1.05 };
     }
     if (!b.wanderTarget || distance(b, b.wanderTarget) < .6) b.wanderTarget = randomFreeTarget(b);
     return { type: 'wander', x: b.wanderTarget.x, y: b.wanderTarget.y, speed: .72 };
@@ -934,59 +1207,98 @@
 
   function updateBots(dt) {
     for (const b of state.bots) {
-      if (b.jailed || b.unconsciousUntil > state.time) continue;
+      if (b.jailed || b.unconsciousUntil > state.time) { resetBotFaceOff(b); continue; }
       b.cooldown = Math.max(0, b.cooldown - dt);
-      const goal = chooseBotGoal(b); b.goal = goal.type;
+      const mission = chooseBotGoal(b);
+      const goal = prepareBotTravel(b, mission);
+      b.goal = goal.type;
       moveBotTo(b, goal, dt, goal.speed);
       const close = Math.hypot(goal.x - b.x, goal.y - b.y);
-      if (goal.type === 'shop' && close < .8 && b.money >= 10) { b.money -= 10; b.inventory.baton = true; b.pathTimer = 0; }
-      if (goal.type === 'note' && close < .8) { b.inventory.codes = true; state.thiefCodesKnown = true; b.pathTimer = 0; }
-      if (goal.type === 'safe' && close < .75 && !goal.target.opened) {
-        goal.target.opened = true; b.money += 50; state.stolen += 50; b.pathTimer = 0;
-        showMessage(`${b.id} öppnade kassaskåpet i Hus ${goal.target.house}!`, 2.2); checkWin();
+      if (goal.transportOnly) {
+        resetBotFaceOff(b);
+        if (goal.type === 'enter-vehicle' && close < .78) enterBotVehicle(b, goal.target);
+        else if ((goal.type.startsWith('drive-') || goal.type.startsWith('fly-')) && close < (b.vehicle === 'helicopter' ? 1.25 : .72)) exitVehicle(b, 'arrived');
+        continue;
       }
-      if (goal.type === 'key' && close < .75 && (!state.jailKeyHolder || state.jailKeyHolder === b.id)) {
+      if (mission.type === 'shop' && close < .8 && tryPurchase(b, mission.item, true)) {
+        b.pathTimer = 0;
+        showMessage(`${b.id} köpte ${mission.item === 'baton' ? 'en klubba' : mission.item === 'car' ? 'en bil' : 'en helikopter'}!`, 2.2);
+      }
+      if (mission.type === 'note' && close < .8) { b.inventory.codes = true; state.thiefCodesKnown = true; b.pathTimer = 0; }
+      if (mission.type === 'safe' && close < .75 && !mission.target.opened) {
+        mission.target.opened = true; b.money += 50; state.stolen += 50; b.pathTimer = 0;
+        recordEvent('safe-opened', { thief: b.id, house: mission.target.house, money: 50 });
+        showMessage(`${b.id} öppnade kassaskåpet i Hus ${mission.target.house}!`, 2.2); checkWin();
+      }
+      if (mission.type === 'key' && close < .75 && (!state.jailKeyHolder || state.jailKeyHolder === b.id)) {
         b.inventory.jailKey = true; state.jailKeyHolder = b.id; b.pathTimer = 0;
+        recordEvent('jail-key', { thief: b.id });
       }
-      if (goal.type === 'release' && close < 1.1) freeAllThieves(b.id);
-      if (goal.type === 'boss' && close < 1.15 && b.cooldown <= 0) {
-        b.cooldown = .65; state.boss.health--;
+      if (mission.type === 'release' && close < 1.1) freeAllThieves(b.id);
+      if (mission.type === 'boss' && close < 1.15 && b.cooldown <= 0) {
+        b.cooldown = .65; state.boss.health = Math.max(0, state.boss.health - (b.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE));
+        recordEvent('boss-hit', { attacker: b.id, damage: b.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE, health: state.boss.health });
         if (state.boss.health <= 0) { state.boss.health = 0; state.boss.defeated = true; showMessage(`${b.id} besegrade polisbossen!`, 4); checkWin(); }
       }
-      if (goal.type === 'chase' && distance(b, goal.target) < .82 && b.cooldown <= 0) {
-        b.cooldown = 1.05;
-        if (goal.target === state.player && state.player.vehicleId) {
-          const vehicle = state.vehicles.find(v => v.id === state.player.vehicleId);
-          if (vehicle && --vehicle.health <= 0) destroyVehicle(vehicle);
-          else if (vehicle) showMessage(`Fordonet träffades! ${vehicle.health}/10 liv`, 1);
-        } else {
-          goal.target.health--;
-          if (goal.target.health <= 0) jailThief(goal.target, b);
-          else if (goal.target === state.player) showMessage(`Polisen träffade dig! ${goal.target.health} liv kvar`, 1);
+      const isMelee = mission.type === 'chase' || mission.type === 'fight';
+      const meleeDistance = mission.type === 'chase' ? .82 : .9;
+      if (isMelee && distance(b, mission.target) < meleeDistance) {
+        const interval = ATTACK_INTERVAL[b.role] || .75;
+        if (botMeleeReady(b, mission.target, interval)) {
+          if (mission.target.vehicleId) {
+            const vehicle = state.vehicles.find(candidate => candidate.id === mission.target.vehicleId);
+            const damage = b.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE;
+            if (vehicle) {
+              vehicle.health = Math.max(0, vehicle.health - damage);
+              recordEvent('vehicle-hit', { attacker: b.id, vehicle: vehicle.id, damage, health: vehicle.health });
+              if (vehicle.health <= 0) destroyVehicle(vehicle);
+              else if (mission.target === state.player) showMessage(`Fordonet träffades! ${vehicle.health}/10 liv`, 1);
+            }
+          } else {
+            damagePerson(b, mission.target, HAND_DAMAGE, 'hand');
+            if (mission.target === state.player && !state.player.jailed && state.player.unconsciousUntil <= state.time) showMessage(`${b.id} träffade dig! ${state.player.health}/3 liv`, 1);
+          }
         }
-      }
-      if (goal.type === 'fight' && distance(b, goal.target) < .9 && b.cooldown <= 0) {
-        b.cooldown = .85; goal.target.health--;
-        if (goal.target.health <= 0) {
-          goal.target.health = 3; goal.target.unconsciousUntil = state.time + 10;
-          if (goal.target === state.player) showMessage('En tjuv slog dig medvetslös i 10 sekunder!', 3);
-        }
+      } else if (isMelee) {
+        resetBotFaceOff(b);
+      } else {
+        resetBotFaceOff(b);
       }
     }
     const bossTarget = nearestActive('tjuv', state.boss, 1.55);
-    if (!state.boss.defeated && bossTarget && state.boss.cooldown <= 0) { state.boss.cooldown = 1.1; bossTarget.health--; if (bossTarget.health <= 0) jailThief(bossTarget); }
+    if (!state.boss.defeated && bossTarget && state.boss.cooldown <= 0) {
+      state.boss.cooldown = 1.1;
+      if (bossTarget.vehicleId) {
+        const vehicle = state.vehicles.find(candidate => candidate.id === bossTarget.vehicleId);
+        if (vehicle) {
+          vehicle.health = Math.max(0, vehicle.health - 1);
+          if (vehicle.health <= 0) destroyVehicle(vehicle);
+        } else {
+          exitVehicle(bossTarget, 'missing');
+        }
+      } else {
+        bossTarget.health--;
+        if (bossTarget.health <= 0) jailThief(bossTarget);
+      }
+    }
   }
 
   function jailThief(thief, captor = null) {
     if (thief.jailed) return false;
     const cell = state.jailCells.find(candidate => candidate.occupant === null);
     if (!cell) return false;
+    if (thief.vehicleId) exitVehicle(thief, 'jailed');
+    if (thief.pendingVehicleId) {
+      const reserved = state.vehicles.find(vehicle => vehicle.id === thief.pendingVehicleId);
+      if (reserved?.reservedBy === thief.id) reserved.reservedBy = null;
+      thief.pendingVehicleId = null;
+    }
     thief.health = 3; thief.jailed = true; thief.jailCell = cell.index;
+    if (thief !== state.player) resetBotFaceOff(thief);
     if (thief.inventory?.jailKey) { thief.inventory.jailKey = false; if (state.jailKeyHolder === thief.id) state.jailKeyHolder = null; }
     cell.occupant = thief === state.player ? 'spelaren' : thief.id;
     thief.x = cell.x; thief.y = cell.y;
     state.jailedThieves = clamp(state.jailedThieves + 1, 0, 5);
-    if (thief === state.player) { thief.vehicle = null; thief.vehicleId = null; thief.altitude = 0; }
     let rewardText = '';
     if (captor?.role === 'polis') {
       captor.money += 10;
@@ -994,14 +1306,19 @@
       rewardText = ` ${captor === state.player ? 'Du fick' : `${captor.id} fick`} +10 pengar!`;
     }
     state.lastCapture = { thief: thief.id, captor: captor?.id || 'polisbossen', reward: captor?.role === 'polis' ? 10 : 0 };
+    recordEvent('capture', state.lastCapture);
     showMessage(`${thief === state.player ? 'Du har blivit fångad!' : `${thief.id} skickades till fängelset!`}${rewardText}`, 4);
     checkWin();
     return true;
   }
 
   function destroyVehicle(vehicle) {
+    const driver = vehicle.driverId ? personById(vehicle.driverId) : null;
+    if (driver) exitVehicle(driver, 'destroyed');
+    for (const bot of state.bots) if (bot.pendingVehicleId === vehicle.id) { bot.pendingVehicleId = null; resetBotFaceOff(bot); }
     vehicle.destroyed = true; vehicle.health = 0;
-    if (state.player.vehicleId === vehicle.id) { state.player.vehicle = null; state.player.vehicleId = null; state.player.altitude = 0; }
+    vehicle.driverId = null; vehicle.reservedBy = null; vehicle.altitude = 0;
+    recordEvent('vehicle-destroyed', { vehicle: vehicle.id });
     showMessage(`${vehicle.label.toUpperCase()} SPRÄNGDES!`, 3);
     playTone(95, .35, 'sawtooth');
   }
@@ -1028,9 +1345,7 @@
         showMessage('Poliser får flyga över tjuvhuset, men inte landa eller gå in!', 4);
         return;
       }
-      const vehicle = state.vehicles.find(v => v.id === p.vehicleId);
-      if (vehicle) { vehicle.x = p.x; vehicle.y = p.y; }
-      p.vehicle = null; p.vehicleId = null; p.altitude = 0;
+      exitVehicle(p, 'player-exit');
       showMessage('Du steg ur fordonet');
       return;
     }
@@ -1040,10 +1355,18 @@
       if (!vehicle.destroyed && d < vehicleDistance) { vehicleDistance = d; nearbyVehicle = vehicle; }
     }
     if (nearbyVehicle) {
+      if (nearbyVehicle.driverId) { showMessage('Någon kör redan det fordonet'); return; }
       const owned = nearbyVehicle.owner === p.role || nearbyVehicle.owner === 'player';
       const hasType = nearbyVehicle.type === 'car' ? p.inventory.car : p.inventory.helicopter;
       if (!owned || !hasType) { showMessage(`Du måste köpa ${nearbyVehicle.type === 'car' ? 'bilen' : 'helikoptern'} i affären först`); return; }
+      if (nearbyVehicle.reservedBy) {
+        const reservingBot = personById(nearbyVehicle.reservedBy);
+        if (reservingBot) reservingBot.pendingVehicleId = null;
+        nearbyVehicle.reservedBy = null;
+      }
       p.vehicle = nearbyVehicle.type; p.vehicleId = nearbyVehicle.id; p.x = nearbyVehicle.x; p.y = nearbyVehicle.y;
+      nearbyVehicle.driverId = p.id;
+      recordEvent('vehicle-enter', { person: p.id, vehicle: nearbyVehicle.id, vehicleType: nearbyVehicle.type });
       showMessage(`Du kör nu ${nearbyVehicle.label}. E = stig ur${nearbyVehicle.type === 'helicopter' ? ', R/C = upp/ner' : ''}`, 4);
       return;
     }
@@ -1090,14 +1413,12 @@
   function buy(item) {
     const p = state.player;
     if (!state.shopOpen || !p) return;
-    const price = { baton: 10, car: 20, helicopter: 30 }[item];
+    const price = ITEM_PRICE[item];
     if (!price) return;
     if ((item === 'baton' || item === 'helicopter') && p.role === 'människa') { state.mallReceipt = 'DEN VARAN FÅR MÄNNISKOR INTE KÖPA'; showMessage('Vanliga människor får bara köpa bil'); return; }
     if (p.inventory[item]) { state.mallReceipt = 'DU ÄGER REDAN DEN VARAN'; showMessage(`Du har redan ${item === 'baton' ? 'en klubba' : item === 'car' ? 'en bil' : 'en helikopter'}`); return; }
     if (p.money < price) { state.mallReceipt = `DU SAKNAR ${price - p.money} PENGAR`; showMessage(`Du behöver ${price - p.money} pengar till`); return; }
-    p.money -= price; p.inventory[item] = true;
-    if (item === 'car') state.vehicles.find(v => v.id === 'shop-car').owner = 'player';
-    if (item === 'helicopter') state.vehicles.find(v => v.id === 'shop-heli').owner = 'player';
+    if (!tryPurchase(p, item, false)) return;
     state.mallReceipt = `KÖPT: ${item === 'baton' ? 'KLUBBA' : item === 'car' ? 'BIL' : 'HELIKOPTER'}`;
     playTone(680, .12, 'triangle');
     showMessage(`Köpet klart: ${item === 'baton' ? 'klubba' : item === 'car' ? 'bil' : 'helikopter'}!`, 3);
@@ -1106,20 +1427,25 @@
   function attack() {
     if (state.mode !== 'playing') return;
     const p = state.player;
-    if (!p.inventory.baton) { showMessage(p.role === 'människa' ? 'Vanliga människor kan inte använda klubbor' : 'Köp en klubba i affären först'); return; }
+    if (!p || p.jailed || p.unconsciousUntil > state.time) return;
+    if (p.vehicleId) { showMessage('Stig ur fordonet för att slå', 1.2); return; }
     if (p.attackCooldown > 0) return;
-    p.attackCooldown = .45;
+    p.attackCooldown = ATTACK_INTERVAL[p.role] || .75;
+    p.attackSwingUntil = state.time + .18;
+    const damage = p.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE;
+    const source = p.inventory.baton ? 'baton' : 'hand';
     const bossDistance = distance(p, state.boss);
     const bossAngle = Math.abs(angleDiff(Math.atan2(state.boss.y - p.y, state.boss.x - p.x), p.angle));
     if (p.role === 'tjuv' && !state.boss.defeated && bossDistance < 2.3 && bossAngle < .55) {
-      state.boss.health--;
+      state.boss.health = Math.max(0, state.boss.health - damage);
+      recordEvent('boss-hit', { attacker: p.id, damage, health: state.boss.health });
       if (state.boss.health <= 0) { state.boss.health = 0; state.boss.defeated = true; showMessage('Polisbossen är besegrad!', 4); checkWin(); }
       else showMessage(`Polisbossen har ${state.boss.health}/20 liv kvar`, 1.2);
       return;
     }
     let target = null, best = 2.05;
     for (const b of state.bots) {
-      if (b.jailed || b.unconsciousUntil > state.time) continue;
+      if (b.jailed || b.unconsciousUntil > state.time || b.vehicleId) continue;
       const d = distance(p, b), a = Math.abs(angleDiff(Math.atan2(b.y - p.y, b.x - p.x), p.angle));
       if (d < best && a < .48) { target = b; best = d; }
     }
@@ -1129,14 +1455,16 @@
         const d = distance(p, v), a = Math.abs(angleDiff(Math.atan2(v.y - p.y, v.x - p.x), p.angle));
         if (!v.destroyed && v.id !== p.vehicleId && d < vehicleDistance && a < .55) { vehicle = v; vehicleDistance = d; }
       }
-      if (vehicle) { vehicle.health--; if (vehicle.health <= 0) destroyVehicle(vehicle); else showMessage(`${vehicle.label}: ${vehicle.health}/10 liv`, 1); return; }
+      if (vehicle) {
+        vehicle.health = Math.max(0, vehicle.health - damage);
+        recordEvent('vehicle-hit', { attacker: p.id, vehicle: vehicle.id, damage, health: vehicle.health });
+        if (vehicle.health <= 0) destroyVehicle(vehicle); else showMessage(`${vehicle.label}: ${vehicle.health}/10 liv`, 1);
+        return;
+      }
       showMessage('Du träffade ingen', 1); return;
     }
-    target.health--;
-    if (target.health <= 0) {
-      if (p.role === 'polis' && target.role === 'tjuv') jailThief(target, p);
-      else { const secs = target.role === 'polis' ? 10 : 5; target.unconsciousUntil = state.time + secs; target.health = 3; showMessage(`${target.role === 'polis' ? 'Polisen' : 'Personen'} svimmade i ${secs} sekunder`); }
-    } else showMessage(`Träff! ${target.health} liv kvar`, 1.2);
+    damagePerson(p, target, damage, source);
+    if (!target.jailed && target.unconsciousUntil <= state.time) showMessage(`${source === 'hand' ? 'Handslag' : 'Klubbslag'}! ${target.health}/3 liv kvar`, 1.2);
   }
 
   window.addEventListener('keydown', e => {
@@ -1221,8 +1549,8 @@
       inventory: state.player.inventory,
     },
     city: {
-      people: 20,
-      bots: state.bots.length,
+      people: state.player ? 1 + state.bots.length : TOTAL_PEOPLE,
+      bots: state.player ? state.bots.length : TOTAL_PEOPLE - 1,
       roleCounts: state.roleCounts,
       mapWidth: MAP_W,
       mapHeight: MAP_H,
@@ -1234,7 +1562,18 @@
         return { id: s.id, label: s.label, type: s.type, x: s.center.x, y: s.center.y, width: s.w, height: s.h, areaTiles: s.w * s.h, areaScale: +(s.w * s.h / oldArea).toFixed(2), doorOpen: doors.get(`${s.door.x},${s.door.y}`)?.open };
       }),
     },
-    nearbyBots: state.player ? state.bots.filter(b => !b.jailed && distance(b, state.player) < 8).map(b => ({ id: b.id, role: b.role, x: +b.x.toFixed(1), y: +b.y.toFixed(1), health: b.health, goal: b.goal, money: b.money, unconsciousSeconds: Math.max(0, +(b.unconsciousUntil - state.time).toFixed(1)) })) : [],
+    nearbyBots: state.player ? state.bots.filter(b => !b.jailed && distance(b, state.player) < 8).map(b => ({
+      id: b.id, role: b.role, x: +b.x.toFixed(1), y: +b.y.toFixed(1), health: b.health, goal: b.goal, money: b.money,
+      vehicle: b.vehicle, vehicleId: b.vehicleId, altitude: +b.altitude.toFixed(1), inventory: b.inventory,
+      faceOffTarget: b.combatTargetId, faceOffSeconds: b.faceOffStartedAt === null ? 0 : +Math.max(0, b.nextMeleeAt - state.time).toFixed(2),
+      lastAttackAt: b.lastAttackAt === null ? null : +b.lastAttackAt.toFixed(2),
+      unconsciousSeconds: Math.max(0, +(b.unconsciousUntil - state.time).toFixed(1)),
+    })) : [],
+    bots: state.bots.map(b => ({
+      id: b.id, role: b.role, x: +b.x.toFixed(1), y: +b.y.toFixed(1), health: b.health, money: b.money, goal: b.goal,
+      jailed: b.jailed, vehicle: b.vehicle, vehicleId: b.vehicleId, altitude: +b.altitude.toFixed(1), preferredVehicle: b.preferredVehicle,
+      inventory: b.inventory, faceOffTarget: b.combatTargetId,
+    })),
     interactives: state.player ? {
       shopOpen: state.shopOpen,
       mallVisits: state.mallVisits,
@@ -1244,11 +1583,17 @@
       jailKeyHolder: state.jailKeyHolder,
       unopenedSafes: state.safes.filter(s => !s.opened).map(s => ({ house: s.house, x: s.x, y: s.y, money: s.money })),
       jailCells: state.jailCells.map(cell => ({ number: cell.index + 1, occupant: cell.occupant, x: cell.x, y: cell.y })),
-      vehicles: state.vehicles.map(v => ({ id: v.id, type: v.type, x: +v.x.toFixed(1), y: +v.y.toFixed(1), health: v.health, owner: v.owner, destroyed: v.destroyed })),
+      vehicles: state.vehicles.map(v => ({
+        id: v.id, type: v.type, x: +v.x.toFixed(1), y: +v.y.toFixed(1), altitude: +(v.altitude || 0).toFixed(1),
+        health: v.health, owner: v.owner, driverId: v.driverId, reservedBy: v.reservedBy, destroyed: v.destroyed,
+      })),
     } : null,
     policeTeam: [state.player, ...state.bots].filter(person => person?.role === 'polis').map(person => ({ id: person.id, money: person.money, captures: person.captures || 0 })),
     accessRules: { allRolesCanEnterOrdinaryHouses: true, policeCanEnterHideout: false, thievesCanEnterPoliceStation: true },
+    combatRules: { handDamage: HAND_DAMAGE, batonDamage: BATON_DAMAGE, faceOffDelay: FACE_OFF_DELAY, policeAttackSeconds: ATTACK_INTERVAL.polis, thiefAttackSeconds: ATTACK_INTERVAL.tjuv },
     lastCapture: state.lastCapture,
+    lastRescue: state.lastRescue,
+    recentEvents: state.events.slice(-12),
     objectives: { stolenMoney: state.stolen, totalSafeMoney: 500, jailedThieves: state.jailedThieves, bossHealth: state.boss.health, bossDefeated: state.boss.defeated },
     message: state.messageUntil > state.time ? state.message : '',
   });
@@ -1258,7 +1603,10 @@
     for (let i = 0; i < steps; i++) update(1 / 60);
     render();
   };
-  window.__wilderTest = { state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, render, doors, structures, places: PLACES };
+  window.__wilderTest = {
+    state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, chooseBotGoal, prepareBotTravel,
+    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, render, doors, structures, places: PLACES,
+  };
   window.__wilderFallback = window.__wilderTest;
 
   let last = performance.now();
