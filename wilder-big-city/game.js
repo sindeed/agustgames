@@ -278,6 +278,7 @@
   function stealHouseSafe(thief, safe) {
     if (!thief || thief.role !== 'tjuv' || !safe || safe.opened) return null;
     safe.opened = true;
+    if ('safeTargetId' in thief) thief.safeTargetId = null;
     thief.money += safe.money;
     state.stolen += safe.money;
     const theft = {
@@ -354,6 +355,7 @@
           nextMeleeAt: Infinity,
           lastAttackAt: null,
           lastDamage: null,
+          safeTargetId: null,
           targetX: p[0],
           targetY: p[1],
           goal: 'vandrar',
@@ -1194,6 +1196,24 @@
     return null;
   }
 
+  function assignedSafeForThief(bot) {
+    if (!bot || bot.role !== 'tjuv') return null;
+    const current = state.safes.find(safe => safe.id === bot.safeTargetId && !safe.opened);
+    if (current) return current;
+    bot.safeTargetId = null;
+    const unopened = state.safes.filter(safe => !safe.opened);
+    if (!unopened.length) return null;
+    const claimed = new Set(state.bots
+      .filter(other => other !== bot && other.role === 'tjuv' && !other.jailed)
+      .map(other => other.safeTargetId)
+      .filter(Boolean));
+    const unclaimed = unopened.filter(safe => !claimed.has(safe.id));
+    const choices = unclaimed.length ? unclaimed : unopened;
+    choices.sort((a, b) => distance(bot, a) - distance(bot, b));
+    bot.safeTargetId = choices[0].id;
+    return choices[0];
+  }
+
   function ownedAvailableVehicle(bot) {
     const allowed = state.vehicles.filter(vehicle => {
       const owned = vehicle.owner === bot.id || (bot.role === 'polis' && vehicle.owner === 'polis');
@@ -1296,18 +1316,19 @@
       }
     }
     if (b.role === 'tjuv') {
+      const nearbyPolice = nearestActive('polis', b, 2.4);
+      if (nearbyPolice) return { type: 'fight', target: nearbyPolice, x: nearbyPolice.x, y: nearbyPolice.y, speed: botMoveSpeed(b) };
       if (state.jailedThieves > 0) {
         if (b.inventory.jailKey) return { type: 'release', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: botMoveSpeed(b) };
         if (!state.jailKeyHolder || state.jailKeyHolder === b.id) return { type: 'key', x: PLACES.jailKey.x, y: PLACES.jailKey.y, speed: botMoveSpeed(b) };
         return { type: 'rescue-support', x: PLACES.jailRelease.x, y: PLACES.jailRelease.y, speed: botMoveSpeed(b) };
       }
-      const nearbyPolice = nearestActive('polis', b, 2.4);
-      if (nearbyPolice) return { type: 'fight', target: nearbyPolice, x: nearbyPolice.x, y: nearbyPolice.y, speed: botMoveSpeed(b) };
+      if (!state.thiefCodesKnown) return { type: 'note', x: PLACES.codeNote.x, y: PLACES.codeNote.y, speed: botMoveSpeed(b) };
+      const safe = assignedSafeForThief(b);
+      if (safe) return { type: 'safe', target: safe, x: safe.x, y: safe.y, speed: botMoveSpeed(b) };
+      // Tjuvbotarna får fortfarande handla, men först när alla kassaskåpspengar är stulna.
       const shoppingItem = botShoppingItem(b);
       if (shoppingItem) return { type: 'shop', item: shoppingItem, x: PLACES.mallCounter.x, y: PLACES.mallCounter.y, speed: botMoveSpeed(b) };
-      if (!state.thiefCodesKnown) return { type: 'note', x: PLACES.codeNote.x, y: PLACES.codeNote.y, speed: botMoveSpeed(b) };
-      const safe = state.safes.filter(item => !item.opened).sort((a, c) => distance(b, a) - distance(b, c))[0];
-      if (safe) return { type: 'safe', target: safe, x: safe.x, y: safe.y, speed: botMoveSpeed(b) };
       if (!state.boss.defeated) return { type: 'boss', target: state.boss, x: state.boss.x, y: state.boss.y, speed: botMoveSpeed(b) };
     }
     if (b.role === 'människa') {
@@ -1437,6 +1458,7 @@
       thief.pendingVehicleId = null;
     }
     thief.health = 3; thief.jailed = true; thief.jailCell = cell.index;
+    if ('safeTargetId' in thief) thief.safeTargetId = null;
     if (thief !== state.player) resetBotFaceOff(thief);
     if (thief.inventory?.jailKey) { thief.inventory.jailKey = false; if (state.jailKeyHolder === thief.id) state.jailKeyHolder = null; }
     cell.occupant = thief === state.player ? 'spelaren' : thief.id;
@@ -1771,7 +1793,7 @@
     bots: state.bots.map(b => ({
       id: b.id, role: b.role, x: +b.x.toFixed(1), y: +b.y.toFixed(1), health: b.health, money: b.money, goal: b.goal,
       jailed: b.jailed, vehicle: b.vehicle, vehicleId: b.vehicleId, altitude: +b.altitude.toFixed(1), preferredVehicle: b.preferredVehicle,
-      inventory: b.inventory, faceOffTarget: b.combatTargetId, homeHouse: homeSafeFor(b)?.house || null,
+      inventory: b.inventory, faceOffTarget: b.combatTargetId, homeHouse: homeSafeFor(b)?.house || null, safeTargetId: b.safeTargetId || null,
     })),
     interactives: state.player ? {
       shopOpen: state.shopOpen,
@@ -1796,6 +1818,10 @@
     },
     combatRules: { handDamage: HAND_DAMAGE, batonDamage: BATON_DAMAGE, faceOffDelay: FACE_OFF_DELAY, policeAttackSeconds: ATTACK_INTERVAL.polis, thiefAttackSeconds: ATTACK_INTERVAL.tjuv },
     movementRules: { policeBot: BOT_MOVE_SPEED.polis, thiefBot: BOT_MOVE_SPEED.tjuv, policeAndThiefBotsSameSpeed: true, thiefSpeedMultiplier: 1 },
+    thiefBotRules: {
+      priorities: ['fight-nearby-police', 'rescue-jailed-thieves', 'read-code-note', 'steal-all-safe-money', 'shop-after-all-safes', 'defeat-police-boss'],
+      shoppingWaitsUntilAllSafesAreEmpty: true,
+    },
     guardRules: { civilianBotsGuardOwnSafe: true, humanPlayerId: 'människa-1', humanPlayerHome: PLAYER_HOME.id, homeTeleportKey: 'H' },
     lastHouseTheft: state.lastHouseTheft,
     lastHomeTeleport: state.lastHomeTeleport,
@@ -1825,7 +1851,7 @@
   };
   window.__wilderTest = {
     state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, chooseBotGoal, prepareBotTravel,
-    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, damageThiefRobot, stealHouseSafe, homeSafeFor, activeThiefInHome,
+    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, damageThiefRobot, stealHouseSafe, homeSafeFor, activeThiefInHome, assignedSafeForThief,
     homeTeleportAvailable, teleportPlayerHome, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES, playerHome: PLAYER_HOME,
     allThievesJailed, canEnterBuilding, checkWin,
   };

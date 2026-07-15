@@ -590,3 +590,20 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   spelartjuv låg kvar i cellen medan polisbotarna avslutade matchen. iPad-provet
   hade 1024 × 768 utan sidscroll och Safari-cachetoken är
   `20260715-wilder-big-city-v7`.
+- Ny Wilder-beställning: tjuvbotarna ska försöka stjäla pengarna ur alla
+  kassaskåp när ingen är fängslad. Om en tjuv fångas ska de avbryta stölden och
+  försöka rädda kompisen; om en polis kommer nära ska de slåss mot polisen.
+- Wilder-v8: tjuvbotarnas målordning är nu nära polis → räddning → kodlapp →
+  alla kassaskåpspengar → galleria → polisboss. De handlar alltså inte innan
+  alla tio kassaskåp är tomma, men den tidigare köp- och bossmekaniken finns
+  kvar efter stölduppdraget.
+- Tjuvbotarna reserverar olika oöppnade kassaskåp, så fem botar inte längre
+  springer till samma hus. Reservationen släpps vid stöld eller gripande och
+  nästa lediga kassaskåp väljs därefter.
+- Wilder-v8 sluttestad utan konsol- eller sidfel. Verifierat: polis inom 2,3
+  rutor ger slagsmål, polis vid 2,5 rutor avbryter inte stölden; tjuven återgår
+  till räddningen efter slagsmålet; nyckel och fritagning fungerar naturligt;
+  en bot stal exakt 50 pengar från Hus 1; alla tio kassaskåp blev tomma utan
+  något förtida köp och tjuvbotarna kunde därefter handla, besegra polisbossen
+  och vinna. Robotfinalen, 4/5/10 roller och iPad 1024 × 768 passerar fortfarande.
+  Safari-cachetoken är `20260715-wilder-big-city-v8`.
