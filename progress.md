@@ -427,3 +427,50 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   obegränsade skott, räckvidd, diagonal riktning, portalövergång, omstart och
   tvåspelarknappar är verifierade utan konsol- eller sidfel. Safari-token är
   `20260714-infinite-bow`.
+
+## Wilder: The Big City
+
+- Original prompt for this game: Bygg ett nytt spel där Wilder är namnet på en
+  stor stad. Spelet ska ses i första person i 3D och göras så verkligt som den
+  första webbläsarversionen klarar.
+- Spelvärlden ska ha exakt 20 personer: fem poliser, fem tjuvar och tio vanliga
+  personer. Spelaren väljer en av dem och de andra 19 styrs av datorn.
+- Staden ska ha exakt 13 byggnader som går att gå in i: tio vanliga hus,
+  polishuset, tjuvhuset och en fordonsaffär.
+- Varje vanligt hus har ett kassaskåp med 50 pengar. Bara tjuvar kan öppna
+  skåpen. Alla tio fyrsiffriga koder finns på en lapp i polishuset.
+- Polishuset har fem fängelseceller och en räddningsnyckel bredvid kodlappen.
+  En fri tjuv kan använda nyckeln för att rädda fängslade tjuvar.
+- Alla personer har tre liv. En tjuv som tappar sista livet efter en polis
+  klubbslag fängslas. En polis svimmar i tio sekunder vid noll liv och en vanlig
+  person i fem sekunder; därefter vaknar personen med tre liv.
+- Poliser har klubba gratis. Tjuvar kan köpa klubba för 10. Vanliga personer
+  kan inte köpa klubba. Bil kostar 20 och helikopter 30; vanliga personer får
+  bara köpa bil. Polisen börjar med en gratis bil, en polishelikopter och
+  klubbor. Poliser och tjuvar börjar med 10 pengar. Arbetsantagande i v1:
+  vanliga personer börjar med 20 så att deras bilköp kan fungera.
+- Bilar och helikoptrar har tio liv, kan köras/flygas och kan explodera.
+- Tjuvarna vinner när alla 500 pengar är stulna ur husen och polisbossen i
+  polishusets sista rum, med 20 liv, är besegrad. Poliserna vinner när alla fem
+  tjuvar sitter i varsin cell. Vanliga personer har inget vinnarmål utan lever i
+  staden, kör och handlar.
+- Första spelbara 3D-versionen är byggd i `wilder-big-city/` och länkad från
+  arkadmenyn. Den har förstapersons-raycasting, karta, mus-/pekdragning,
+  tangentbord och stora touchkontroller för iPad.
+- Alla 13 byggnader, 20 personer och 19 botar finns i samma stora stad. Botarna
+  hittar vägar genom dörrar; poliser jagar/fängslar, tjuvar köper klubba, hämtar
+  koder, öppnar kassaskåp, fritar lagkamrater och attackerar bossen, medan vanliga
+  personer rör sig i staden.
+- Verifierat deterministiskt och i webbläsaren: exakta rollantal, 13 dörrar,
+  affärens priser/rollspärrar inklusive touchköp, tio koder, tio kassaskåp och
+  exakt 500 pengar, fem synliga celler, räddningsnyckel, svimning i 10/5 sekunder,
+  båda vinstvillkoren, bil/helikopter/flygning samt explosion vid 0 av 10 liv.
+  Sluttesterna gav inga konsol- eller sidfel.
+- Botarnas naturliga matcher är också verifierade: med aktiva poliser kan alla
+  fem tjuvar fängslas; med poliserna tillfälligt utslagna köper tjuvbotarna
+  utrustning, stjäl 500 pengar och besegrar 20-livsbossen.
+- V1-förenklingar att förbättra senare: procedurritad 2,5D-grafik i stället för
+  riktiga 3D-modeller, enkel fordonsfysik och inga personliga namn/utseenden för
+  de 20 personerna ännu. En riktig knappsats för att själv skriva in varje
+  kassaskåpskod kan vara nästa spelmekanik; v1 öppnar skåpet automatiskt efter
+  att tjuven har läst kodlappen.

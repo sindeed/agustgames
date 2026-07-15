@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Wilder: The Big City">
+  <meta name="theme-color" content="#101820">
+  <title>Wilder: The Big City</title>
+  <link rel="stylesheet" href="style.css?v=20260715-wilder-v1-final">
+</head>
+<body>
+  <main class="game-shell" aria-label="Wilder: The Big City">
+    <section class="game-frame" aria-label="Spelyta">
+      <canvas
+        id="game"
+        width="1024"
+        height="640"
+        tabindex="0"
+        aria-label="Wilder, en stor 3D-stad där du spelar som polis, tjuv eller vanlig människa"
+      >Din webbläsare behöver kunna visa canvas för att spela Wilder.</canvas>
+
+      <div class="rotate-hint" role="status">
+        <span aria-hidden="true">📱↻</span>
+        <strong>Vrid skärmen åt sidan</strong>
+        <small>Wilder spelas bäst i liggande läge.</small>
+      </div>
+
+      <div class="top-controls" aria-label="Spelinställningar">
+        <a class="arcade-link" href="../" aria-label="Tillbaka till Agust Games">
+          <span aria-hidden="true">‹</span>
+          <span>Spel</span>
+        </a>
+
+        <details class="help-panel">
+          <summary>Hjälp</summary>
+          <div class="help-card">
+            <h1>Välkommen till Wilder!</h1>
+            <p><strong>Wilder är den stora staden.</strong> Välj polis, tjuv eller vanlig människa på startskärmen.</p>
+            <ul>
+              <li><strong>Gå:</strong> använd pilarna till vänster.</li>
+              <li><strong>Titta:</strong> dra över staden eller använd vridknapparna.</li>
+              <li><strong>Använd:</strong> öppna dörrar, kör fordon och handla.</li>
+              <li><strong>Slå:</strong> använd klubban om din roll har en.</li>
+              <li><strong>Helikopter:</strong> använd upp och ner för att flyga.</li>
+            </ul>
+            <p class="keyboard-help">Med tangentbord: WASD, piltangenter, E och mellanslag.</p>
+          </div>
+        </details>
+
+        <div class="utility-buttons">
+          <button id="sound-btn" class="utility-button" type="button" aria-label="Slå av eller på ljudet">
+            <span aria-hidden="true">🔊</span>
+            <span class="utility-label">Ljud</span>
+          </button>
+          <button id="fullscreen-btn" class="utility-button" type="button" aria-label="Visa spelet i helskärm">
+            <span aria-hidden="true">⛶</span>
+            <span class="utility-label">Helskärm</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="touch-controls" aria-label="Pekkontroller">
+        <div class="move-pad" aria-label="Gå">
+          <button class="control-button move-button forward" type="button" data-action="forward" aria-label="Gå framåt">
+            <span class="control-icon" aria-hidden="true">▲</span>
+            <span class="control-label">Framåt</span>
+          </button>
+          <button class="control-button move-button left" type="button" data-action="left" aria-label="Gå åt vänster">
+            <span class="control-icon" aria-hidden="true">◀</span>
+          </button>
+          <button class="control-button move-button right" type="button" data-action="right" aria-label="Gå åt höger">
+            <span class="control-icon" aria-hidden="true">▶</span>
+          </button>
+          <button class="control-button move-button backward" type="button" data-action="backward" aria-label="Gå bakåt">
+            <span class="control-icon" aria-hidden="true">▼</span>
+            <span class="control-label">Bakåt</span>
+          </button>
+        </div>
+
+        <div class="look-controls" aria-label="Titta åt sidan">
+          <button class="control-button look-button" type="button" data-action="turn-left" aria-label="Titta åt vänster">
+            <span aria-hidden="true">↶</span>
+            <span class="control-label">Vrid</span>
+          </button>
+          <button class="control-button look-button" type="button" data-action="turn-right" aria-label="Titta åt höger">
+            <span aria-hidden="true">↷</span>
+            <span class="control-label">Vrid</span>
+          </button>
+        </div>
+
+        <div class="flight-controls" aria-label="Styr helikoptern upp och ner">
+          <button class="control-button flight-button" type="button" data-action="up" aria-label="Flyg uppåt">
+            <span aria-hidden="true">↑</span>
+            <span class="control-label">Upp</span>
+          </button>
+          <button class="control-button flight-button" type="button" data-action="down" aria-label="Flyg neråt">
+            <span aria-hidden="true">↓</span>
+            <span class="control-label">Ner</span>
+          </button>
+        </div>
+
+        <div class="action-controls" aria-label="Gör saker">
+          <button class="control-button action-button interact-button" type="button" data-action="interact">
+            <span class="action-icon" aria-hidden="true">✋</span>
+            <span>Använd</span>
+          </button>
+          <button class="control-button action-button attack-button" type="button" data-action="attack">
+            <span class="action-icon" aria-hidden="true">💥</span>
+            <span>Slå</span>
+          </button>
+        </div>
+      </div>
+
+      <noscript>
+        <p class="noscript-message">JavaScript måste vara på för att spela Wilder.</p>
+      </noscript>
+    </section>
+  </main>
+
+  <script src="game.js?v=20260715-wilder-v1-final"></script>
+</body>
+</html>

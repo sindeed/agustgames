@@ -62,6 +62,37 @@
     }
     .card.soon { opacity: 0.55; border-style: dashed; }
     .card.soon .play { background: #3c4250; color: #aab2c0; }
+    .card.wilder-card {
+      background:
+        linear-gradient(155deg, rgba(40, 71, 88, 0.96), rgba(25, 31, 38, 0.98)),
+        #2a2f3a;
+      border-color: #6b8491;
+    }
+    .card.wilder-card:hover { border-color: #f4c542; }
+    .wilder-title {
+      margin-bottom: 10px;
+      font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+      line-height: 0.82;
+      text-transform: uppercase;
+    }
+    .wilder-title .city-name {
+      display: block;
+      color: #f4c542;
+      font-size: 36px;
+      font-weight: 400;
+      letter-spacing: 0.11em;
+      text-shadow: 0 3px 0 #4c421d;
+    }
+    .wilder-title .game-subtitle {
+      display: block;
+      margin-top: 8px;
+      color: #d9edf5;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.32em;
+      text-shadow: none;
+    }
     footer { margin-top: 44px; color: #6b7384; font-size: 14px; }
   </style>
 </head>
@@ -81,6 +112,16 @@
       <div class="icon">💚</div>
       <h2>Survivor of Days</h2>
       <p>Bygg en bas, köp block i Blockshop och skydda hjärtat i fem dagar.</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
+    <a class="card wilder-card" href="wilder-big-city/">
+      <div class="icon">🏙️</div>
+      <h2 class="wilder-title">
+        <span class="city-name">WILDER</span>
+        <span class="game-subtitle">The Big City</span>
+      </h2>
+      <p>Wilder är den stora staden. Utforska den i 3D som polis, tjuv eller vanlig människa!</p>
       <span class="play">Spela ▶</span>
     </a>
   </div>
