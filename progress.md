@@ -566,3 +566,27 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   väntar en sekund, gör 0,5 skada per handslag och svimmar tjuven utan fängelse.
   Husstöld-, fart-, fordons-, fritagnings- och båda vinsttesterna passerar; med
   poliserna utslagna stal botarna fortfarande 500 och nådde tjuvvinsten.
+- Ny Wilder-beställning: när alla fem tjuvar är fångade ska poliserna först då få
+  gå in i tjuvhuset och besegra en tjuvrobot. Slutligt rollantal ändrades till
+  fyra poliser, fem tjuvar och tio vanliga människor. Polis- och tjuvbotar ska
+  röra sig lika snabbt, men tjuvarna ska vara lite starkare.
+- Wilder-v7: staden har nu 4/5/10 roller (19 personer och 18 botar). Polis- och
+  tjuvbotarnas fart är exakt lika på fot, i bil och i helikopter; tjuvarna behåller
+  stridsfördelen genom slag var 0,5 sekund mot polisernas 1 sekund.
+- Tjuvhuset är spärrat för poliser tills fem tjuvar sitter i de fem cellerna.
+  Femte gripandet håller spelet igång, låser upp dörr, gångväg och landning och
+  aktiverar den nya tjuvroboten med 20 liv. Alla polisbotar prioriterar roboten,
+  använder transport och går in. Polisvinst kräver både 5/5 fångar och besegrad
+  robot; tjuvvinsten 500 pengar + besegrad polisboss är oförändrad.
+- Tjuvroboten har egen 3D-figur, livmätare, HUD-rad och kartmarkör. Den slår bara
+  vakna poliser, gör 1 skada var 1,1 sekund och en utslagen polis svimmar i tio
+  sekunder. Spelarpolisen kan slå roboten med sin klubb och touchknappen fungerar.
+- Wilder-v7 är testad med den officiella Playwright-klienten samt egna
+  regel-, bot- och iPad-landskapstester utan konsol- eller sidfel. Verifierat:
+  låst vid 4/5, upplåst men ingen tidig vinst vid 5/5, spelar- och botattacker,
+  robotens motattack, båda vinstlägena och 4/5/10 roller. Fyra polisbotar vann
+  roboträden naturligt efter cirka 62 spelsekunder; tre polisbotar vann efter
+  cirka 84 sekunder när spelaren var polis men inte hjälpte till. En fängslad
+  spelartjuv låg kvar i cellen medan polisbotarna avslutade matchen. iPad-provet
+  hade 1024 × 768 utan sidscroll och Safari-cachetoken är
+  `20260715-wilder-big-city-v7`.

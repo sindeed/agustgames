@@ -15,14 +15,14 @@
   const MAP_H = 120;
   const CITY_AREA_SCALE = 10;
   const HOUSE_AREA_SCALE = 5;
-  const ROLE_TOTALS = Object.freeze({ polis: 3, tjuv: 5, människa: 10 });
+  const ROLE_TOTALS = Object.freeze({ polis: 4, tjuv: 5, människa: 10 });
   const TOTAL_PEOPLE = Object.values(ROLE_TOTALS).reduce((sum, count) => sum + count, 0);
   const HAND_DAMAGE = 0.5;
   const BATON_DAMAGE = 1;
   const FACE_OFF_DELAY = 1;
   const ATTACK_INTERVAL = Object.freeze({ polis: 1, tjuv: 0.5, människa: 0.75 });
   const BOT_MOVE_SPEED = Object.freeze({
-    polis: Object.freeze({ foot: 1.25, car: 5, helicopter: 5.5 }),
+    polis: Object.freeze({ foot: 1.5, car: 6, helicopter: 6.6 }),
     tjuv: Object.freeze({ foot: 1.5, car: 6, helicopter: 6.6 }),
     människa: Object.freeze({ foot: 0.72, car: 4.7, helicopter: 5.6 }),
   });
@@ -54,6 +54,7 @@
     mall: { x: 63, y: 88, w: 27, h: 18, doorX: 76 },
     hideout: { x: 117, y: 86, w: 27, h: 20, doorX: 130 },
     boss: { x: 21.5, y: 90.5 },
+    thiefRobot: { x: 130.5, y: 92.5 },
     bossWallY: 94,
     codeNote: { x: 11.5, y: 98.5 },
     jailKey: { x: 15.5, y: 98.5 },
@@ -89,6 +90,10 @@
     events: [],
     mallReceipt: '',
     boss: { x: PLACES.boss.x, y: PLACES.boss.y, health: 20, maxHealth: 20, defeated: false, cooldown: 0 },
+    thiefRobot: {
+      id: 'tjuvrobot', role: 'robot', x: PLACES.thiefRobot.x, y: PLACES.thiefRobot.y,
+      health: 20, maxHealth: 20, defeated: false, cooldown: 0,
+    },
     lastHouseTheft: null,
     lastHomeTeleport: null,
     jailCells: [[11.5, 102.5], [15.5, 102.5], [19.5, 102.5], [23.5, 102.5], [27.5, 102.5]]
@@ -230,9 +235,13 @@
     return structures.find(s => x > s.x && x < s.x + s.w - 1 && y > s.y && y < s.y + s.h - 1) || null;
   }
 
+  function allThievesJailed() {
+    return state.jailedThieves >= ROLE_TOTALS.tjuv;
+  }
+
   function canEnterBuilding(person, building) {
     if (!person || !building) return true;
-    return !(person.role === 'polis' && building.type === 'hideout');
+    return !(person.role === 'polis' && building.type === 'hideout' && !allThievesJailed());
   }
 
   function canPersonStand(person, x, y, radius = 0.23, ignoreWalls = false) {
@@ -301,7 +310,7 @@
     state.mode = 'playing';
     state.messageUntil = 0;
     makeBots(role);
-    showMessage(role === 'polis' ? 'Du är polis: fånga alla fem tjuvar!' : role === 'tjuv' ? 'Du är tjuv: hitta koderna och stjäl 500 pengar!' : 'Du är Människa 1. Hus 1 är ditt hem och du vaktar kassaskåpet!', 6);
+    showMessage(role === 'polis' ? 'Du är polis: fånga fem tjuvar och besegra tjuvroboten!' : role === 'tjuv' ? 'Du är tjuv: hitta koderna och stjäl 500 pengar!' : 'Du är Människa 1. Hus 1 är ditt hem och du vaktar kassaskåpet!', 6);
     canvas.focus();
   }
 
@@ -392,7 +401,7 @@
     ctx.font = `700 ${Math.round(h * 0.033)}px system-ui`; ctx.fillStyle = '#bce6ff'; ctx.fillText('THE BIG CITY', w / 2, h * 0.225);
     ctx.font = `600 ${Math.round(h * 0.026)}px system-ui`; ctx.fillStyle = '#fff'; ctx.fillText('Vem vill du vara?', w / 2, h * 0.31);
     const roles = [
-      { role: 'polis', title: 'POLIS', count: '3 poliser', color: '#2f79d3', key: '1', note: 'Bil, helikopter och klubba' },
+      { role: 'polis', title: 'POLIS', count: '4 poliser', color: '#2f79d3', key: '1', note: 'Bil, helikopter och klubba' },
       { role: 'tjuv', title: 'TJUV', count: '5 tjuvar', color: '#a73c47', key: '2', note: 'Stjäl 500 pengar' },
       { role: 'människa', title: 'MÄNNISKA', count: '10 människor', color: '#36966a', key: '3', note: 'Hus 1 blir ditt hem' },
     ];
@@ -585,12 +594,13 @@
     furniture.forEach(item => sprites.push({ ...item }));
     cityProps.forEach(item => sprites.push({ ...item }));
     if (!state.boss.defeated) sprites.push({ kind: 'boss', ...state.boss });
+    if (!state.thiefRobot.defeated) sprites.push({ kind: 'thiefRobot', active: allThievesJailed(), ...state.thiefRobot });
     sprites.push({ kind: 'pickup', x: PLACES.codeNote.x, y: PLACES.codeNote.y, label: 'KODLAPP', color: '#f2e7b3' });
     if (!state.jailKeyHolder) sprites.push({ kind: 'pickup', x: PLACES.jailKey.x, y: PLACES.jailKey.y, label: 'NYCKEL', color: '#f2c94c' });
     state.jailCells.forEach(cell => sprites.push({ kind: 'cell', ...cell, label: `CELL ${cell.index + 1}` }));
     sprites.sort((a, b) => distance(b, state.player) - distance(a, state.player));
     for (const s of sprites) {
-      const scale = s.kind === 'sign' ? .48 : s.kind === 'safe' || s.kind === 'pickup' ? .42 : s.kind === 'cell' ? .42 : s.kind === 'boss' ? 1.05 : s.kind === 'vehicle' ? .7 : s.kind === 'tree' ? 1.35 : s.kind === 'lamp' ? 1.15 : s.kind === 'furniture' ? .5 : .62;
+      const scale = s.kind === 'sign' ? .48 : s.kind === 'safe' || s.kind === 'pickup' ? .42 : s.kind === 'cell' ? .42 : s.kind === 'thiefRobot' ? 1.15 : s.kind === 'boss' ? 1.05 : s.kind === 'vehicle' ? .7 : s.kind === 'tree' ? 1.35 : s.kind === 'lamp' ? 1.15 : s.kind === 'furniture' ? .5 : .62;
       const pr = projectSprite(s.x, s.y, scale);
       if (!pr) continue;
       if (s.kind === 'sign') {
@@ -660,6 +670,29 @@
         if (s.style === 'sofa' || s.style === 'bed') { ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(pr.screenX - sw * .42, y + sh * .08, sw * .84, sh * .17); }
         if (s.style === 'crate') { ctx.strokeStyle = '#4d321c'; ctx.lineWidth = Math.max(1, sh * .03); ctx.strokeRect(pr.screenX - sw / 2, y, sw, sh * .5); }
         if (s.style === 'counter') { ctx.fillStyle = '#fff0b0'; ctx.font = `800 ${clamp(sh * .12, 8, 13)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText('KÖP HÄR', pr.screenX, y - 5); }
+      } else if (s.kind === 'thiefRobot') {
+        const sh = clamp(pr.size, 28, canvas.height * 1.25), sw = sh * .5, y = horizon - sh * .58;
+        ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(pr.screenX, horizon + sh * .43, sw * .82, sh * .12, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#242b30'; ctx.fillRect(pr.screenX - sw * .58, y + sh * .32, sw * 1.16, sh * .49);
+        ctx.fillStyle = '#7c2633'; ctx.fillRect(pr.screenX - sw * .48, y + sh * .39, sw * .96, sh * .2);
+        ctx.fillStyle = '#171d21'; ctx.fillRect(pr.screenX - sw * .43, y + sh * .05, sw * .86, sh * .28);
+        ctx.strokeStyle = '#aeb8bd'; ctx.lineWidth = Math.max(2, sw * .055); ctx.strokeRect(pr.screenX - sw * .43, y + sh * .05, sw * .86, sh * .28);
+        ctx.strokeStyle = '#9da7ac'; ctx.lineWidth = Math.max(2, sw * .05); ctx.beginPath(); ctx.moveTo(pr.screenX, y + sh * .05); ctx.lineTo(pr.screenX, y - sh * .08); ctx.stroke();
+        ctx.fillStyle = s.active ? '#ff3349' : '#792631'; ctx.beginPath(); ctx.arc(pr.screenX, y - sh * .1, sw * .06, 0, TAU); ctx.fill();
+        ctx.fillStyle = s.active ? '#ff3047' : '#69252d';
+        ctx.fillRect(pr.screenX - sw * .27, y + sh * .16, sw * .16, sh * .055); ctx.fillRect(pr.screenX + sw * .11, y + sh * .16, sw * .16, sh * .055);
+        ctx.strokeStyle = '#343c41'; ctx.lineWidth = Math.max(5, sw * .15); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(pr.screenX - sw * .52, y + sh * .42); ctx.lineTo(pr.screenX - sw * .88, y + sh * .68); ctx.moveTo(pr.screenX + sw * .52, y + sh * .42); ctx.lineTo(pr.screenX + sw * .88, y + sh * .68); ctx.stroke();
+        ctx.strokeStyle = '#aeb8bd'; ctx.lineWidth = Math.max(2, sw * .055); ctx.beginPath();
+        ctx.moveTo(pr.screenX - sw * .88, y + sh * .68); ctx.lineTo(pr.screenX - sw * 1.02, y + sh * .61); ctx.moveTo(pr.screenX - sw * .88, y + sh * .68); ctx.lineTo(pr.screenX - sw * 1.03, y + sh * .76);
+        ctx.moveTo(pr.screenX + sw * .88, y + sh * .68); ctx.lineTo(pr.screenX + sw * 1.02, y + sh * .61); ctx.moveTo(pr.screenX + sw * .88, y + sh * .68); ctx.lineTo(pr.screenX + sw * 1.03, y + sh * .76); ctx.stroke(); ctx.lineCap = 'butt';
+        ctx.fillStyle = '#1b2125'; ctx.fillRect(pr.screenX - sw * .48, y + sh * .79, sw * .35, sh * .25); ctx.fillRect(pr.screenX + sw * .13, y + sh * .79, sw * .35, sh * .25);
+        const barW = sw * 1.75;
+        ctx.fillStyle = 'rgba(9,13,16,.9)'; ctx.fillRect(pr.screenX - barW / 2 - 3, y - 8, barW + 6, 24);
+        ctx.fillStyle = '#8b2734'; ctx.fillRect(pr.screenX - barW / 2, y + 8, barW, 7);
+        ctx.fillStyle = '#55d36d'; ctx.fillRect(pr.screenX - barW / 2, y + 8, barW * s.health / s.maxHealth, 7);
+        ctx.fillStyle = '#fff'; ctx.font = `900 ${clamp(sh * .09, 9, 15)}px system-ui`; ctx.textAlign = 'center';
+        ctx.fillText(`TJUVROBOT ${s.health}/${s.maxHealth}`, pr.screenX, y + 5);
       } else if (s.kind === 'boss') {
         const sh = clamp(pr.size, 22, canvas.height * 1.2), sw = sh * .42, y = horizon - sh * .55;
         ctx.fillStyle = '#152b4f'; ctx.fillRect(pr.screenX - sw / 2, y + sh * .28, sw, sh * .58);
@@ -729,7 +762,7 @@
     ctx.fillStyle = 'rgba(5,13,19,.78)'; ctx.fillRect(w - 258, hudTop, 240, 76);
     ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.max(13, h * .019)}px system-ui`;
     ctx.fillText(`Tjuvar i fängelse: ${state.jailedThieves}/5`, w - 240, hudTop + 27);
-    ctx.fillText(`Stulna pengar: ${state.stolen}/500`, w - 240, hudTop + 54);
+    ctx.fillText(allThievesJailed() ? `Tjuvrobot: ${state.thiefRobot.health}/20` : `Stulna pengar: ${state.stolen}/500`, w - 240, hudTop + 54);
     if (state.message && state.messageUntil > state.time) {
       ctx.font = `700 ${Math.max(15, h * .024)}px system-ui`; const tw = Math.min(w - 60, ctx.measureText(state.message).width + 40);
       const messageY = h - 154;
@@ -762,6 +795,10 @@
       if (bot.x < sx || bot.x > sx + viewW || bot.y < sy || bot.y > sy + viewH) continue;
       ctx.fillStyle = bot.role === 'polis' ? '#54a7ff' : bot.role === 'tjuv' ? '#ff6570' : '#55d997';
       ctx.fillRect(x + (bot.x - sx) * scaleX - 2, y + (bot.y - sy) * scaleY - 2, 4, 4);
+    }
+    if (allThievesJailed() && !state.thiefRobot.defeated && state.thiefRobot.x >= sx && state.thiefRobot.x <= sx + viewW && state.thiefRobot.y >= sy && state.thiefRobot.y <= sy + viewH) {
+      const rx = x + (state.thiefRobot.x - sx) * scaleX, ry = y + (state.thiefRobot.y - sy) * scaleY;
+      ctx.save(); ctx.translate(rx, ry); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#ff3047'; ctx.fillRect(-4, -4, 8, 8); ctx.restore();
     }
     ctx.translate(x + (state.player.x - sx) * scaleX, y + (state.player.y - sy) * scaleY);
     ctx.rotate(state.player.angle);
@@ -821,7 +858,7 @@
       ctx.font = `500 ${Math.max(13, h * .02)}px system-ui`; ctx.fillStyle = '#b8d2df'; ctx.fillText('E för att stänga lappen', w / 2, y + ph - 30);
     } else if (state.mode === 'police-win' || state.mode === 'thief-win') {
       ctx.font = `900 ${Math.max(30, h * .07)}px system-ui`; ctx.fillStyle = '#ffd75d'; ctx.fillText(state.mode === 'police-win' ? 'POLISERNA VANN!' : 'TJUVLIGAN VANN!', w / 2, y + ph * .38);
-      ctx.font = `600 ${Math.max(16, h * .028)}px system-ui`; ctx.fillStyle = '#fff'; ctx.fillText(state.mode === 'police-win' ? 'Alla fem tjuvar sitter i fängelse.' : 'Alla pengar är stulna och polisbossen är besegrad.', w / 2, y + ph * .55);
+      ctx.font = `600 ${Math.max(16, h * .028)}px system-ui`; ctx.fillStyle = '#fff'; ctx.fillText(state.mode === 'police-win' ? 'Fem tjuvar är fångade och tjuvroboten är besegrad.' : 'Alla pengar är stulna och polisbossen är besegrad.', w / 2, y + ph * .55);
       const bw = 230, bh = 48, bx = w / 2 - bw / 2, by = y + ph * .67;
       state.overlayButtons.push({ action: 'restart', x: bx, y: by, w: bw, h: bh });
       ctx.fillStyle = '#ffd75d'; ctx.fillRect(bx, by, bw, bh);
@@ -856,7 +893,7 @@
     if (p.vehicle === 'helicopter') {
       if (keys.FlyUp || keys.KeyR) p.altitude = clamp(p.altitude + dt * .75, 0, 2);
       if (keys.FlyDown || keys.KeyC) {
-        const overForbiddenHideout = p.role === 'polis' && currentBuildingAt(p.x, p.y)?.type === 'hideout';
+        const overForbiddenHideout = p.role === 'polis' && !allThievesJailed() && currentBuildingAt(p.x, p.y)?.type === 'hideout';
         p.altitude = clamp(p.altitude - dt * .75, overForbiddenHideout ? .65 : 0, 2);
       }
     }
@@ -969,7 +1006,7 @@
     let waypoint = b.path[0] || target;
     if (Math.hypot(waypoint.x - b.x, waypoint.y - b.y) < .16 && b.path.length) { b.path.shift(); waypoint = b.path[0] || target; }
     const door = doors.get(`${Math.floor(waypoint.x)},${Math.floor(waypoint.y)}`);
-    if (door && !(b.role === 'polis' && door.buildingType === 'hideout')) door.open = true;
+    if (door && !(b.role === 'polis' && door.buildingType === 'hideout' && !allThievesJailed())) door.open = true;
     const angle = Math.atan2(waypoint.y - b.y, waypoint.x - b.x); b.angle = angle;
     const nx = b.x + Math.cos(angle) * speed * dt, ny = b.y + Math.sin(angle) * speed * dt;
     const canMove = b.vehicle === 'car'
@@ -1050,6 +1087,21 @@
     return true;
   }
 
+  function damageThiefRobot(attacker, damage = BATON_DAMAGE) {
+    const robot = state.thiefRobot;
+    if (!attacker || attacker.role !== 'polis' || !allThievesJailed() || robot.defeated) return false;
+    robot.health = Math.max(0, +(robot.health - damage).toFixed(2));
+    recordEvent('thief-robot-hit', { attacker: attacker.id, damage, health: robot.health });
+    if (robot.health <= 0) {
+      robot.health = 0;
+      robot.defeated = true;
+      recordEvent('thief-robot-defeated', { attacker: attacker.id });
+      showMessage('Tjuvroboten är besegrad! Poliserna vann!', 5);
+      checkWin();
+    }
+    return true;
+  }
+
   function exitVehicle(person, reason = 'parked') {
     if (!person?.vehicleId) return null;
     const vehicle = state.vehicles.find(candidate => candidate.id === person.vehicleId);
@@ -1064,6 +1116,11 @@
     person.vehicle = null;
     person.vehicleId = null;
     person.altitude = 0;
+    if (person.role === 'polis' && !allThievesJailed() && currentBuildingAt(person.x, person.y)?.type === 'hideout') {
+      person.x = hideout.door.x + .5;
+      person.y = hideout.door.y + 1.7;
+      person.angle = -Math.PI / 2;
+    }
     if ('pendingVehicleId' in person) person.pendingVehicleId = null;
     recordEvent('vehicle-exit', { person: person.id, vehicle: oldId, reason });
     return vehicle;
@@ -1196,6 +1253,17 @@
       state.player.x = PLACES.jailRelease.x; state.player.y = PLACES.jailRelease.y - 2.2; freed++;
     }
     state.jailedThieves = Math.max(0, state.jailedThieves - freed);
+    if (freed && !allThievesJailed()) {
+      for (const police of [state.player, ...state.bots].filter(person => person?.role === 'polis' && currentBuildingAt(person.x, person.y)?.type === 'hideout')) {
+        if (police.vehicleId) exitVehicle(police, 'hideout-relocked');
+        else {
+          police.x = hideout.door.x + .5;
+          police.y = hideout.door.y + 1.7;
+          police.angle = -Math.PI / 2;
+          if (police.path) police.path = [];
+        }
+      }
+    }
     state.jailKeyHolder = null; state.player.inventory.jailKey = false;
     for (const thief of state.bots.filter(person => person.role === 'tjuv')) thief.inventory.jailKey = false;
     if (freed) {
@@ -1208,6 +1276,12 @@
 
   function chooseBotGoal(b) {
     if (b.role === 'polis') {
+      if (allThievesJailed() && !state.thiefRobot.defeated) {
+        return {
+          type: 'thief-robot', target: state.thiefRobot,
+          x: state.thiefRobot.x, y: state.thiefRobot.y, speed: botMoveSpeed(b),
+        };
+      }
       const thief = nearestActive('tjuv', b);
       if (thief) {
         const thiefBuilding = currentBuildingAt(thief.x, thief.y);
@@ -1286,12 +1360,15 @@
         recordEvent('boss-hit', { attacker: b.id, damage: b.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE, health: state.boss.health });
         if (state.boss.health <= 0) { state.boss.health = 0; state.boss.defeated = true; showMessage(`${b.id} besegrade polisbossen!`, 4); checkWin(); }
       }
-      const isMelee = mission.type === 'chase' || mission.type === 'fight';
-      const meleeDistance = mission.type === 'chase' ? .82 : .9;
+      const isRobotMelee = mission.type === 'thief-robot';
+      const isMelee = mission.type === 'chase' || mission.type === 'fight' || isRobotMelee;
+      const meleeDistance = mission.type === 'chase' ? .82 : isRobotMelee ? 1.15 : .9;
       if (isMelee && distance(b, mission.target) < meleeDistance) {
         const interval = ATTACK_INTERVAL[b.role] || .75;
         if (botMeleeReady(b, mission.target, interval)) {
-          if (mission.target.vehicleId) {
+          if (isRobotMelee) {
+            damageThiefRobot(b, BATON_DAMAGE);
+          } else if (mission.target.vehicleId) {
             const vehicle = state.vehicles.find(candidate => candidate.id === mission.target.vehicleId);
             const damage = b.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE;
             if (vehicle) {
@@ -1327,6 +1404,26 @@
         if (bossTarget.health <= 0) jailThief(bossTarget);
       }
     }
+    const robot = state.thiefRobot;
+    robot.cooldown = Math.max(0, robot.cooldown - dt);
+    const robotTarget = allThievesJailed() && !robot.defeated ? nearestActive('polis', robot, 1.55) : null;
+    if (robotTarget && robot.cooldown <= 0) {
+      robot.cooldown = 1.1;
+      if (robotTarget.vehicleId) {
+        const vehicle = state.vehicles.find(candidate => candidate.id === robotTarget.vehicleId);
+        if (vehicle) {
+          vehicle.health = Math.max(0, vehicle.health - 1);
+          recordEvent('thief-robot-attack', { target: robotTarget.id, vehicle: vehicle.id, damage: 1, health: vehicle.health });
+          if (vehicle.health <= 0) destroyVehicle(vehicle);
+        } else {
+          exitVehicle(robotTarget, 'missing');
+        }
+      } else {
+        damagePerson(robot, robotTarget, 1, 'robot');
+        recordEvent('thief-robot-attack', { target: robotTarget.id, damage: 1, health: robotTarget.health });
+        if (robotTarget === state.player && robotTarget.unconsciousUntil <= state.time) showMessage(`Tjuvroboten träffade dig! ${robotTarget.health}/3 liv`, 1);
+      }
+    }
   }
 
   function jailThief(thief, captor = null) {
@@ -1344,7 +1441,8 @@
     if (thief.inventory?.jailKey) { thief.inventory.jailKey = false; if (state.jailKeyHolder === thief.id) state.jailKeyHolder = null; }
     cell.occupant = thief === state.player ? 'spelaren' : thief.id;
     thief.x = cell.x; thief.y = cell.y;
-    state.jailedThieves = clamp(state.jailedThieves + 1, 0, 5);
+    const unlockedRaid = !allThievesJailed() && state.jailedThieves + 1 >= ROLE_TOTALS.tjuv;
+    state.jailedThieves = clamp(state.jailedThieves + 1, 0, ROLE_TOTALS.tjuv);
     let rewardText = '';
     if (captor?.role === 'polis') {
       captor.money += 10;
@@ -1353,7 +1451,12 @@
     }
     state.lastCapture = { thief: thief.id, captor: captor?.id || 'polisbossen', reward: captor?.role === 'polis' ? 10 : 0 };
     recordEvent('capture', state.lastCapture);
-    showMessage(`${thief === state.player ? 'Du har blivit fångad!' : `${thief.id} skickades till fängelset!`}${rewardText}`, 4);
+    if (unlockedRaid) {
+      recordEvent('thief-robot-activated', { health: state.thiefRobot.health });
+      showMessage(`Alla fem tjuvar är fångade!${rewardText} Tjuvhuset är upplåst – besegra tjuvroboten!`, 7);
+    } else {
+      showMessage(`${thief === state.player ? 'Du har blivit fångad!' : `${thief.id} skickades till fängelset!`}${rewardText}`, 4);
+    }
     checkWin();
     return true;
   }
@@ -1371,7 +1474,7 @@
 
   function checkWin() {
     const oldMode = state.mode;
-    if (state.jailedThieves >= 5) state.mode = 'police-win';
+    if (allThievesJailed() && state.thiefRobot.defeated) state.mode = 'police-win';
     else if (state.stolen >= 500 && state.boss.defeated) state.mode = 'thief-win';
     if (state.mode !== oldMode) playTone(740, .45, 'triangle');
   }
@@ -1426,7 +1529,7 @@
     if (state.codesOpen) { state.codesOpen = false; return; }
     if (p.jailed || p.unconsciousUntil > state.time) return;
     if (p.vehicleId) {
-      if (p.role === 'polis' && currentBuildingAt(p.x, p.y)?.type === 'hideout') {
+      if (p.role === 'polis' && !allThievesJailed() && currentBuildingAt(p.x, p.y)?.type === 'hideout') {
         showMessage('Poliser får flyga över tjuvhuset, men inte landa eller gå in!', 4);
         return;
       }
@@ -1486,8 +1589,8 @@
       if (d < best) { best = d; nearest = door; }
     }
     if (nearest) {
-      if (p.role === 'polis' && nearest.buildingType === 'hideout') {
-        showMessage('STOPP: poliser får inte gå in i tjuvhuset!', 4);
+      if (p.role === 'polis' && nearest.buildingType === 'hideout' && !allThievesJailed()) {
+        showMessage('Fånga alla fem tjuvar först! Då låses tjuvhuset upp.', 4);
         return;
       }
       nearest.open = !nearest.open; playTone(nearest.open ? 420 : 280, .08, 'square');
@@ -1520,6 +1623,13 @@
     p.attackSwingUntil = state.time + .18;
     const damage = p.inventory.baton ? BATON_DAMAGE : HAND_DAMAGE;
     const source = p.inventory.baton ? 'baton' : 'hand';
+    const robotDistance = distance(p, state.thiefRobot);
+    const robotAngle = Math.abs(angleDiff(Math.atan2(state.thiefRobot.y - p.y, state.thiefRobot.x - p.x), p.angle));
+    if (p.role === 'polis' && allThievesJailed() && !state.thiefRobot.defeated && robotDistance < 2.3 && robotAngle < .55) {
+      damageThiefRobot(p, damage);
+      if (!state.thiefRobot.defeated) showMessage(`Tjuvroboten har ${state.thiefRobot.health}/20 liv kvar`, 1.2);
+      return;
+    }
     const bossDistance = distance(p, state.boss);
     const bossAngle = Math.abs(angleDiff(Math.atan2(state.boss.y - p.y, state.boss.x - p.x), p.angle));
     if (p.role === 'tjuv' && !state.boss.defeated && bossDistance < 2.3 && bossAngle < .55) {
@@ -1678,16 +1788,33 @@
       })),
     } : null,
     policeTeam: [state.player, ...state.bots].filter(person => person?.role === 'polis').map(person => ({ id: person.id, money: person.money, captures: person.captures || 0 })),
-    accessRules: { allRolesCanEnterOrdinaryHouses: true, policeCanEnterHideout: false, thievesCanEnterPoliceStation: true },
+    accessRules: {
+      allRolesCanEnterOrdinaryHouses: true,
+      policeCanEnterHideout: allThievesJailed(),
+      policeHideoutUnlockAtJailedThieves: ROLE_TOTALS.tjuv,
+      thievesCanEnterPoliceStation: true,
+    },
     combatRules: { handDamage: HAND_DAMAGE, batonDamage: BATON_DAMAGE, faceOffDelay: FACE_OFF_DELAY, policeAttackSeconds: ATTACK_INTERVAL.polis, thiefAttackSeconds: ATTACK_INTERVAL.tjuv },
-    movementRules: { policeBot: BOT_MOVE_SPEED.polis, thiefBot: BOT_MOVE_SPEED.tjuv, thiefSpeedMultiplier: 1.2 },
+    movementRules: { policeBot: BOT_MOVE_SPEED.polis, thiefBot: BOT_MOVE_SPEED.tjuv, policeAndThiefBotsSameSpeed: true, thiefSpeedMultiplier: 1 },
     guardRules: { civilianBotsGuardOwnSafe: true, humanPlayerId: 'människa-1', humanPlayerHome: PLAYER_HOME.id, homeTeleportKey: 'H' },
     lastHouseTheft: state.lastHouseTheft,
     lastHomeTeleport: state.lastHomeTeleport,
     lastCapture: state.lastCapture,
     lastRescue: state.lastRescue,
     recentEvents: state.events.slice(-12),
-    objectives: { stolenMoney: state.stolen, totalSafeMoney: 500, jailedThieves: state.jailedThieves, bossHealth: state.boss.health, bossDefeated: state.boss.defeated },
+    objectives: {
+      stolenMoney: state.stolen, totalSafeMoney: 500, jailedThieves: state.jailedThieves,
+      bossHealth: state.boss.health, bossDefeated: state.boss.defeated,
+      hideoutUnlockedForPolice: allThievesJailed(),
+      thiefRobotActive: allThievesJailed() && !state.thiefRobot.defeated,
+      thiefRobotHealth: state.thiefRobot.health,
+      thiefRobotDefeated: state.thiefRobot.defeated,
+    },
+    thiefRobot: {
+      id: state.thiefRobot.id, x: state.thiefRobot.x, y: state.thiefRobot.y,
+      health: state.thiefRobot.health, maxHealth: state.thiefRobot.maxHealth,
+      active: allThievesJailed() && !state.thiefRobot.defeated, defeated: state.thiefRobot.defeated,
+    },
     message: state.messageUntil > state.time ? state.message : '',
   });
   window.advanceTime = ms => {
@@ -1698,8 +1825,9 @@
   };
   window.__wilderTest = {
     state, chooseRole, interact, attack, buy, jailThief, freeAllThieves, findBotPath, chooseBotGoal, prepareBotTravel,
-    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, stealHouseSafe, homeSafeFor, activeThiefInHome,
+    tryPurchase, enterBotVehicle, exitVehicle, botMeleeReady, damagePerson, damageThiefRobot, stealHouseSafe, homeSafeFor, activeThiefInHome,
     homeTeleportAvailable, teleportPlayerHome, botMoveSpeed, moveBotTo, render, doors, structures, places: PLACES, playerHome: PLAYER_HOME,
+    allThievesJailed, canEnterBuilding, checkWin,
   };
   window.__wilderFallback = window.__wilderTest;
 
