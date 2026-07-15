@@ -28,6 +28,20 @@
   var MAX_RAINBOW_FISH = 3;
   var STARTING_HEARTS = 3;
   var MAX_HEARTS = 8;
+  var FP_FOV = 70 * Math.PI / 180;
+  var FP_NEAR = 12;
+  var FP_FAR = 1150;
+  var FP_HORIZON = 246;
+  var FP_PROJECTION = VIEW_W / (2 * Math.tan(FP_FOV / 2));
+  var FP_RAY_STRIDE = 3;
+  var fpGroundCanvas = document.createElement("canvas");
+  fpGroundCanvas.width = 120;
+  fpGroundCanvas.height = 48;
+  var fpGroundContext = fpGroundCanvas.getContext("2d");
+  var FP_TERRAIN_W = 192;
+  var FP_TERRAIN_H = 120;
+  var fpTerrainPixels = null;
+  var fpDepthBuffer = new Float32Array(VIEW_W);
   var keys = new Set();
   var state = null;
   var manualTime = false;
@@ -38,6 +52,7 @@
   var soundEnabled = true;
   var audioContext = null;
   var selectedCharacter = "girl";
+  var prefersReducedMotion = Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   function clamp(value, low, high) {
     return Math.max(low, Math.min(high, value));
@@ -406,8 +421,10 @@
         x: 355,
         y: 2030,
         character: selectedCharacter,
+        viewAngle: 0,
         facingX: 1,
         facingY: 0,
+        moving: false,
         hearts: STARTING_HEARTS,
         maxHearts: MAX_HEARTS,
         food: 0,
@@ -476,6 +493,8 @@
     if (mode !== "playing") {
       state.mapOpen = false;
       mapButton.textContent = "🗺️";
+      mapButton.setAttribute("aria-label", "Open world map");
+      releasePointerLock();
     }
     document.body.classList.toggle("map-open", state.mapOpen);
     startScreen.classList.toggle("hidden", mode !== "title");
@@ -490,6 +509,7 @@
     mapButton.setAttribute("aria-label", "Open world map");
     syncCamera();
     setMode("playing");
+    showToast("FIRST PERSON • Click to look • W/S walk • E talks", 4.2);
     unlockAudio();
     playTone(392, 0.12, "sine", 0.05);
     canvas.focus();
@@ -510,6 +530,7 @@
   function toggleWorldMap() {
     if (state.mode !== "playing" || state.dialog) return;
     state.mapOpen = !state.mapOpen;
+    if (state.mapOpen) releasePointerLock();
     document.body.classList.toggle("map-open", state.mapOpen);
     keys.clear();
     mapButton.textContent = state.mapOpen ? "✕" : "🗺️";
@@ -1248,24 +1269,50 @@
     render();
   }
 
+  function normalizeViewAngle(angle) {
+    while (angle > Math.PI) angle -= Math.PI * 2;
+    while (angle <= -Math.PI) angle += Math.PI * 2;
+    return angle;
+  }
+
+  function setPlayerViewAngle(angle) {
+    state.player.viewAngle = normalizeViewAngle(angle);
+    state.player.facingX = Math.cos(state.player.viewAngle);
+    state.player.facingY = Math.sin(state.player.viewAngle);
+  }
+
   function updatePlayer(dt) {
-    var xDirection = 0;
-    var yDirection = 0;
-    if (keys.has("ArrowLeft") || keys.has("KeyA")) xDirection -= 1;
-    if (keys.has("ArrowRight") || keys.has("KeyD")) xDirection += 1;
-    if (keys.has("ArrowUp") || keys.has("KeyW")) yDirection -= 1;
-    if (keys.has("ArrowDown") || keys.has("KeyS")) yDirection += 1;
-    if (xDirection || yDirection) {
+    var forward = 0;
+    var strafe = 0;
+    var turn = 0;
+    if (keys.has("ArrowUp") || keys.has("KeyW")) forward += 1;
+    if (keys.has("ArrowDown") || keys.has("KeyS")) forward -= 1;
+    if (keys.has("KeyA")) strafe -= 1;
+    if (keys.has("KeyD")) strafe += 1;
+    if (keys.has("ArrowLeft")) turn -= 1;
+    if (keys.has("ArrowRight")) turn += 1;
+
+    if (turn) {
+      var turnSpeed = getMountedHorse() ? 1.95 : 2.45;
+      setPlayerViewAngle(state.player.viewAngle + turn * turnSpeed * dt);
+    } else {
+      setPlayerViewAngle(state.player.viewAngle);
+    }
+
+    var xDirection = state.player.facingX * forward - state.player.facingY * strafe;
+    var yDirection = state.player.facingY * forward + state.player.facingX * strafe;
+    var wantsToMove = Boolean(xDirection || yDirection);
+    state.player.moving = false;
+    if (wantsToMove) {
       var length = Math.hypot(xDirection, yDirection);
       xDirection /= length;
       yDirection /= length;
-      state.player.facingX = xDirection;
-      state.player.facingY = yDirection;
       var mounted = Boolean(getMountedHorse());
       var speed = mounted ? 425 : 250;
+      if (forward < 0) speed *= 0.72;
       if (!mounted && isPlayerSwimming()) speed *= 0.55;
       if (state.player.superSpeedUntil > state.timeMs) speed *= 1.75;
-      moveCircle(
+      state.player.moving = moveCircle(
         state.player,
         xDirection * speed * dt,
         yDirection * speed * dt,
@@ -1276,13 +1323,13 @@
       if (horse) {
         horse.x = state.player.x;
         horse.y = state.player.y;
-        horse.facingX = xDirection;
-        horse.facingY = yDirection;
-        if (state.timeMs >= state.rideDustReadyAt) {
+        horse.facingX = state.player.facingX;
+        horse.facingY = state.player.facingY;
+        if (state.player.moving && state.timeMs >= state.rideDustReadyAt) {
           state.rideDustReadyAt = state.timeMs + 110;
           emitParticles(state.player.x - xDirection * 22, state.player.y - yDirection * 22, "#d6c59a", 2, 32);
         }
-      } else if (state.player.superSpeedUntil > state.timeMs && state.timeMs >= state.rideDustReadyAt) {
+      } else if (state.player.moving && state.player.superSpeedUntil > state.timeMs && state.timeMs >= state.rideDustReadyAt) {
         state.rideDustReadyAt = state.timeMs + 85;
         emitParticles(state.player.x - xDirection * 18, state.player.y - yDirection * 18, "#9e8cff", 2, 38);
       }
@@ -1720,10 +1767,728 @@
     return "";
   }
 
+  function getFPViewBasis() {
+    var angle = state.player.viewAngle;
+    return {
+      forwardX: Math.cos(angle),
+      forwardY: Math.sin(angle),
+      rightX: -Math.sin(angle),
+      rightY: Math.cos(angle)
+    };
+  }
+
+  function getFPEyeHeight() {
+    if (getMountedHorse()) return 66;
+    if (state.player.swimming) return 27;
+    return 52;
+  }
+
+  function getFPHorizon() {
+    var bob = !prefersReducedMotion && state.player.moving && !state.dialog ?
+      Math.sin(state.timeMs / (getMountedHorse() ? 72 : 105)) * (getMountedHorse() ? 5 : 2.8) : 0;
+    return FP_HORIZON + bob;
+  }
+
+  function getFPCameraPoint(x, y) {
+    var basis = getFPViewBasis();
+    var dx = x - state.player.x;
+    var dy = y - state.player.y;
+    return {
+      depth: dx * basis.forwardX + dy * basis.forwardY,
+      lateral: dx * basis.rightX + dy * basis.rightY
+    };
+  }
+
+  function projectFPPoint(x, y, height) {
+    var cameraPoint = getFPCameraPoint(x, y);
+    if (cameraPoint.depth <= FP_NEAR) return null;
+    var horizon = getFPHorizon();
+    var eyeHeight = getFPEyeHeight();
+    return {
+      depth: cameraPoint.depth,
+      lateral: cameraPoint.lateral,
+      x: VIEW_W / 2 + cameraPoint.lateral * FP_PROJECTION / cameraPoint.depth,
+      groundY: horizon + eyeHeight * FP_PROJECTION / cameraPoint.depth,
+      y: horizon + (eyeHeight - (height || 0)) * FP_PROJECTION / cameraPoint.depth,
+      scale: FP_PROJECTION / cameraPoint.depth
+    };
+  }
+
+  function isInFirstPersonView(x, y, margin) {
+    var point = getFPCameraPoint(x, y);
+    margin = margin || 0;
+    if (point.depth < -margin || point.depth > FP_FAR + margin) return false;
+    var halfWidth = Math.max(40, point.depth * Math.tan(FP_FOV / 2)) + margin;
+    return Math.abs(point.lateral) <= halfWidth;
+  }
+
+  function isPointInsideRect(x, y, rect) {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+  }
+
+  function staticTerrainColorAt(x, y) {
+    var base;
+    var onBridge = bridges.some(function (bridge) {
+      return Math.abs(x - bridge.x) <= bridge.w / 2 && Math.abs(y - bridge.y) <= bridge.h / 2;
+    });
+    var riverDistance = Math.abs(x - riverX(y));
+    if (onBridge) {
+      base = ((Math.floor(x / 25) + Math.floor(y / 24)) % 2) ? [151, 93, 48] : [170, 108, 57];
+    } else if (riverDistance < 61) {
+      base = [61, 151, 179];
+    } else if (riverDistance < 90) {
+      base = [186, 158, 101];
+    } else if (isInsideCastle(x, y)) {
+      var stone = (Math.floor(x / 42) + Math.floor(y / 42)) % 2 ? 7 : 0;
+      base = [116 + stone, 112 + stone, 107 + stone];
+    } else if (distanceToRoutes(x, y) < 42) {
+      base = [180, 154, 98];
+    } else if (x >= 2668) {
+      base = x > 3260 && y < 620 ? [136, 142, 151] : [113, 109, 119];
+    } else if (x < 760 && y > 1630) {
+      base = [126, 194, 99];
+    } else {
+      var forestPatch = (Math.floor(x / 95) + Math.floor(y / 95)) % 2 ? 5 : -3;
+      base = [70 + forestPatch, 132 + forestPatch, 73 + forestPatch];
+    }
+    return base;
+  }
+
+  function ensureFPTerrainTexture() {
+    if (fpTerrainPixels) return;
+    fpTerrainPixels = new Uint8ClampedArray(FP_TERRAIN_W * FP_TERRAIN_H * 3);
+    for (var ty = 0; ty < FP_TERRAIN_H; ty += 1) {
+      for (var tx = 0; tx < FP_TERRAIN_W; tx += 1) {
+        var worldX = (tx + 0.5) / FP_TERRAIN_W * WORLD_W;
+        var worldY = (ty + 0.5) / FP_TERRAIN_H * WORLD_H;
+        var color = staticTerrainColorAt(worldX, worldY);
+        var index = (ty * FP_TERRAIN_W + tx) * 3;
+        fpTerrainPixels[index] = color[0];
+        fpTerrainPixels[index + 1] = color[1];
+        fpTerrainPixels[index + 2] = color[2];
+      }
+    }
+  }
+
+  function sampleFPTerrain(x, y, depth, destination, destinationIndex) {
+    var textureX = clamp(Math.floor(x / WORLD_W * FP_TERRAIN_W), 0, FP_TERRAIN_W - 1);
+    var textureY = clamp(Math.floor(y / WORLD_H * FP_TERRAIN_H), 0, FP_TERRAIN_H - 1);
+    var sourceIndex = (textureY * FP_TERRAIN_W + textureX) * 3;
+    var shade = clamp(1.05 - depth / (FP_FAR * 2.4), 0.58, 1.05);
+    destination[destinationIndex] = fpTerrainPixels[sourceIndex] * shade;
+    destination[destinationIndex + 1] = fpTerrainPixels[sourceIndex + 1] * shade;
+    destination[destinationIndex + 2] = fpTerrainPixels[sourceIndex + 2] * shade;
+    destination[destinationIndex + 3] = 255;
+  }
+
+  function drawFPSkyAndGround() {
+    ensureFPTerrainTexture();
+    var horizon = getFPHorizon();
+    var sky = ctx.createLinearGradient(0, 0, 0, horizon + 35);
+    if (state.weather.intensity > 0.45) {
+      sky.addColorStop(0, "#56677a");
+      sky.addColorStop(1, "#a6b2b1");
+    } else if (state.area === "Moonstone Mountain" || state.area === "Crystal Hollow") {
+      sky.addColorStop(0, "#7289a7");
+      sky.addColorStop(1, "#d8d4c9");
+    } else {
+      sky.addColorStop(0, "#67b9df");
+      sky.addColorStop(1, "#d9f2cf");
+    }
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, VIEW_W, horizon + 3);
+
+    var sunX = 705 - Math.sin(state.player.viewAngle) * 150;
+    var sunY = 105;
+    ctx.fillStyle = "rgba(255,240,157,0.82)";
+    ctx.shadowColor = "rgba(255,235,136,0.72)";
+    ctx.shadowBlur = 28;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 31, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = state.player.x >= 2668 ? "rgba(71,69,82,0.58)" : "rgba(39,93,55,0.48)";
+    ctx.beginPath();
+    ctx.moveTo(0, horizon + 3);
+    for (var ridgeX = 0; ridgeX <= VIEW_W; ridgeX += 60) {
+      var ridgeY = horizon - 24 - Math.sin(ridgeX * 0.015 + state.player.viewAngle * 3) * 18;
+      ctx.lineTo(ridgeX, ridgeY);
+    }
+    ctx.lineTo(VIEW_W, horizon + 8);
+    ctx.closePath();
+    ctx.fill();
+
+    var groundWidth = fpGroundCanvas.width;
+    var groundHeight = fpGroundCanvas.height;
+    var image = fpGroundContext.createImageData(groundWidth, groundHeight);
+    var basis = getFPViewBasis();
+    var eyeHeight = getFPEyeHeight();
+    for (var gy = 0; gy < groundHeight; gy += 1) {
+      var screenY = horizon + 1 + (gy + 0.5) / groundHeight * (VIEW_H - horizon - 1);
+      var rowDepth = clamp(eyeHeight * FP_PROJECTION / Math.max(1, screenY - horizon), FP_NEAR, FP_FAR);
+      for (var gx = 0; gx < groundWidth; gx += 1) {
+        var screenX = (gx + 0.5) / groundWidth * VIEW_W;
+        var lateral = (screenX - VIEW_W / 2) * rowDepth / FP_PROJECTION;
+        var worldX = state.player.x + basis.forwardX * rowDepth + basis.rightX * lateral;
+        var worldY = state.player.y + basis.forwardY * rowDepth + basis.rightY * lateral;
+        var index = (gy * groundWidth + gx) * 4;
+        sampleFPTerrain(worldX, worldY, rowDepth, image.data, index);
+      }
+    }
+    fpGroundContext.putImageData(image, 0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(fpGroundCanvas, 0, horizon, VIEW_W, VIEW_H - horizon);
+    ctx.restore();
+
+    var fog = ctx.createLinearGradient(0, horizon - 10, 0, horizon + 95);
+    fog.addColorStop(0, "rgba(218,232,211,0.42)");
+    fog.addColorStop(1, "rgba(218,232,211,0)");
+    ctx.fillStyle = fog;
+    ctx.fillRect(0, horizon - 10, VIEW_W, 110);
+  }
+
+  function rayRectIntersection(originX, originY, rayX, rayY, rect) {
+    var entry = -Infinity;
+    var exit = Infinity;
+    if (Math.abs(rayX) < 0.00001) {
+      if (originX < rect.x || originX > rect.x + rect.w) return null;
+    } else {
+      var tx1 = (rect.x - originX) / rayX;
+      var tx2 = (rect.x + rect.w - originX) / rayX;
+      entry = Math.max(entry, Math.min(tx1, tx2));
+      exit = Math.min(exit, Math.max(tx1, tx2));
+    }
+    if (Math.abs(rayY) < 0.00001) {
+      if (originY < rect.y || originY > rect.y + rect.h) return null;
+    } else {
+      var ty1 = (rect.y - originY) / rayY;
+      var ty2 = (rect.y + rect.h - originY) / rayY;
+      entry = Math.max(entry, Math.min(ty1, ty2));
+      exit = Math.min(exit, Math.max(ty1, ty2));
+    }
+    if (exit < Math.max(FP_NEAR, entry)) return null;
+    return entry >= FP_NEAR ? entry : exit;
+  }
+
+  function rayCircleIntersection(originX, originY, rayX, rayY, circle) {
+    var ox = originX - circle.x;
+    var oy = originY - circle.y;
+    var a = rayX * rayX + rayY * rayY;
+    var b = 2 * (ox * rayX + oy * rayY);
+    var c = ox * ox + oy * oy - circle.r * circle.r;
+    var discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) return null;
+    var root = Math.sqrt(discriminant);
+    var first = (-b - root) / (2 * a);
+    var second = (-b + root) / (2 * a);
+    if (first >= FP_NEAR) return first;
+    if (second >= FP_NEAR) return second;
+    return null;
+  }
+
+  function getFPSolids() {
+    var solids = [];
+    cliffs.forEach(function (rect) {
+      solids.push({ type: "rect", rect: rect, height: 260, material: "cliff" });
+    });
+    castleWalls.forEach(function (rect) {
+      solids.push({ type: "rect", rect: rect, height: 128, material: "castle" });
+    });
+    secretRoomWalls.forEach(function (rect) {
+      solids.push({ type: "rect", rect: rect, height: 112, material: "castle" });
+    });
+    if (!state.secretRoomOpen) {
+      solids.push({ type: "rect", rect: secretDoor, height: 112, material: "door" });
+    }
+    if (!state.gateCleared) {
+      solids.push({ type: "rect", rect: thornGate, height: 170, material: "thorn" });
+    }
+    if (!state.sealOpen) {
+      solids.push({ type: "circle", circle: { x: diamond.x, y: diamond.y, r: 118 }, height: 145, material: "seal" });
+    }
+    return solids;
+  }
+
+  function fpWallColor(material, depth, column) {
+    var flicker = (Math.floor(column / 9) % 2) * 6;
+    var shade = clamp(1 - depth / 1800, 0.48, 1);
+    var color;
+    if (material === "castle") color = [113 + flicker, 111 + flicker, 122 + flicker];
+    else if (material === "door") color = [91 + flicker, 82 + flicker, 94 + flicker];
+    else if (material === "thorn") color = [48 + flicker, 94 + flicker, 48];
+    else if (material === "seal") color = [104, 183, 219];
+    else if (material === "boundary") color = [45, 69, 53];
+    else color = [83 + flicker, 80 + flicker, 93 + flicker];
+    if (material === "seal") return "rgba(" + color[0] + "," + color[1] + "," + color[2] + ",0.72)";
+    return "rgb(" + Math.round(color[0] * shade) + "," + Math.round(color[1] * shade) + "," + Math.round(color[2] * shade) + ")";
+  }
+
+  function drawFPWalls() {
+    var solids = getFPSolids();
+    var basis = getFPViewBasis();
+    var planeScale = Math.tan(FP_FOV / 2);
+    var horizon = getFPHorizon();
+    var eyeHeight = getFPEyeHeight();
+    fpDepthBuffer.fill(FP_FAR + 1);
+    for (var column = 0; column < VIEW_W; column += FP_RAY_STRIDE) {
+      var cameraX = 2 * (column + FP_RAY_STRIDE / 2) / VIEW_W - 1;
+      var rayX = basis.forwardX + basis.rightX * planeScale * cameraX;
+      var rayY = basis.forwardY + basis.rightY * planeScale * cameraX;
+      var nearest = FP_FAR + 1;
+      var hitSolid = null;
+      solids.forEach(function (solid) {
+        var hit = solid.type === "rect" ?
+          rayRectIntersection(state.player.x, state.player.y, rayX, rayY, solid.rect) :
+          rayCircleIntersection(state.player.x, state.player.y, rayX, rayY, solid.circle);
+        if (hit !== null && hit < nearest && hit <= FP_FAR) {
+          nearest = hit;
+          hitSolid = solid;
+        }
+      });
+      for (var fillX = column; fillX < Math.min(VIEW_W, column + FP_RAY_STRIDE); fillX += 1) {
+        fpDepthBuffer[fillX] = nearest;
+      }
+      if (!hitSolid) continue;
+      var baseY = horizon + eyeHeight * FP_PROJECTION / nearest;
+      var topY = baseY - hitSolid.height * FP_PROJECTION / nearest;
+      ctx.fillStyle = fpWallColor(hitSolid.material, nearest, column);
+      ctx.fillRect(column, Math.max(-220, topY), FP_RAY_STRIDE + 0.5, Math.min(VIEW_H + 220, baseY) - Math.max(-220, topY));
+      if (hitSolid.material === "door" && Math.floor(column / 14) % 4 === 0) {
+        ctx.fillStyle = "rgba(34,31,40,0.72)";
+        ctx.fillRect(column, Math.max(0, topY + (baseY - topY) * 0.25), 2, Math.min(VIEW_H, (baseY - topY) * 0.55));
+      }
+      if (hitSolid.material === "thorn" && Math.floor(column / 11) % 3 === 0) {
+        ctx.fillStyle = "rgba(142,184,78,0.8)";
+        ctx.fillRect(column, Math.max(0, topY), 3, Math.max(8, Math.min(VIEW_H, baseY) - Math.max(0, topY)));
+      }
+    }
+  }
+
+  function drawFPPortalBillboard() {
+    ctx.save();
+    ctx.translate(portal.x, portal.y);
+    var pulse = 0.8 + Math.sin(state.timeMs / 160) * 0.12;
+    ctx.strokeStyle = "rgba(125,255,238," + pulse + ")";
+    ctx.shadowColor = "#7fffee";
+    ctx.shadowBlur = 20;
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.ellipse(0, -46, 35, 61, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(196,164,255,0.82)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.ellipse(0, -46, 24, 48, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(91,70,150,0.22)";
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawEntitySideOn(entity, drawFunction) {
+    var facingX = entity.facingX;
+    var facingY = entity.facingY;
+    entity.facingX = 1;
+    entity.facingY = 0;
+    drawFunction();
+    entity.facingX = facingX;
+    entity.facingY = facingY;
+  }
+
+  function collectFPSprites() {
+    var sprites = [];
+    function add(x, y, radius, draw, raise, minVisualDepth, occlusionBias) {
+      var cameraPoint = getFPCameraPoint(x, y);
+      if (cameraPoint.depth <= FP_NEAR || cameraPoint.depth > FP_FAR) return;
+      var halfView = cameraPoint.depth * Math.tan(FP_FOV / 2) + radius * 2;
+      if (Math.abs(cameraPoint.lateral) > halfView) return;
+      sprites.push({
+        x: x,
+        y: y,
+        radius: radius,
+        draw: draw,
+        raise: raise || 0,
+        depth: cameraPoint.depth,
+        minVisualDepth: minVisualDepth || 150,
+        occlusionBias: occlusionBias || 2
+      });
+    }
+    trees.forEach(function (tree) {
+      add(tree.x, tree.y, tree.r * 1.25, function () { drawTree(tree, false); }, 0, 175, 6);
+    });
+    ancientTrees.forEach(function (tree) {
+      add(tree.x, tree.y, 92, function () { drawTree(tree, true); }, 0, 200, 6);
+    });
+    rocks.forEach(function (rock) {
+      add(rock.x, rock.y, rock.r * 1.2, function () { drawRock(rock); }, 0, 155);
+    });
+    crystals.forEach(function (crystal) {
+      add(crystal.x, crystal.y, 58, function () { drawCrystal(crystal); }, 0, 200);
+    });
+    add(diamond.x, diamond.y, 126, drawDiamondAndSeal, 0, 210);
+    if (portal.active) add(portal.x, portal.y, 76, drawFPPortalBillboard, 0, 220);
+    if (treasureMap.available && !treasureMap.collected) {
+      add(treasureMap.x, treasureMap.y, 48, drawTreasureMap, 8, 150);
+    }
+    state.foodDrops.forEach(function (food) {
+      if (!food.collected) add(food.x, food.y, 30, function () { drawFood(food); }, 10, 150);
+    });
+    if (state.secretRoomOpen) {
+      royalFoods.forEach(function (food) {
+        if (!food.collected) add(food.x, food.y, 38, function () { drawRoyalFood(food); }, 12, 145);
+      });
+    }
+    rainbowFishSpots.forEach(function (fish) {
+      if (!fish.caught) add(fish.x, fish.y, 48, function () { drawRainbowFish(fish); }, 13, 150);
+    });
+    weaponPickups.forEach(function (pickup) {
+      if (isWeaponPickupVisible(pickup)) add(pickup.x, pickup.y, 48, function () { drawWeaponPickup(pickup); }, 10, 180);
+    });
+    state.monsters.forEach(function (monster) {
+      if (!monster.defeated) {
+        add(monster.x, monster.y, monster.id === "boswer" ? 92 : monster.r * 1.8, function () {
+          drawEntitySideOn(monster, function () { drawMonster(monster); });
+        }, 0, monster.id === "boswer" ? 240 : 160);
+      }
+    });
+    state.horses.forEach(function (horse) {
+      if (!horse.mounted) {
+        add(horse.x, horse.y, 72, function () {
+          drawEntitySideOn(horse, function () { drawHorse(horse, false); });
+        }, 0, 165);
+      }
+    });
+    state.villagers.forEach(function (villager) {
+      add(villager.x, villager.y, 38, function () { drawVillager(villager); }, 0, 145);
+    });
+    add(wizard.x, wizard.y, 66, drawWizard, 0, 180);
+    if (state.weather.tornado.phase !== "idle") {
+      var tornado = state.weather.tornado;
+      add(tornado.x, tornado.y, 145, drawTornadoWorld, 0, 280, 10);
+    }
+    state.arrows.forEach(function (arrow) {
+      add(arrow.x, arrow.y, 18, function () {
+        ctx.save();
+        ctx.translate(arrow.x, arrow.y);
+        ctx.strokeStyle = "#6d4828";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-15, 0);
+        ctx.lineTo(14, 0);
+        ctx.stroke();
+        ctx.fillStyle = "#e5efec";
+        ctx.beginPath();
+        ctx.moveTo(18, 0);
+        ctx.lineTo(9, -5);
+        ctx.lineTo(9, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }, 18, 180);
+    });
+    state.particles.forEach(function (particle) {
+      add(particle.x, particle.y, 9, function () {
+        var alpha = 1 - particle.age / particle.life;
+        ctx.save();
+        ctx.translate(particle.x, particle.y);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = particle.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.min(2.25, particle.size * 0.35 + 0.35), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }, 22, 240);
+    });
+    sprites.sort(function (a, b) { return b.depth - a.depth; });
+    return sprites;
+  }
+
+  function drawProjectedFPSprite(sprite) {
+    var projected = projectFPPoint(sprite.x, sprite.y, 0);
+    if (!projected) return;
+    var visualDepth = Math.max(sprite.minVisualDepth, projected.depth);
+    projected.groundY = getFPHorizon() + getFPEyeHeight() * FP_PROJECTION / visualDepth;
+    projected.scale = FP_PROJECTION / visualDepth;
+    var halfWidth = Math.max(8, sprite.radius * projected.scale * 1.5);
+    if (projected.x + halfWidth < 0 || projected.x - halfWidth > VIEW_W) return;
+    var left = Math.max(0, Math.floor(projected.x - halfWidth));
+    var right = Math.min(VIEW_W - 1, Math.ceil(projected.x + halfWidth));
+    ctx.save();
+    ctx.beginPath();
+    var visibleStrip = false;
+    for (var x = left; x <= right; x += FP_RAY_STRIDE) {
+      if (projected.depth <= fpDepthBuffer[x] + sprite.occlusionBias) {
+        ctx.rect(x, 0, FP_RAY_STRIDE + 1, VIEW_H);
+        visibleStrip = true;
+      }
+    }
+    if (!visibleStrip) {
+      ctx.restore();
+      return;
+    }
+    ctx.clip();
+    ctx.globalAlpha = clamp(1.18 - projected.depth / FP_FAR, 0.26, 1);
+    ctx.translate(projected.x, projected.groundY - sprite.raise * projected.scale);
+    ctx.scale(projected.scale, projected.scale);
+    ctx.translate(-sprite.x, -sprite.y);
+    sprite.draw();
+    ctx.restore();
+  }
+
+  function drawFPObjectiveMarker() {
+    var target = getObjectiveTarget();
+    if (!target) return;
+    var projected = projectFPPoint(target.x, target.y, 112);
+    if (!projected || projected.x < 20 || projected.x > VIEW_W - 20) return;
+    var column = clamp(Math.round(projected.x), 0, VIEW_W - 1);
+    if (projected.depth > fpDepthBuffer[column] + 18) return;
+    var pulse = 8 + Math.sin(state.timeMs / 140) * 2;
+    ctx.save();
+    ctx.translate(projected.x, clamp(projected.y, 105, VIEW_H - 120));
+    ctx.shadowColor = "#ffe66d";
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#ffe66d";
+    ctx.beginPath();
+    ctx.moveTo(0, -pulse);
+    ctx.lineTo(pulse * 0.7, 0);
+    ctx.lineTo(0, pulse);
+    ctx.lineTo(-pulse * 0.7, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawFirstPersonWorld() {
+    drawFPSkyAndGround();
+    drawFPWalls();
+    collectFPSprites().forEach(drawProjectedFPSprite);
+    drawFPObjectiveMarker();
+  }
+
+  function drawFPHandsAndWeapon() {
+    if (state.mode === "title" || state.mode === "victory" || state.mapOpen || state.dialog) return;
+    var girlHero = state.player.character === "girl";
+    var sleeve = girlHero ? "#425fa2" : "#3c8656";
+    var skin = "#e4bd8e";
+    var bob = prefersReducedMotion ? 0 :
+      (state.player.moving ? Math.sin(state.timeMs / 95) * 7 : Math.sin(state.timeMs / 420) * 2);
+    var activeEffect = state.weaponEffects.length ? state.weaponEffects[state.weaponEffects.length - 1] : null;
+    var effectProgress = activeEffect ? clamp(activeEffect.age / activeEffect.life, 0, 1) : 1;
+
+    if (getMountedHorse()) {
+      var horse = getMountedHorse();
+      ctx.fillStyle = horse.mane;
+      ctx.beginPath();
+      ctx.moveTo(420, VIEW_H);
+      ctx.lineTo(446, 500 + bob);
+      ctx.lineTo(474, VIEW_H);
+      ctx.moveTo(486, VIEW_H);
+      ctx.lineTo(515, 500 + bob);
+      ctx.lineTo(544, VIEW_H);
+      ctx.fill();
+      ctx.strokeStyle = "#6c4930";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(445, 540 + bob);
+      ctx.quadraticCurveTo(480, 515 + bob, 516, 540 + bob);
+      ctx.stroke();
+    }
+
+    if (state.player.swimming) {
+      var waterLine = 500 + Math.sin(state.timeMs / 130) * 8;
+      var water = ctx.createLinearGradient(0, waterLine, 0, VIEW_H);
+      water.addColorStop(0, "rgba(110,218,231,0.38)");
+      water.addColorStop(1, "rgba(42,127,161,0.72)");
+      ctx.fillStyle = water;
+      ctx.fillRect(0, waterLine, VIEW_W, VIEW_H - waterLine);
+      ctx.strokeStyle = "rgba(218,255,255,0.8)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      for (var wx = 0; wx <= VIEW_W; wx += 60) {
+        var waveY = waterLine + Math.sin(wx / 48 + state.timeMs / 160) * 6;
+        if (wx === 0) ctx.moveTo(wx, waveY);
+        else ctx.lineTo(wx, waveY);
+      }
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(0, bob);
+    ctx.fillStyle = sleeve;
+    ctx.beginPath();
+    ctx.moveTo(180, VIEW_H + 25);
+    ctx.lineTo(265, 493);
+    ctx.lineTo(338, 522);
+    ctx.lineTo(300, VIEW_H + 25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.ellipse(329, 504, 28, 22, -0.25, 0, Math.PI * 2);
+    ctx.fill();
+    if (state.player.hasMagic) {
+      var magicPulse = 11 + Math.sin(state.timeMs / 120) * 3;
+      ctx.fillStyle = state.player.strongPowerUntil > state.timeMs ? "#ff6574" : "#7fffee";
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 22;
+      ctx.beginPath();
+      ctx.arc(326, 476, magicPulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.fillStyle = sleeve;
+    ctx.beginPath();
+    ctx.moveTo(780, VIEW_H + 25);
+    ctx.lineTo(700, 493);
+    ctx.lineTo(628, 522);
+    ctx.lineTo(660, VIEW_H + 25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.ellipse(696, 500, 29, 22, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    var weapon = state.player.selectedWeapon;
+    ctx.save();
+    if (activeEffect && activeEffect.type === weapon && weapon !== "rod" && weapon !== "bow") {
+      var swing = Math.sin(effectProgress * Math.PI);
+      ctx.translate(-swing * 85, -swing * 65);
+      ctx.rotate(-swing * 0.6);
+    }
+    if (weapon === "sword") {
+      ctx.strokeStyle = "#684625";
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.moveTo(698, 492);
+      ctx.lineTo(650, 430);
+      ctx.stroke();
+      ctx.strokeStyle = "#d9eef1";
+      ctx.lineWidth = 13;
+      ctx.beginPath();
+      ctx.moveTo(650, 430);
+      ctx.lineTo(550, 276);
+      ctx.stroke();
+      ctx.strokeStyle = "#fff9d2";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else if (weapon === "spear") {
+      var thrust = activeEffect && activeEffect.type === "spear" ? Math.sin(effectProgress * Math.PI) * 80 : 0;
+      ctx.strokeStyle = "#76502e";
+      ctx.lineWidth = 13;
+      ctx.beginPath();
+      ctx.moveTo(718, 540);
+      ctx.lineTo(518 - thrust, 305 - thrust * 0.25);
+      ctx.stroke();
+      ctx.fillStyle = "#e2ecea";
+      ctx.beginPath();
+      ctx.moveTo(498 - thrust, 278 - thrust * 0.25);
+      ctx.lineTo(532 - thrust, 306 - thrust * 0.25);
+      ctx.lineTo(505 - thrust, 318 - thrust * 0.25);
+      ctx.closePath();
+      ctx.fill();
+    } else if (weapon === "bow") {
+      ctx.strokeStyle = "#8a582e";
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.arc(650, 402, 92, -1.2, 1.2);
+      ctx.stroke();
+      ctx.strokeStyle = "#f1e7cf";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(684, 317);
+      ctx.lineTo(650, 402);
+      ctx.lineTo(684, 487);
+      ctx.stroke();
+      ctx.strokeStyle = "#6d4828";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(650, 402);
+      ctx.lineTo(480, 402);
+      ctx.stroke();
+    } else if (weapon === "rod") {
+      ctx.strokeStyle = "#80532c";
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(708, 520);
+      ctx.lineTo(580, 310);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(241,247,232,0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(580, 310);
+      ctx.quadraticCurveTo(540, 360, 512, 455);
+      ctx.stroke();
+      ctx.fillStyle = "#e95665";
+      ctx.beginPath();
+      ctx.arc(512, 455, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+
+    state.magicWaves.forEach(function (wave) {
+      var progress = wave.age / wave.life;
+      ctx.strokeStyle = wave.strong ?
+        "rgba(255,83,100," + (1 - progress) + ")" :
+        "rgba(127,255,238," + (1 - progress) + ")";
+      ctx.lineWidth = 8 * (1 - progress) + 2;
+      ctx.beginPath();
+      ctx.arc(VIEW_W / 2, VIEW_H / 2, 35 + progress * 260, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    if (!prefersReducedMotion && state.player.superSpeedUntil > state.timeMs) {
+      ctx.strokeStyle = "rgba(171,150,255,0.38)";
+      ctx.lineWidth = 3;
+      for (var streak = 0; streak < 12; streak += 1) {
+        var sy = 190 + ((streak * 47 + state.timeMs * 0.4) % 340);
+        ctx.beginPath();
+        ctx.moveTo((streak % 2) ? 0 : VIEW_W, sy);
+        ctx.lineTo((streak % 2) ? 130 : VIEW_W - 130, sy + 18);
+        ctx.stroke();
+      }
+    }
+    if (state.player.strongPowerUntil > state.timeMs) {
+      var aura = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, 210, VIEW_W / 2, VIEW_H / 2, 560);
+      aura.addColorStop(0, "rgba(255,83,100,0)");
+      aura.addColorStop(1, "rgba(255,83,100,0.2)");
+      ctx.fillStyle = aura;
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+    if (state.player.invulnerableUntil > state.timeMs) {
+      ctx.fillStyle = "rgba(255,46,70," + (0.08 + Math.sin(state.timeMs / 55) * 0.06) + ")";
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+
+    ctx.save();
+    ctx.translate(VIEW_W / 2, VIEW_H / 2 + 2);
+    ctx.strokeStyle = "rgba(255,255,235,0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-10, 0);
+    ctx.lineTo(-3, 0);
+    ctx.moveTo(3, 0);
+    ctx.lineTo(10, 0);
+    ctx.moveTo(0, -10);
+    ctx.lineTo(0, -3);
+    ctx.moveTo(0, 3);
+    ctx.lineTo(0, 10);
+    ctx.stroke();
+    ctx.fillStyle = "#ffe66d";
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function visibleWorldPoint(x, y, margin) {
-    margin = margin || 80;
-    return x >= state.camera.x - margin && x <= state.camera.x + VIEW_W + margin &&
-      y >= state.camera.y - margin && y <= state.camera.y + VIEW_H + margin;
+    return isInFirstPersonView(x, y, margin || 80);
   }
 
   function drawRoundedRect(x, y, w, h, radius, fill, stroke) {
@@ -3161,31 +3926,27 @@
   function drawObjectiveArrow() {
     var target = getObjectiveTarget();
     if (!target) return;
-    var screenX = target.x - state.camera.x;
-    var screenY = target.y - state.camera.y;
-    if (screenX > 60 && screenX < VIEW_W - 60 && screenY > 80 && screenY < VIEW_H - 70) return;
     var dx = target.x - state.player.x;
     var dy = target.y - state.player.y;
-    var angle = Math.atan2(dy, dx);
-    var radiusX = 360;
-    var radiusY = 205;
-    var x = VIEW_W / 2 + Math.cos(angle) * radiusX;
-    var y = VIEW_H / 2 + Math.sin(angle) * radiusY;
-    x = clamp(x, 82, VIEW_W - 82);
-    y = clamp(y, 112, VIEW_H - 72);
+    var targetAngle = Math.atan2(dy, dx);
+    var relativeAngle = normalizeViewAngle(targetAngle - state.player.viewAngle);
+    var projected = projectFPPoint(target.x, target.y, 70);
+    if (projected && Math.abs(relativeAngle) < FP_FOV * 0.42 && projected.depth < FP_FAR) return;
+    var direction = relativeAngle < 0 ? -1 : 1;
+    var x = direction < 0 ? 316 : 644;
+    var y = 211;
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(angle);
     ctx.fillStyle = "rgba(9, 25, 19, 0.72)";
     ctx.beginPath();
-    ctx.arc(0, 0, 24, 0, Math.PI * 2);
+    ctx.arc(0, 0, 23, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#ffe66d";
     ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(-8, -10);
-    ctx.lineTo(-3, 0);
-    ctx.lineTo(-8, 10);
+    ctx.moveTo(direction * 16, 0);
+    ctx.lineTo(direction * -6, -10);
+    ctx.lineTo(direction * -1, 0);
+    ctx.lineTo(direction * -6, 10);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -3483,14 +4244,12 @@
   function render() {
     if (!state) return;
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-    ctx.save();
-    ctx.translate(-state.camera.x, -state.camera.y);
-    drawGround();
-    drawWorldEntities();
-    drawTornadoWorld();
-    ctx.restore();
+    drawFirstPersonWorld();
     drawWeather();
-    if (state.mode !== "title") drawHUD();
+    if (state.mode !== "title") {
+      drawFPHandsAndWeapon();
+      drawHUD();
+    }
     if (state.mode === "title") drawCanvasTitle();
     if (state.mode === "paused") {
       ctx.fillStyle = "rgba(4,14,10,0.45)";
@@ -3541,6 +4300,12 @@
     }
   }
 
+  function releasePointerLock() {
+    if (document.pointerLockElement === canvas && document.exitPointerLock) {
+      document.exitPointerLock();
+    }
+  }
+
   function handleKeyDown(event) {
     var code = event.code;
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(code) >= 0) {
@@ -3548,7 +4313,7 @@
     }
     if (code === "KeyF") {
       event.preventDefault();
-      toggleFullscreen();
+      if (!event.repeat) toggleFullscreen();
       return;
     }
     if (state.mode === "title") {
@@ -3569,8 +4334,10 @@
       }
       return;
     }
+    var focusedControl = document.activeElement && document.activeElement.closest("button, a");
+    if (focusedControl && (code === "Enter" || code === "Space")) return;
     if (code === "KeyP") {
-      togglePause();
+      if (!event.repeat) togglePause();
       return;
     }
     if (state.mode === "paused") {
@@ -3683,7 +4450,35 @@
       playTone(selectedCharacter === "girl" ? 659 : 523, 0.08, "sine", 0.025);
     });
   });
-  canvas.addEventListener("pointerdown", function () { canvas.focus(); });
+  canvas.addEventListener("pointerdown", function (event) {
+    canvas.focus();
+    if (event.pointerType !== "mouse" || state.mode !== "playing" || state.dialog || state.mapOpen) return;
+    if (document.pointerLockElement === canvas) {
+      event.preventDefault();
+      if (event.button === 0) useSelectedWeapon();
+      if (event.button === 2) castMagic();
+      return;
+    }
+  });
+  canvas.addEventListener("click", function (event) {
+    if (event.pointerType && event.pointerType !== "mouse") return;
+    if (event.button !== 0 || state.mode !== "playing" || state.dialog || state.mapOpen) return;
+    if (document.pointerLockElement !== canvas && canvas.requestPointerLock) {
+      var lockRequest = canvas.requestPointerLock();
+      if (lockRequest && lockRequest.catch) lockRequest.catch(function () {});
+    }
+  });
+  canvas.addEventListener("contextmenu", function (event) {
+    if (state.mode === "playing") event.preventDefault();
+  });
+  document.addEventListener("mousemove", function (event) {
+    if (document.pointerLockElement !== canvas || state.mode !== "playing" || state.mapOpen || state.dialog) return;
+    setPlayerViewAngle(state.player.viewAngle + event.movementX * 0.00235);
+  });
+  document.addEventListener("pointerlockchange", render);
+  document.addEventListener("pointerlockerror", function () {
+    if (state.mode === "playing") showToast("Mouse look unavailable — use ← → to turn.", 2.2);
+  });
   window.addEventListener("keydown", handleKeyDown, { passive: false });
   window.addEventListener("keyup", handleKeyUp);
   window.addEventListener("blur", function () { keys.clear(); });
@@ -3720,12 +4515,18 @@
       return { id: food.id, x: round1(food.x), y: round1(food.y) };
     });
     return JSON.stringify({
-      coordinateSystem: "world pixels; origin top-left; x increases right; y increases down; viewport 960x600",
+      coordinateSystem: "first-person view over world pixels; map origin top-left; x increases right; y increases down; viewport 960x600",
       mode: state.mode,
       paused: state.mode === "paused",
       mapOpen: state.mapOpen,
       timeMs: Math.round(state.timeMs),
       region: state.area,
+      view: {
+        mode: "first-person",
+        yawDegrees: Math.round(state.player.viewAngle * 180 / Math.PI),
+        fieldOfViewDegrees: 70,
+        pointerLocked: document.pointerLockElement === canvas
+      },
       quest: {
         stage: state.questStage,
         objective: state.objective,
@@ -3894,6 +4695,7 @@
       var targetOffset = name.indexOf("tree") === 0 ? 118 : (name === "fish1" ? 110 : 58);
       state.player.x = target.x - targetOffset;
       state.player.y = target.y;
+      setPlayerViewAngle(Math.atan2(target.y - state.player.y, target.x - state.player.x));
       state.player.swimming = isPlayerSwimming();
       syncCamera();
       updateArea();
@@ -3956,6 +4758,11 @@
     setCharacter: function (character) {
       state.player.character = character === "boy" ? "boy" : "girl";
       render();
+    },
+    setViewAngle: function (degrees) {
+      setPlayerViewAngle(Number(degrees) * Math.PI / 180);
+      render();
+      return JSON.parse(window.render_game_to_text());
     },
     setHearts: function (count) {
       state.player.hearts = clamp(Math.floor(count), 0, state.player.maxHearts);

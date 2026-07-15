@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="../apple-touch-icon.png">
   <link rel="icon" href="../favicon.ico" sizes="any">
   <title>The Lost Diamond</title>
-  <link rel="stylesheet" href="style.css?v=20260715-2">
+  <link rel="stylesheet" href="style.css?v=20260715-4">
 </head>
 <body>
   <main class="game-shell">
@@ -29,7 +29,7 @@
       <section class="screen-overlay" id="start-screen">
         <div class="panel title-panel">
           <div class="diamond-mark" aria-hidden="true">◆</div>
-          <p class="eyebrow">A BIG-MAP MAGIC ADVENTURE</p>
+          <p class="eyebrow">A FIRST-PERSON MAGIC ADVENTURE</p>
           <h1>The Lost Diamond</h1>
           <p class="story">Aster the wizard has lost his magic diamond. Follow its light through the forest, cross the rivers and search Moonstone Mountain — but beware of hungry shadow creatures.</p>
           <div class="character-choice" role="group" aria-label="Choose your hero">
@@ -41,14 +41,16 @@
             </button>
           </div>
           <div class="controls-list" aria-label="Controls">
-            <span><b>Move</b> Arrows / WASD</span>
-            <span><b>Magic</b> Space</span>
+            <span><b>Walk</b> W/S or ↑/↓</span>
+            <span><b>Look</b> Mouse or ←/→</span>
+            <span><b>Sidestep</b> A/D</span>
+            <span><b>Magic</b> Space / right click</span>
             <span><b>Talk &amp; feed</b> E / Enter</span>
             <span><b>Eat food</b> Q / B</span>
             <span><b>Magic apple</b> R / C</span>
             <span><b>Rainbow fish</b> V / X</span>
             <span><b>Gear</b> 1–4 / Z</span>
-            <span><b>Use weapon</b> K</span>
+            <span><b>Use weapon</b> K / left click</span>
             <span><b>World map</b> M</span>
           </div>
           <button class="main-button" id="start-btn">Begin adventure</button>
@@ -75,11 +77,11 @@
       </section>
 
       <div class="touch-controls" id="touch-controls" aria-label="Touch controls">
-        <div class="dpad" aria-label="Move">
-          <button class="touch-button d-up" data-key="ArrowUp" aria-label="Move up">▲</button>
-          <button class="touch-button d-left" data-key="ArrowLeft" aria-label="Move left">◀</button>
-          <button class="touch-button d-right" data-key="ArrowRight" aria-label="Move right">▶</button>
-          <button class="touch-button d-down" data-key="ArrowDown" aria-label="Move down">▼</button>
+        <div class="dpad" aria-label="Move and turn">
+          <button class="touch-button d-up" data-key="ArrowUp" aria-label="Walk forward">▲</button>
+          <button class="touch-button d-left" data-key="ArrowLeft" aria-label="Turn left">◀</button>
+          <button class="touch-button d-right" data-key="ArrowRight" aria-label="Turn right">▶</button>
+          <button class="touch-button d-down" data-key="ArrowDown" aria-label="Walk backward">▼</button>
         </div>
         <div class="action-pad">
           <button class="touch-button action-button eat-button" id="touch-eat" aria-label="Eat food"><span>🍖</span>EAT</button>
@@ -100,6 +102,6 @@
     <noscript>This game needs JavaScript to run.</noscript>
   </main>
 
-  <script src="game.js?v=20260715-2"></script>
+  <script src="game.js?v=20260715-4"></script>
 </body>
 </html>
