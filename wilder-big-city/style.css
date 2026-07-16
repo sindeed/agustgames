@@ -444,6 +444,26 @@ button {
   }
 }
 
+@media (pointer: coarse) {
+  .arcade-link,
+  .utility-button,
+  .help-panel summary {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(8, 15, 21, 0.86);
+  }
+
+  .control-button {
+    background-color: rgba(9, 16, 22, 0.54);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.26), inset 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .control-button:active,
+  .control-button.is-pressed {
+    background-color: rgba(244, 197, 66, 0.82);
+  }
+}
+
 @media (max-height: 560px), (max-width: 760px) {
   .arcade-link {
     min-width: 48px;

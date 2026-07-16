@@ -607,3 +607,28 @@ Original prompt: Bygg Bana 5: Kodtemplet utifrån Agusts ritade karta.
   något förtida köp och tjuvbotarna kunde därefter handla, besegra polisbossen
   och vinna. Robotfinalen, 4/5/10 roller och iPad 1024 × 768 passerar fortfarande.
   Safari-cachetoken är `20260715-wilder-big-city-v8`.
+- Ny Wilder-beställning: gör grafiken mycket bättre och behåll spelet i 3D.
+- Wilder-v9: raycast-världen har nu perspektivkorrigerad förstapersons-3D med
+  samma kameraprojektion för mark, väggar och objekt. Helikopterhöjd flyttar nu
+  väggar, skyltar, mark och personer på riktigt i bilden i stället för att bara
+  ändra cockpitens höjdsiffra.
+- Fasaderna har procedurtexturer för puts, tegel, trä, betong och metall,
+  inramade glasfönster med reflexer, riktat solljus, kalla skuggor, kontaktmörker,
+  avståndsdis och en parallax-silhuett av storstaden. Invändiga väggar har egna
+  ljusa material utan felaktiga fasadfönster. Asfalt, vägmarkeringar, smala
+  zebrapassager, kantsten, trottoar, gräs och alla inomhusgolv har mer detalj.
+- Personerna har rundare kroppar, ansikten, uniformer, unika kläder, gång- och
+  slagposer samt liggande svimningspose. Bilar och helikoptrar har karossljus,
+  glas, hjul, lyktor, polisljusramp, rotor, landställ och skuggor. Tjuvroboten har
+  metallpaneler och glödande ögon. Förstapersonshänder, klubba, bil-/helikopter-
+  cockpit, hjärt-HUD, sikte, meddelanden och fordons­explosioner är omgjorda.
+- Renderingen cullar osynliga sprites, återanvänder ray-/golvbuffertar, använder
+  förskapade material- och atmosfärlager och har en särskild iPad-profil med
+  320 väggstrålar och 256 × 160 golv (desktop: 512 och 320 × 200). Ett iPad-prov
+  i 1024 × 768 hade ingen scroll, inga webbläsarfel och vid 4× CPU-throttle
+  mättes 28,8 ms median och 30,4 ms p95 per renderad bild.
+- Wilder-v9 sluttestad med den officiella spelklienten och fulla v6-, v7- och
+  v8-regressionerna. Verifierat: 4/5/10 roller, hemknapp och kassaskåpsvakter,
+  tjuvbotarnas stöld-/räddningsprioritet, naturlig 500-pengar-tjuvseger,
+  roboträden och naturlig polisvinst. Inga konsol- eller sidfel. Safari-token är
+  `20260716-wilder-big-city-v9`.
