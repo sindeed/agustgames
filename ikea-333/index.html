@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="IKEA 3:33 – ett stort 3D-äventyr om att bygga gömställen och överleva monstret som kommer på natten."
+    />
+    <meta name="theme-color" content="#07182f" />
+    <title>IKEA 3:33 – Agust Games</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#startButton">Hoppa till startknappen</a>
+
+    <main class="game-page" aria-labelledby="gameTitle">
+      <section class="game-shell" aria-label="Spelruta för IKEA 3:33">
+        <div class="canvas-frame">
+          <canvas
+            id="gameCanvas"
+            width="960"
+            height="540"
+            tabindex="0"
+            aria-label="IKEA 3:33. Utforska varuhuset och göm dig innan monstret kommer klockan 3:33."
+          >
+            Din webbläsare kan inte visa spelet. Prova en nyare webbläsare.
+          </canvas>
+
+          <section id="gameHud" class="game-hud" aria-label="Spelstatus" hidden>
+            <div class="hud-block">
+              <strong id="hudArea">IKEA ∞</strong>
+              <span id="hudWeather">Molnigt</span>
+            </div>
+            <div class="hud-clock">
+              <strong id="hudClock">21:00</strong>
+              <span id="hudDay">Natt 1</span>
+            </div>
+            <div class="hud-objective" id="hudObjective">Bygg ett gömställe före 03:33</div>
+            <div class="hud-prompt" id="hudPrompt" hidden></div>
+            <div class="hud-toast" id="hudToast" hidden></div>
+          </section>
+
+          <div id="hideMask" class="hide-mask" hidden aria-hidden="true"></div>
+          <div id="cinematicCaption" class="cinematic-caption" hidden></div>
+
+          <nav class="game-nav" aria-label="Spelmeny">
+            <a class="pixel-icon-button" href="../" aria-label="Tillbaka till Agust Games">⌂</a>
+            <button class="pixel-icon-button" id="fullscreenButton" type="button" aria-label="Helskärm">⛶</button>
+          </nav>
+
+          <div id="touchControls" class="touch-controls" aria-label="Pekkontroller" hidden>
+            <div id="touchJoystick" class="touch-joystick" aria-label="Styrspak">
+              <span id="touchKnob" class="touch-knob"></span>
+            </div>
+            <div class="touch-actions">
+              <button class="touch-action touch-action-main" data-action="interact" type="button">HAND</button>
+              <button class="touch-action" data-action="hide" type="button">GÖM</button>
+              <button class="touch-action" data-action="marker" type="button">PIL</button>
+            </div>
+          </div>
+
+          <section
+            id="startOverlay"
+            class="start-overlay"
+            aria-labelledby="gameTitle"
+            aria-describedby="gameTagline gameControls"
+          >
+            <div class="menu-panel">
+              <p class="eyebrow">NATT 1 · VARUHUSET STÄNGER ALDRIG</p>
+
+              <h1 id="gameTitle" class="game-title">
+                <span class="title-blue">IKEA</span>
+                <span class="title-time">3:33</span>
+              </h1>
+
+              <p id="gameTagline" class="tagline">
+                Utforska ett oändligt, övergivet IKEA.<br />
+                Bygg ett gömställe och överlev <strong>3:33</strong>.
+              </p>
+
+              <div class="ominous-clock" aria-hidden="true">
+                <span class="clock-label">MONSTRET KOMMER OM</span>
+                <span class="clock-digits">00:48</span>
+              </div>
+
+              <div id="gameControls" class="controls-card">
+                <p>
+                  <strong>Dator:</strong> WASD/pilar = gå · mus = titta · E = bär/placera/använd
+                </p>
+                <p><strong>Göm:</strong> H · vägpil: M · spring: Shift · ficklampa: L · helskärm: F</p>
+                <p><strong>Mobil:</strong> Joystick och knappar visas när spelet startar.</p>
+              </div>
+
+              <button id="startButton" class="start-button" type="button">
+                <span aria-hidden="true">▶</span>
+                STARTA NATTEN
+              </button>
+
+              <p class="menu-hint">
+                Hitta den hemliga utgången. Bortom den väntar skogen – och en blå drake.
+              </p>
+            </div>
+          </section>
+
+          <p
+            id="gameStatus"
+            class="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Startmenyn är öppen. Tryck på Starta natten för att spela.
+          </p>
+
+          <p id="webglError" class="webgl-error" hidden>
+            Spelet behöver WebGL och internet första gången 3D-motorn laddas.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <noscript>
+      <p class="noscript-message">JavaScript behövs för att spela IKEA 3:33.</p>
+    </noscript>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js"
+        }
+      }
+    </script>
+    <script type="module" src="game.js?v=3"></script>
+  </body>
+</html>
