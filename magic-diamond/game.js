@@ -18,8 +18,12 @@
 
   var VIEW_W = canvas.width;
   var VIEW_H = canvas.height;
-  var WORLD_W = 3840;
-  var WORLD_H = 2400;
+  var BASE_WORLD_W = 3840;
+  var BASE_WORLD_H = 2400;
+  var WORLD_COLS = 10;
+  var WORLD_ROWS = 10;
+  var WORLD_W = BASE_WORLD_W * WORLD_COLS;
+  var WORLD_H = BASE_WORLD_H * WORLD_ROWS;
   var STEP_MS = 1000 / 60;
   var PLAYER_RADIUS = 18;
   var MAGIC_RANGE = 148;
@@ -40,7 +44,8 @@
   var fpGroundContext = fpGroundCanvas.getContext("2d");
   var FP_TERRAIN_W = 192;
   var FP_TERRAIN_H = 120;
-  var fpTerrainPixels = null;
+  var FP_TERRAIN_CACHE_LIMIT = 14;
+  var fpTerrainTiles = new Map();
   var fpDepthBuffer = new Float32Array(VIEW_W);
   var keys = new Set();
   var state = null;
@@ -101,14 +106,101 @@
     return effectSeed / 4294967296;
   }
 
+  function hashUnit(x, y, salt) {
+    var value = Math.imul((x | 0) + 374761393, 668265263) ^
+      Math.imul((y | 0) + 1442695041, 2246822519) ^ Math.imul((salt | 0) + 31, 3266489917);
+    value = Math.imul(value ^ (value >>> 15), 2246822519);
+    value = Math.imul(value ^ (value >>> 13), 3266489917);
+    return ((value ^ (value >>> 16)) >>> 0) / 4294967296;
+  }
+
+  var BIOME_GRID = [
+    ["core", "forest", "pine", "pine", "frost", "frost", "frost", "crystal", "crystal", "frost"],
+    ["meadow", "forest", "forest", "pine", "pine", "frost", "crystal", "crystal", "crystal", "pine"],
+    ["meadow", "meadow", "forest", "forest", "pine", "crystal", "crystal", "haunted", "haunted", "forest"],
+    ["meadow", "forest", "forest", "haunted", "haunted", "crystal", "haunted", "haunted", "forest", "meadow"],
+    ["meadow", "meadow", "forest", "haunted", "marsh", "marsh", "crystal", "forest", "meadow", "meadow"],
+    ["forest", "forest", "haunted", "marsh", "marsh", "marsh", "badlands", "badlands", "meadow", "forest"],
+    ["forest", "haunted", "marsh", "marsh", "meadow", "marsh", "badlands", "badlands", "badlands", "meadow"],
+    ["haunted", "marsh", "marsh", "badlands", "badlands", "badlands", "crystal", "crystal", "badlands", "meadow"],
+    ["badlands", "badlands", "marsh", "badlands", "badlands", "crystal", "crystal", "crystal", "meadow", "forest"],
+    ["badlands", "badlands", "badlands", "badlands", "crystal", "crystal", "crystal", "meadow", "meadow", "forest"]
+  ];
+  var BIOME_INFO = {
+    core: { name: "Lost Diamond Valley", color: [92, 151, 76], map: "#5c974c", trees: 0.58, rocks: 0.12, variant: "oak" },
+    meadow: { name: "Emerald Meadows", color: [117, 184, 92], map: "#75b85c", trees: 0.36, rocks: 0.10, variant: "oak" },
+    forest: { name: "Great Greenwood", color: [67, 123, 75], map: "#437b4b", trees: 0.74, rocks: 0.08, variant: "redwood" },
+    pine: { name: "Stormpine Reach", color: [49, 95, 85], map: "#315f55", trees: 0.70, rocks: 0.12, variant: "pine" },
+    haunted: { name: "Gloomwood", color: [75, 72, 95], map: "#4b485f", trees: 0.62, rocks: 0.16, variant: "dead" },
+    marsh: { name: "Misty Marsh", color: [97, 121, 83], map: "#617953", trees: 0.45, rocks: 0.08, variant: "willow" },
+    frost: { name: "Frostpeak Tundra", color: [184, 207, 218], map: "#b8cfda", trees: 0.42, rocks: 0.22, variant: "frost" },
+    badlands: { name: "Ember Badlands", color: [167, 109, 72], map: "#a76d48", trees: 0.16, rocks: 0.38, variant: "dead" },
+    crystal: { name: "Crystal Expanse", color: [129, 123, 154], map: "#817b9a", trees: 0.25, rocks: 0.42, variant: "crystal" }
+  };
+
+  function sectorCode(col, row) {
+    return String.fromCharCode(65 + clamp(col, 0, WORLD_COLS - 1)) + (clamp(row, 0, WORLD_ROWS - 1) + 1);
+  }
+
+  function getSectorInfoAt(x, y) {
+    var col = clamp(Math.floor(x / BASE_WORLD_W), 0, WORLD_COLS - 1);
+    var row = clamp(Math.floor(y / BASE_WORLD_H), 0, WORLD_ROWS - 1);
+    var biome = BIOME_GRID[row][col];
+    return {
+      col: col,
+      row: row,
+      code: sectorCode(col, row),
+      biome: biome,
+      info: BIOME_INFO[biome]
+    };
+  }
+
   function riverX(y) {
     return 1840 + Math.sin(y / 274) * 154 + Math.sin(y / 91) * 22;
   }
 
-  var bridges = [
-    { id: "moon_bridge", x: riverX(720), y: 720, w: 324, h: 112 },
-    { id: "old_bridge", x: riverX(1700), y: 1700, w: 324, h: 112 }
+  var riverDescriptors = [
+    { id: "silver", name: "Silver River", baseX: 1840, amplitude: 154, detail: 22, wave: 274, detailWave: 91, phase: 0 },
+    { id: "pinewater", name: "Pinewater River", baseX: 8260, amplitude: 235, detail: 48, wave: 510, detailWave: 143, phase: 1.4 },
+    { id: "mistflow", name: "Mistflow River", baseX: 15720, amplitude: 290, detail: 38, wave: 620, detailWave: 171, phase: 3.1 },
+    { id: "emberrun", name: "Emberrun River", baseX: 24050, amplitude: 210, detail: 54, wave: 455, detailWave: 128, phase: 4.6 },
+    { id: "moonwater", name: "Moonwater River", baseX: 32300, amplitude: 265, detail: 44, wave: 565, detailWave: 157, phase: 2.2 }
   ];
+
+  function riverCenterX(river, y) {
+    if (river.id === "silver") return riverX(y);
+    return river.baseX + Math.sin(y / river.wave + river.phase) * river.amplitude +
+      Math.sin(y / river.detailWave + river.phase * 1.7) * river.detail;
+  }
+
+  function getNearestRiverInfo(x, y) {
+    var best = null;
+    for (var i = 0; i < riverDescriptors.length; i += 1) {
+      var centerX = riverCenterX(riverDescriptors[i], y);
+      var riverDistance = Math.abs(x - centerX);
+      if (!best || riverDistance < best.distance) {
+        best = { river: riverDescriptors[i], x: centerX, distance: riverDistance };
+      }
+    }
+    return best;
+  }
+
+  var bridges = [
+    { id: "moon_bridge", riverId: "silver", x: riverX(720), y: 720, w: 324, h: 112 },
+    { id: "old_bridge", riverId: "silver", x: riverX(1700), y: 1700, w: 324, h: 112 }
+  ];
+  riverDescriptors.forEach(function (river, riverIndex) {
+    for (var bridgeY = 3200 + riverIndex * 210; bridgeY < WORLD_H - 260; bridgeY += 1720) {
+      bridges.push({
+        id: river.id + "_bridge_" + Math.round(bridgeY),
+        riverId: river.id,
+        x: riverCenterX(river, bridgeY),
+        y: bridgeY,
+        w: 324,
+        h: 112
+      });
+    }
+  });
   var rainbowFishSpots = [
     { id: "rainbow_fish_1", x: riverX(585), y: 585, caught: false, phase: 0.4 },
     { id: "rainbow_fish_2", x: riverX(1575), y: 1575, caught: false, phase: 2.2 },
@@ -140,7 +232,9 @@
   var thornGate = { x: 2534, y: 654, w: 82, h: 292 };
   var cliffs = [
     { x: 2485, y: 0, w: 184, h: 620 },
-    { x: 2485, y: 980, w: 184, h: 1420 }
+    { x: 2485, y: 980, w: 184, h: 1420 },
+    { x: 2485, y: 2336, w: 1355, h: 64 },
+    { x: 3776, y: 0, w: 64, h: 2400 }
   ];
   var ancientTrees = [
     { id: "whisper_tree", x: 1040, y: 880, r: 54, found: false, label: "Whisper Tree" },
@@ -152,6 +246,15 @@
     { id: "moon_crystal", x: 3500, y: 760, lit: false, color: "#9db8ff" }
   ];
   var diamond = { x: 3515, y: 322, collected: false };
+  var diamondSearchZone = { x: 3260, y: 610, radius: 760 };
+  var crystalCaves = [
+    { id: "echo_cave", x: 2860, y: 420, actual: false, checked: false },
+    { id: "mist_cave", x: 3090, y: 760, actual: false, checked: false },
+    { id: "frost_cave", x: 3420, y: 940, actual: false, checked: false },
+    { id: "shadow_cave", x: 3650, y: 640, actual: false, checked: false },
+    { id: "prism_cave", x: 3050, y: 250, actual: false, checked: false },
+    { id: "true_cave", x: diamond.x, y: diamond.y, actual: true, checked: false }
+  ];
   var portal = { x: 3405, y: 485, active: false };
   var treasureMap = { x: 560, y: 430, available: false, collected: false };
   var WEAPON_ORDER = ["sword", "bow", "spear", "rod"];
@@ -191,7 +294,7 @@
     ],
     [
       { x: 2910, y: 850 }, { x: 3240, y: 810 }, { x: 3500, y: 760 },
-      { x: 3520, y: 520 }, { x: 3515, y: 322 }
+      { x: 3380, y: 650 }, { x: diamondSearchZone.x, y: diamondSearchZone.y }
     ]
   ];
 
@@ -214,6 +317,186 @@
       }
     }
     return best;
+  }
+
+  function distanceToWorldRoads(x, y) {
+    if (x < BASE_WORLD_W && y < BASE_WORLD_H) return distanceToRoutes(x, y);
+    var localX = ((x % BASE_WORLD_W) + BASE_WORLD_W) % BASE_WORLD_W;
+    var localY = ((y % BASE_WORLD_H) + BASE_WORLD_H) % BASE_WORLD_H;
+    var gridRoad = Math.min(Math.abs(localX - BASE_WORLD_W / 2), Math.abs(localY - BASE_WORLD_H / 2));
+    var southTrail = Math.min(
+      distanceToSegment(x, y, 355, 2030, 355, 2700),
+      distanceToSegment(x, y, 355, 2700, BASE_WORLD_W / 2, BASE_WORLD_H + BASE_WORLD_H / 2)
+    );
+    return Math.min(gridRoad, southTrail);
+  }
+
+  function buildSectorLakes() {
+    var result = [];
+    for (var row = 0; row < WORLD_ROWS; row += 1) {
+      for (var col = 0; col < WORLD_COLS; col += 1) {
+        if (col === 0 && row === 0) continue;
+        var biome = BIOME_GRID[row][col];
+        var chance = biome === "marsh" ? 0.82 : (biome === "frost" ? 0.30 : 0.18);
+        if (hashUnit(col, row, 401) > chance) continue;
+        var leftSide = hashUnit(col, row, 402) < 0.5;
+        var upperSide = hashUnit(col, row, 403) < 0.5;
+        result.push({
+          id: "lake_" + sectorCode(col, row),
+          name: biome === "frost" ? "Mirror Ice Lake" : (biome === "marsh" ? "Murkwater Pool" : "Wildwater Lake"),
+          sector: sectorCode(col, row),
+          x: col * BASE_WORLD_W + (leftSide ? 820 : 3020) + (hashUnit(col, row, 404) - 0.5) * 260,
+          y: row * BASE_WORLD_H + (upperSide ? 600 : 1820) + (hashUnit(col, row, 405) - 0.5) * 190,
+          rx: 270 + hashUnit(col, row, 406) * (biome === "marsh" ? 260 : 150),
+          ry: 170 + hashUnit(col, row, 407) * (biome === "marsh" ? 170 : 110),
+          frozen: biome === "frost"
+        });
+      }
+    }
+    return result;
+  }
+
+  var sectorLakes = buildSectorLakes();
+
+  function getLakeAtPoint(x, y, padding) {
+    padding = padding || 0;
+    var sector = getSectorInfoAt(x, y);
+    for (var i = 0; i < sectorLakes.length; i += 1) {
+      var lake = sectorLakes[i];
+      if (lake.sector !== sector.code) continue;
+      var dx = (x - lake.x) / (lake.rx + padding);
+      var dy = (y - lake.y) / (lake.ry + padding);
+      if (dx * dx + dy * dy <= 1) return lake;
+    }
+    return null;
+  }
+
+  var LANDMARK_TYPES = {
+    meadow: ["Windmill Village", "Sun Tree", "Hilltop Shrine"],
+    forest: ["Guardian Tree", "Vine Ruins", "Ranger Tower"],
+    pine: ["Storm Watchtower", "Frozen Falls", "Pine Fort"],
+    haunted: ["Abandoned Manor", "Skull Grove", "Moon Graveyard"],
+    marsh: ["Witch Hut", "Sunken Shrine", "Reed Village"],
+    frost: ["Ice Spire", "Frozen Fort", "Aurora Arch"],
+    badlands: ["Dragon-Bone Arch", "Ember Tower", "Red Canyon Camp"],
+    crystal: ["Crystal Cathedral", "Moon Observatory", "Prism Ruins"]
+  };
+
+  function buildWildernessLandmarks() {
+    var result = [];
+    for (var row = 0; row < WORLD_ROWS; row += 1) {
+      for (var col = 0; col < WORLD_COLS; col += 1) {
+        if (col === 0 && row === 0) continue;
+        var biome = BIOME_GRID[row][col];
+        var names = LANDMARK_TYPES[biome];
+        var name = names[Math.floor(hashUnit(col, row, 501) * names.length)];
+        var x = col * BASE_WORLD_W + BASE_WORLD_W / 2 + (hashUnit(col, row, 502) < 0.5 ? -1 : 1) *
+          (460 + hashUnit(col, row, 503) * 230);
+        var y = row * BASE_WORLD_H + BASE_WORLD_H / 2 + (hashUnit(col, row, 504) - 0.5) * 620;
+        var nearestRiver = getNearestRiverInfo(x, y);
+        if (nearestRiver.distance < 240) x += x < nearestRiver.x ? -360 : 360;
+        result.push({
+          id: "landmark_" + sectorCode(col, row),
+          name: name,
+          x: x,
+          y: y,
+          sector: sectorCode(col, row),
+          biome: biome,
+          phase: hashUnit(col, row, 505) * Math.PI * 2
+        });
+      }
+    }
+    return result;
+  }
+
+  var wildernessLandmarks = buildWildernessLandmarks();
+
+  function getLandmarkForSector(code) {
+    for (var i = 0; i < wildernessLandmarks.length; i += 1) {
+      if (wildernessLandmarks[i].sector === code) return wildernessLandmarks[i];
+    }
+    return null;
+  }
+
+  var WILD_CELL = 170;
+  var WILD_OBJECT_CACHE_LIMIT = 2400;
+  var wildObjectCache = new Map();
+
+  function isNaturalWaterAt(x, y, padding) {
+    var riverInfo = getNearestRiverInfo(x, y);
+    if (riverInfo.distance < 92 + (padding || 0)) return true;
+    return Boolean(getLakeAtPoint(x, y, 34 + (padding || 0)));
+  }
+
+  function wildernessObjectForCell(cellX, cellY) {
+    if (cellX < 0 || cellY < 0 || cellX * WILD_CELL >= WORLD_W || cellY * WILD_CELL >= WORLD_H) return null;
+    var key = cellX + ":" + cellY;
+    if (wildObjectCache.has(key)) return wildObjectCache.get(key) || null;
+    var x = (cellX + 0.5) * WILD_CELL + (hashUnit(cellX, cellY, 611) - 0.5) * WILD_CELL * 0.58;
+    var y = (cellY + 0.5) * WILD_CELL + (hashUnit(cellX, cellY, 612) - 0.5) * WILD_CELL * 0.58;
+    var object = null;
+    if (!(x < BASE_WORLD_W && y < BASE_WORLD_H) && x > 80 && y > 80 && x < WORLD_W - 80 && y < WORLD_H - 80) {
+      var sector = getSectorInfoAt(x, y);
+      var landmark = getLandmarkForSector(sector.code);
+      var selector = hashUnit(cellX, cellY, 613);
+      var safeFromLandmark = !landmark || distanceXY(x, y, landmark.x, landmark.y) > 235;
+      if (!isNaturalWaterAt(x, y, 52) && distanceToWorldRoads(x, y) > 105 && safeFromLandmark) {
+        if (selector < sector.info.trees) {
+          var treeRadius = 34 + hashUnit(cellX, cellY, 614) * 22;
+          object = {
+            kind: "tree",
+            x: x,
+            y: y,
+            r: treeRadius,
+            collisionR: treeRadius * 0.52,
+            tint: hashUnit(cellX, cellY, 615),
+            shape: Math.floor(hashUnit(cellX, cellY, 616) * 3),
+            variant: sector.info.variant,
+            procedural: true
+          };
+        } else if (selector < sector.info.trees + sector.info.rocks) {
+          var rockRadius = 24 + hashUnit(cellX, cellY, 617) * 28;
+          object = {
+            kind: "rock",
+            x: x,
+            y: y,
+            r: rockRadius,
+            tint: hashUnit(cellX, cellY, 618),
+            shape: Math.floor(hashUnit(cellX, cellY, 619) * 3),
+            variant: sector.biome,
+            procedural: true
+          };
+        }
+      }
+    }
+    wildObjectCache.set(key, object || false);
+    if (wildObjectCache.size > WILD_OBJECT_CACHE_LIMIT) {
+      wildObjectCache.delete(wildObjectCache.keys().next().value);
+    }
+    return object;
+  }
+
+  function forEachWildernessObjectNear(x, y, radius, callback) {
+    var minCellX = Math.max(0, Math.floor((x - radius) / WILD_CELL));
+    var maxCellX = Math.min(Math.ceil(WORLD_W / WILD_CELL) - 1, Math.floor((x + radius) / WILD_CELL));
+    var minCellY = Math.max(0, Math.floor((y - radius) / WILD_CELL));
+    var maxCellY = Math.min(Math.ceil(WORLD_H / WILD_CELL) - 1, Math.floor((y + radius) / WILD_CELL));
+    for (var cellY = minCellY; cellY <= maxCellY; cellY += 1) {
+      for (var cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+        var object = wildernessObjectForCell(cellX, cellY);
+        if (object && distanceXY(x, y, object.x, object.y) <= radius + object.r) callback(object);
+      }
+    }
+  }
+
+  function isBlockedByWildernessObject(x, y, radius) {
+    var blocked = false;
+    forEachWildernessObjectNear(x, y, radius + 82, function (object) {
+      if (blocked) return;
+      var collisionRadius = object.kind === "tree" ? object.collisionR : object.r * 0.72;
+      if (distanceXY(x, y, object.x, object.y) < radius + collisionRadius) blocked = true;
+    });
+    return blocked;
   }
 
   function buildWorldObjects() {
@@ -258,8 +541,8 @@
 
     var decorations = [];
     for (var d = 0; d < 520; d += 1) {
-      var dx = 35 + random() * (WORLD_W - 70);
-      var dy = 35 + random() * (WORLD_H - 70);
+      var dx = 35 + random() * (BASE_WORLD_W - 70);
+      var dy = 35 + random() * (BASE_WORLD_H - 70);
       if (Math.abs(dx - riverX(dy)) < 92) continue;
       decorations.push({
         x: dx,
@@ -278,6 +561,58 @@
   var rocks = worldObjects.rocks;
   var decorations = worldObjects.decorations;
 
+  function buildWildernessMonsterBlueprints() {
+    var result = [];
+    var monstersPerSector = 16;
+    var typeByBiome = {
+      meadow: ["hornling", "crawler", "hornling"],
+      forest: ["crawler", "hornling", "maw"],
+      pine: ["hornling", "maw", "crawler"],
+      haunted: ["maw", "crawler", "maw"],
+      marsh: ["crawler", "maw", "crawler"],
+      frost: ["hornling", "crawler", "maw"],
+      badlands: ["maw", "hornling", "crawler"],
+      crystal: ["crawler", "hornling", "maw"]
+    };
+    for (var row = 0; row < WORLD_ROWS; row += 1) {
+      for (var col = 0; col < WORLD_COLS; col += 1) {
+        if (col === 0 && row === 0) continue;
+        var biome = BIOME_GRID[row][col];
+        var sector = sectorCode(col, row);
+        var landmark = getLandmarkForSector(sector);
+        for (var index = 0; index < monstersPerSector; index += 1) {
+          var x = 0;
+          var y = 0;
+          var attempt = 0;
+          do {
+            x = col * BASE_WORLD_W + 260 + hashUnit(col * 17 + index, row * 23 + attempt, 701) * (BASE_WORLD_W - 520);
+            y = row * BASE_WORLD_H + 230 + hashUnit(col * 29 + attempt, row * 31 + index, 702) * (BASE_WORLD_H - 460);
+            attempt += 1;
+          } while (attempt < 18 && (
+            isNaturalWaterAt(x, y, 70) ||
+            distanceToWorldRoads(x, y) < 145 ||
+            (landmark && distanceXY(x, y, landmark.x, landmark.y) < 260) ||
+            isBlockedByWildernessObject(x, y, 34)
+          ));
+          var types = typeByBiome[biome];
+          var type = types[(index + col + row) % types.length];
+          result.push({
+            id: "wild_" + sector + "_" + (index + 1),
+            type: type,
+            x: x,
+            y: y,
+            hp: type === "maw" ? 3 : 2,
+            speed: type === "crawler" ? 108 : (type === "hornling" ? 94 : 79),
+            phase: hashUnit(col * 41 + index, row * 43, 703) * Math.PI * 2,
+            sector: sector,
+            biome: biome
+          });
+        }
+      }
+    }
+    return result;
+  }
+
   var monsterBlueprints = [
     { id: "boswer", type: "boswer", x: 560, y: 430, hp: 8, speed: 66, phase: 3.8 },
     { id: "m1", type: "hornling", x: 860, y: 1370, hp: 2, speed: 92, phase: 0.2 },
@@ -295,6 +630,7 @@
     { id: "m13", type: "hornling", x: 3230, y: 420, hp: 2, speed: 96, phase: 2.8 },
     { id: "m14", type: "maw", x: 3700, y: 1940, hp: 3, speed: 82, phase: 0.4 }
   ];
+  monsterBlueprints = monsterBlueprints.concat(buildWildernessMonsterBlueprints());
 
   var horseBlueprints = [
     { id: "ember", name: "Ember", x: 820, y: 2090, color: "#a96336", mane: "#4a2b20", phase: 0.4 },
@@ -329,7 +665,7 @@
   ];
 
   (function clearBlueprintSpawnAreas() {
-    var positions = monsterBlueprints.concat(horseBlueprints).concat(villagerBlueprints);
+    var positions = monsterBlueprints.concat(horseBlueprints).concat(villagerBlueprints).concat(crystalCaves);
     for (var i = trees.length - 1; i >= 0; i -= 1) {
       if (positions.some(function (item) {
         return distanceXY(trees[i].x, trees[i].y, item.x, item.y) < trees[i].collisionR + 48;
@@ -355,6 +691,8 @@
         maxHp: m.hp,
         speed: m.speed,
         phase: m.phase,
+        sector: m.sector || "A1",
+        biome: m.biome || "core",
         r: m.type === "boswer" ? 38 : (m.type === "maw" ? 24 : 21),
         mode: "patrol",
         defeated: false,
@@ -409,6 +747,7 @@
     ancientTrees.forEach(function (tree) { tree.found = false; });
     crystals.forEach(function (crystal) { crystal.lit = false; });
     diamond.collected = false;
+    crystalCaves.forEach(function (cave) { cave.checked = false; });
     portal.active = false;
     treasureMap.x = 560;
     treasureMap.y = 430;
@@ -430,6 +769,7 @@
       objective: "Talk to Aster in the glowing grove",
       gateCleared: false,
       sealOpen: false,
+      diamondRevealed: false,
       secretRoomOpen: false,
       player: {
         x: 355,
@@ -470,6 +810,8 @@
       toast: "",
       toastUntil: 0,
       area: "Sunlit Grove",
+      currentSector: "A1",
+      visitedSectors: { A1: true },
       areaBanner: "Sunlit Grove",
       areaBannerUntil: 2500,
       monstersDefeated: 0,
@@ -572,7 +914,11 @@
   }
 
   function isInRiver(x, y, radius) {
-    return !isOnBridge(x, y, radius || 0) && Math.abs(x - riverX(y)) < 62 + (radius || 0);
+    radius = radius || 0;
+    if (isOnBridge(x, y, radius)) return false;
+    var riverInfo = getNearestRiverInfo(x, y);
+    if (riverInfo.distance < 62 + radius) return true;
+    return Boolean(getLakeAtPoint(x, y, radius));
   }
 
   function isPlayerSwimming() {
@@ -580,34 +926,53 @@
   }
 
   function routeTargetAcrossRiver(actor, target) {
-    var actorSide = Math.sign(actor.x - riverX(actor.y));
-    var targetSide = Math.sign(target.x - riverX(target.y));
     var radius = actor.r || 20;
     var activeBridge = bridges.find(function (bridge) {
       return Math.abs(actor.y - bridge.y) < bridge.h / 2 &&
         Math.abs(actor.x - bridge.x) < bridge.w / 2 + radius + 8;
     });
     if (activeBridge) {
+      var activeRiver = riverDescriptors.find(function (river) { return river.id === activeBridge.riverId; }) || riverDescriptors[0];
+      var actorSide = Math.sign(actor.x - riverCenterX(activeRiver, actor.y));
+      var targetSide = Math.sign(target.x - riverCenterX(activeRiver, target.y));
       var exitSide = targetSide || actorSide || 1;
       return {
         x: activeBridge.x + exitSide * (activeBridge.w / 2 + radius + 34),
         y: activeBridge.y
       };
     }
-    if (actorSide === 0 || targetSide === 0 || actorSide === targetSide) {
-      return target;
+
+    var crossing = null;
+    for (var riverIndex = 0; riverIndex < riverDescriptors.length; riverIndex += 1) {
+      var river = riverDescriptors[riverIndex];
+      var actorSideForRiver = Math.sign(actor.x - riverCenterX(river, actor.y));
+      var targetSideForRiver = Math.sign(target.x - riverCenterX(river, target.y));
+      if (actorSideForRiver && targetSideForRiver && actorSideForRiver !== targetSideForRiver) {
+        var centerDistance = Math.abs(actor.x - riverCenterX(river, actor.y));
+        if (!crossing || centerDistance < crossing.distance) {
+          crossing = {
+            river: river,
+            actorSide: actorSideForRiver,
+            targetSide: targetSideForRiver,
+            distance: centerDistance
+          };
+        }
+      }
     }
-    var bridge = bridges.slice().sort(function (a, b) {
-      var aApproachX = a.x + actorSide * (a.w / 2 + radius + 34);
-      var bApproachX = b.x + actorSide * (b.w / 2 + radius + 34);
-      var aExitX = a.x + targetSide * (a.w / 2 + radius + 34);
-      var bExitX = b.x + targetSide * (b.w / 2 + radius + 34);
+    if (!crossing) return target;
+    var riverBridges = bridges.filter(function (bridge) { return bridge.riverId === crossing.river.id; });
+    if (!riverBridges.length) return target;
+    var bridge = riverBridges.slice().sort(function (a, b) {
+      var aApproachX = a.x + crossing.actorSide * (a.w / 2 + radius + 34);
+      var bApproachX = b.x + crossing.actorSide * (b.w / 2 + radius + 34);
+      var aExitX = a.x + crossing.targetSide * (a.w / 2 + radius + 34);
+      var bExitX = b.x + crossing.targetSide * (b.w / 2 + radius + 34);
       var aRoute = distanceXY(actor.x, actor.y, aApproachX, a.y) + distanceXY(target.x, target.y, aExitX, a.y);
       var bRoute = distanceXY(actor.x, actor.y, bApproachX, b.y) + distanceXY(target.x, target.y, bExitX, b.y);
       return aRoute - bRoute;
     })[0];
     var approach = {
-      x: bridge.x + actorSide * (bridge.w / 2 + radius + 34),
+      x: bridge.x + crossing.actorSide * (bridge.w / 2 + radius + 34),
       y: bridge.y
     };
     if (distanceXY(actor.x, actor.y, approach.x, approach.y) > 68) return approach;
@@ -617,7 +982,7 @@
   function isBlocked(x, y, radius, movement) {
     var canSwim = Boolean(movement && movement.canSwim);
     if (x < radius + 18 || y < radius + 18 || x > WORLD_W - radius - 18 || y > WORLD_H - radius - 18) return true;
-    if (!canSwim && !isOnBridge(x, y, radius) && Math.abs(x - riverX(y)) < 68 + radius) return true;
+    if (!canSwim && isInRiver(x, y, radius + 6)) return true;
 
     for (var i = 0; i < trees.length; i += 1) {
       if (distanceXY(x, y, trees[i].x, trees[i].y) < radius + trees[i].collisionR) return true;
@@ -628,6 +993,9 @@
     for (var r = 0; r < rocks.length; r += 1) {
       if (distanceXY(x, y, rocks[r].x, rocks[r].y) < radius + rocks[r].r * 0.72) return true;
     }
+    if (isBlockedByWildernessObject(x, y, radius)) return true;
+    var currentLandmark = getLandmarkForSector(getSectorInfoAt(x, y).code);
+    if (currentLandmark && distanceXY(x, y, currentLandmark.x, currentLandmark.y) < radius + 72) return true;
     for (var c = 0; c < cliffs.length; c += 1) {
       if (circleRectCollision(x, y, radius, cliffs[c])) return true;
     }
@@ -659,14 +1027,25 @@
   }
 
   function getArea(x, y) {
-    if (x > 3260 && y < 560) return "Crystal Hollow";
-    if (x >= 2670) return "Moonstone Mountain";
-    if (x < 760 && y > 1630) return "Sunlit Grove";
-    if (Math.abs(x - riverX(y)) < 185) return "Silver River";
-    return "Whispering Woods";
+    if (x < BASE_WORLD_W && y < BASE_WORLD_H) {
+      if (x > 3260 && y < 560) return "Crystal Hollow";
+      if (x >= 2670) return "Moonstone Mountain";
+      if (x < 760 && y > 1630) return "Sunlit Grove";
+      if (Math.abs(x - riverX(y)) < 185) return "Silver River";
+      return "Whispering Woods";
+    }
+    var sector = getSectorInfoAt(x, y);
+    var riverInfo = getNearestRiverInfo(x, y);
+    var lake = getLakeAtPoint(x, y, 45);
+    if (riverInfo.distance < 150) return riverInfo.river.name + " • " + sector.code;
+    if (lake) return lake.name + " • " + sector.code;
+    return sector.info.name + " • " + sector.code;
   }
 
   function updateArea() {
+    var sector = getSectorInfoAt(state.player.x, state.player.y);
+    state.currentSector = sector.code;
+    state.visitedSectors[sector.code] = true;
     var nextArea = getArea(state.player.x, state.player.y);
     if (nextArea !== state.area) {
       state.area = nextArea;
@@ -690,7 +1069,7 @@
     if (stage === "castle_map") state.objective = "Defeat Boswer in Shadowkeep Castle and take his map";
     if (stage === "mountain_gate") state.objective = "Clear the thorn gate to Moonstone Mountain";
     if (stage === "mountain_crystals") state.objective = "Light the 3 moon crystals on the mountain";
-    if (stage === "diamond") state.objective = "Find and take Aster's lost diamond";
+    if (stage === "diamond") state.objective = "Investigate 3 false crystal caves to unlock the true echo";
     if (stage === "return") state.objective = "Return the diamond to Aster";
     if (stage === "won") state.objective = "Quest complete!";
   }
@@ -754,11 +1133,12 @@
       ]);
     } else if (state.questStage === "mountain_crystals") {
       openDialog("Aster the Wizard", [
-        "Moonstone Mountain is open. Light all three crystals and the diamond will reveal itself."
+        "Moonstone Mountain is open. Light all three crystals to break the seal around its false caves."
       ]);
     } else if (state.questStage === "diamond") {
       openDialog("Aster the Wizard", [
-        "I can feel the diamond shining in Crystal Hollow, high in the northeast."
+        "I can feel the diamond somewhere in Crystal Hollow, but false caves echo its magic.",
+        "Boswer's map shows only a wide search area. Inspect every cave until the true light answers."
       ]);
     } else if (state.questStage === "return") {
       openDialog("Aster the Wizard", [
@@ -846,6 +1226,49 @@
     playChime([440, 554, 659]);
   }
 
+  function nearestUncheckedCrystalCave(range) {
+    if (state.questStage !== "diamond") return null;
+    var nearest = null;
+    var bestDistance = Infinity;
+    crystalCaves.forEach(function (cave) {
+      if (cave.checked) return;
+      var caveDistance = distanceXY(state.player.x, state.player.y, cave.x, cave.y);
+      if (caveDistance < bestDistance) {
+        nearest = cave;
+        bestDistance = caveDistance;
+      }
+    });
+    return bestDistance <= (range || 112) ? nearest : null;
+  }
+
+  function inspectCrystalCave(cave) {
+    if (cave.actual) {
+      var falseCavesChecked = crystalCaves.filter(function (item) { return !item.actual && item.checked; }).length;
+      if (falseCavesChecked < 3) {
+        showToast("A hidden seal blocks this cave. Silence 3 false echoes first (" + falseCavesChecked + "/3).", 3.2);
+        playTone(145, 0.2, "triangle", 0.03);
+        return;
+      }
+      cave.checked = true;
+      state.diamondRevealed = true;
+      state.objective = "Take Aster's Lost Diamond from the true cave";
+      emitParticles(cave.x, cave.y - 20, "#8ff7ff", 52, 190);
+      showToast("The true cave answers! The Lost Diamond appears.", 3.4);
+      playChime([523, 659, 784, 1047]);
+      return;
+    }
+    cave.checked = true;
+    var checkedCount = crystalCaves.filter(function (item) { return !item.actual && item.checked; }).length;
+    state.objective = checkedCount < 3 ?
+      "Investigate false crystal caves (" + checkedCount + "/3 echoes)" :
+      "The seal is broken — find the true diamond cave";
+    emitParticles(cave.x, cave.y - 12, "#8b819c", 20, 110);
+    showToast(checkedCount < 3 ?
+      "Only an echo... false cave " + checkedCount + "/3." :
+      "Third false echo silenced! The true cave can now answer.", 2.8);
+    playTone(196, 0.18, "sine", 0.03);
+  }
+
   function catchRainbowFish(fish) {
     if (state.player.rainbowFish >= MAX_RAINBOW_FISH) {
       showToast("Your rainbow-fish pouch is full.", 1.8);
@@ -923,9 +1346,14 @@
       collectTreasureMap();
       return;
     }
-    if (state.questStage === "diamond" && !diamond.collected &&
+    if (state.questStage === "diamond" && state.diamondRevealed && !diamond.collected &&
         distanceXY(state.player.x, state.player.y, diamond.x, diamond.y) <= 100) {
       collectDiamond();
+      return;
+    }
+    var crystalCave = nearestUncheckedCrystalCave();
+    if (crystalCave) {
+      inspectCrystalCave(crystalCave);
       return;
     }
     if (portal.active && distanceXY(state.player.x, state.player.y, portal.x, portal.y) <= 100) {
@@ -933,6 +1361,8 @@
       state.player.y = 1900;
       state.player.checkpointX = 665;
       state.player.checkpointY = 1900;
+      state.player.swimming = isPlayerSwimming();
+      updateArea();
       syncCamera();
       emitParticles(state.player.x, state.player.y, "#8ff7ff", 32, 150);
       showToast("Aster's portal carries you home!", 2.4);
@@ -1369,6 +1799,10 @@
       var toPlayerX = state.player.x - monster.x;
       var toPlayerY = state.player.y - monster.y;
       var playerDistance = Math.hypot(toPlayerX, toPlayerY);
+      if (monster.id !== "boswer" && playerDistance > 1700) {
+        monster.mode = "dormant";
+        return;
+      }
       var targetX;
       var targetY;
       if (playerDistance < 440) {
@@ -1743,7 +2177,16 @@
         return { x: unlit[0].x, y: unlit[0].y, label: "Moon crystal" };
       }
     }
-    if (state.questStage === "diamond") return { x: diamond.x, y: diamond.y, label: "Lost Diamond" };
+    if (state.questStage === "diamond") {
+      if (state.diamondRevealed) return { x: diamond.x, y: diamond.y, label: "Revealed Diamond" };
+      return {
+        x: diamondSearchZone.x,
+        y: diamondSearchZone.y,
+        label: "Search Crystal Hollow",
+        approximate: true,
+        searchRadius: diamondSearchZone.radius
+      };
+    }
     if (state.questStage === "return") {
       if (portal.active && distanceXY(state.player.x, state.player.y, portal.x, portal.y) < 620) {
         return { x: portal.x, y: portal.y, label: "Magic portal" };
@@ -1764,10 +2207,12 @@
         distanceXY(state.player.x, state.player.y, treasureMap.x, treasureMap.y) <= 100) {
       return "E / ENTER  •  Take Boswer's map";
     }
-    if (state.questStage === "diamond" && !diamond.collected &&
+    if (state.questStage === "diamond" && state.diamondRevealed && !diamond.collected &&
         distanceXY(state.player.x, state.player.y, diamond.x, diamond.y) <= 100) {
       return "E / ENTER  •  Take the Lost Diamond";
     }
+    var cave = nearestUncheckedCrystalCave();
+    if (cave) return "E / ENTER  •  Search this crystal cave";
     if (portal.active && distanceXY(state.player.x, state.player.y, portal.x, portal.y) <= 100) {
       return "E / ENTER  •  Use Aster's portal";
     }
@@ -1848,70 +2293,112 @@
   }
 
   function staticTerrainColorAt(x, y) {
+    if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return [36, 50, 42];
     var base;
     var onBridge = bridges.some(function (bridge) {
       return Math.abs(x - bridge.x) <= bridge.w / 2 && Math.abs(y - bridge.y) <= bridge.h / 2;
     });
-    var riverDistance = Math.abs(x - riverX(y));
+    var riverInfo = getNearestRiverInfo(x, y);
+    var riverDistance = riverInfo.distance;
+    var lake = getLakeAtPoint(x, y, 0);
+    var sector = getSectorInfoAt(x, y);
     if (onBridge) {
       base = ((Math.floor(x / 25) + Math.floor(y / 24)) % 2) ? [151, 93, 48] : [170, 108, 57];
+    } else if (lake) {
+      base = lake.frozen ? [155, 211, 226] : [55, 139, 164];
     } else if (riverDistance < 61) {
       base = [61, 151, 179];
     } else if (riverDistance < 90) {
       base = [186, 158, 101];
-    } else if (isInsideCastle(x, y)) {
+    } else if (x < BASE_WORLD_W && y < BASE_WORLD_H && isInsideCastle(x, y)) {
       var stone = (Math.floor(x / 42) + Math.floor(y / 42)) % 2 ? 7 : 0;
       base = [116 + stone, 112 + stone, 107 + stone];
-    } else if (distanceToRoutes(x, y) < 42) {
+    } else if (distanceToWorldRoads(x, y) < 42) {
       base = [180, 154, 98];
-    } else if (x >= 2668) {
+    } else if (x < BASE_WORLD_W && y < BASE_WORLD_H && x >= 2668) {
       base = x > 3260 && y < 620 ? [136, 142, 151] : [113, 109, 119];
-    } else if (x < 760 && y > 1630) {
+    } else if (x < BASE_WORLD_W && y < BASE_WORLD_H && x < 760 && y > 1630) {
       base = [126, 194, 99];
-    } else {
+    } else if (x < BASE_WORLD_W && y < BASE_WORLD_H) {
       var forestPatch = (Math.floor(x / 95) + Math.floor(y / 95)) % 2 ? 5 : -3;
       base = [70 + forestPatch, 132 + forestPatch, 73 + forestPatch];
+    } else {
+      var terrainNoise = Math.round((hashUnit(Math.floor(x / 78), Math.floor(y / 78), 811) - 0.5) * 18);
+      var broadNoise = Math.round((hashUnit(Math.floor(x / 330), Math.floor(y / 330), 812) - 0.5) * 12);
+      base = [
+        sector.info.color[0] + terrainNoise + broadNoise,
+        sector.info.color[1] + terrainNoise + broadNoise,
+        sector.info.color[2] + terrainNoise + broadNoise
+      ];
     }
-    return base;
+    return [clamp(base[0], 20, 235), clamp(base[1], 20, 235), clamp(base[2], 20, 235)];
   }
 
   function ensureFPTerrainTexture() {
-    if (fpTerrainPixels) return;
-    fpTerrainPixels = new Uint8ClampedArray(FP_TERRAIN_W * FP_TERRAIN_H * 3);
+    var sector = getSectorInfoAt(state.player.x, state.player.y);
+    getFPTerrainTile(sector.col, sector.row);
+  }
+
+  function getFPTerrainTile(col, row) {
+    col = clamp(col, 0, WORLD_COLS - 1);
+    row = clamp(row, 0, WORLD_ROWS - 1);
+    var key = col + ":" + row;
+    if (fpTerrainTiles.has(key)) return fpTerrainTiles.get(key);
+    var pixels = new Uint8ClampedArray(FP_TERRAIN_W * FP_TERRAIN_H * 3);
     for (var ty = 0; ty < FP_TERRAIN_H; ty += 1) {
       for (var tx = 0; tx < FP_TERRAIN_W; tx += 1) {
-        var worldX = (tx + 0.5) / FP_TERRAIN_W * WORLD_W;
-        var worldY = (ty + 0.5) / FP_TERRAIN_H * WORLD_H;
+        var worldX = col * BASE_WORLD_W + (tx + 0.5) / FP_TERRAIN_W * BASE_WORLD_W;
+        var worldY = row * BASE_WORLD_H + (ty + 0.5) / FP_TERRAIN_H * BASE_WORLD_H;
         var color = staticTerrainColorAt(worldX, worldY);
         var index = (ty * FP_TERRAIN_W + tx) * 3;
-        fpTerrainPixels[index] = color[0];
-        fpTerrainPixels[index + 1] = color[1];
-        fpTerrainPixels[index + 2] = color[2];
+        pixels[index] = color[0];
+        pixels[index + 1] = color[1];
+        pixels[index + 2] = color[2];
       }
     }
+    fpTerrainTiles.set(key, pixels);
+    if (fpTerrainTiles.size > FP_TERRAIN_CACHE_LIMIT) {
+      fpTerrainTiles.delete(fpTerrainTiles.keys().next().value);
+    }
+    return pixels;
   }
 
   function sampleFPTerrain(x, y, depth, destination, destinationIndex) {
-    var textureX = clamp(Math.floor(x / WORLD_W * FP_TERRAIN_W), 0, FP_TERRAIN_W - 1);
-    var textureY = clamp(Math.floor(y / WORLD_H * FP_TERRAIN_H), 0, FP_TERRAIN_H - 1);
+    x = clamp(x, 0, WORLD_W - 0.001);
+    y = clamp(y, 0, WORLD_H - 0.001);
+    var col = clamp(Math.floor(x / BASE_WORLD_W), 0, WORLD_COLS - 1);
+    var row = clamp(Math.floor(y / BASE_WORLD_H), 0, WORLD_ROWS - 1);
+    var pixels = getFPTerrainTile(col, row);
+    var localX = x - col * BASE_WORLD_W;
+    var localY = y - row * BASE_WORLD_H;
+    var textureX = clamp(Math.floor(localX / BASE_WORLD_W * FP_TERRAIN_W), 0, FP_TERRAIN_W - 1);
+    var textureY = clamp(Math.floor(localY / BASE_WORLD_H * FP_TERRAIN_H), 0, FP_TERRAIN_H - 1);
     var sourceIndex = (textureY * FP_TERRAIN_W + textureX) * 3;
     var shade = clamp(1.05 - depth / (FP_FAR * 2.4), 0.58, 1.05);
-    destination[destinationIndex] = fpTerrainPixels[sourceIndex] * shade;
-    destination[destinationIndex + 1] = fpTerrainPixels[sourceIndex + 1] * shade;
-    destination[destinationIndex + 2] = fpTerrainPixels[sourceIndex + 2] * shade;
+    destination[destinationIndex] = pixels[sourceIndex] * shade;
+    destination[destinationIndex + 1] = pixels[sourceIndex + 1] * shade;
+    destination[destinationIndex + 2] = pixels[sourceIndex + 2] * shade;
     destination[destinationIndex + 3] = 255;
   }
 
   function drawFPSkyAndGround() {
     ensureFPTerrainTexture();
     var horizon = getFPHorizon();
+    var currentBiome = getSectorInfoAt(state.player.x, state.player.y).biome;
     var sky = ctx.createLinearGradient(0, 0, 0, horizon + 35);
     if (state.weather.intensity > 0.45) {
       sky.addColorStop(0, "#56677a");
       sky.addColorStop(1, "#a6b2b1");
-    } else if (state.area === "Moonstone Mountain" || state.area === "Crystal Hollow") {
+    } else if (currentBiome === "frost" || currentBiome === "crystal" ||
+        state.area === "Moonstone Mountain" || state.area === "Crystal Hollow") {
       sky.addColorStop(0, "#7289a7");
       sky.addColorStop(1, "#d8d4c9");
+    } else if (currentBiome === "badlands") {
+      sky.addColorStop(0, "#8f6c72");
+      sky.addColorStop(1, "#efc18b");
+    } else if (currentBiome === "haunted" || currentBiome === "marsh") {
+      sky.addColorStop(0, "#5b6675");
+      sky.addColorStop(1, "#b3c2ae");
     } else {
       sky.addColorStop(0, "#67b9df");
       sky.addColorStop(1, "#d9f2cf");
@@ -1929,7 +2416,9 @@
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = state.player.x >= 2668 ? "rgba(71,69,82,0.58)" : "rgba(39,93,55,0.48)";
+    ctx.fillStyle = (currentBiome === "frost" || currentBiome === "crystal" || currentBiome === "haunted" ||
+      state.area === "Moonstone Mountain" || state.area === "Crystal Hollow") ?
+      "rgba(71,69,82,0.58)" : (currentBiome === "badlands" ? "rgba(104,65,48,0.56)" : "rgba(39,93,55,0.48)");
     ctx.beginPath();
     ctx.moveTo(0, horizon + 3);
     for (var ridgeX = 0; ridgeX <= VIEW_W; ridgeX += 60) {
@@ -2146,9 +2635,24 @@
     rocks.forEach(function (rock) {
       add(rock.x, rock.y, rock.r * 1.2, function () { drawRock(rock); }, 0, 155);
     });
+    forEachWildernessObjectNear(state.player.x, state.player.y, FP_FAR + 180, function (object) {
+      if (object.kind === "tree") {
+        add(object.x, object.y, object.r * 1.35, function () { drawTree(object, false); }, 0, 175, 6);
+      } else {
+        add(object.x, object.y, object.r * 1.25, function () { drawRock(object); }, 0, 155);
+      }
+    });
+    wildernessLandmarks.forEach(function (landmark) {
+      add(landmark.x, landmark.y, 145, function () { drawWildernessLandmark(landmark); }, 0, 330, 7);
+    });
     crystals.forEach(function (crystal) {
       add(crystal.x, crystal.y, 58, function () { drawCrystal(crystal); }, 0, 200);
     });
+    if (state.questStage === "diamond") {
+      crystalCaves.forEach(function (cave) {
+        add(cave.x, cave.y, 82, function () { drawCrystalCave(cave); }, 0, 205, 5);
+      });
+    }
     add(diamond.x, diamond.y, 126, drawDiamondAndSeal, 0, 210);
     if (portal.active) add(portal.x, portal.y, 76, drawFPPortalBillboard, 0, 220);
     if (treasureMap.available && !treasureMap.collected) {
@@ -2262,6 +2766,7 @@
   function drawFPObjectiveMarker() {
     var target = getObjectiveTarget();
     if (!target) return;
+    if (target.approximate && distanceXY(state.player.x, state.player.y, target.x, target.y) <= target.searchRadius) return;
     var projected = projectFPPoint(target.x, target.y, 112);
     if (!projected || projected.x < 20 || projected.x > VIEW_W - 20) return;
     var column = clamp(Math.round(projected.x), 0, VIEW_W - 1);
@@ -2790,6 +3295,7 @@
 
   function drawTree(tree, ancient) {
     var size = tree.r;
+    var variant = ancient ? "ancient" : (tree.variant || "oak");
     ctx.save();
     var windSway = state.weather.intensity * Math.sin(state.timeMs / 330 + tree.x * 0.017) * (ancient ? 3.5 : 2.3);
     ctx.translate(tree.x + windSway, tree.y);
@@ -2797,22 +3303,73 @@
     ctx.beginPath();
     ctx.ellipse(8, size * 0.5, size * 0.78, size * 0.33, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = ancient ? "#6d4b31" : "#64452d";
+    ctx.fillStyle = variant === "crystal" ? "#554e72" : (variant === "dead" ? "#4c3d3b" : (ancient ? "#6d4b31" : "#64452d"));
     ctx.fillRect(-size * 0.17, -4, size * 0.34, size * 0.78);
-    ctx.fillStyle = ancient ? "#3d8663" : (tree.tint > 0.55 ? "#2f7649" : "#377f4a");
     var canopyY = -size * 0.46;
-    [[-0.42, 0.02, 0.55], [0.42, 0.02, 0.55], [0, -0.35, 0.62], [0, 0.2, 0.62]].forEach(function (part, index) {
-      ctx.beginPath();
-      ctx.arc(part[0] * size, canopyY + part[1] * size, part[2] * size, 0, Math.PI * 2);
-      ctx.fill();
-      if (index < 3) {
-        ctx.fillStyle = ancient ? "#4fa176" : "#4c9458";
+    if (variant === "pine" || variant === "frost") {
+      var pineColors = variant === "frost" ? ["#d9edf0", "#a9d5d5", "#78aaa4"] : ["#315f55", "#2a5148", "#3b7562"];
+      for (var layer = 0; layer < 3; layer += 1) {
+        ctx.fillStyle = pineColors[layer];
+        ctx.beginPath();
+        ctx.moveTo(0, -size * (1.65 - layer * 0.43));
+        ctx.lineTo(-size * (0.55 + layer * 0.12), -size * (0.42 - layer * 0.18));
+        ctx.lineTo(size * (0.55 + layer * 0.12), -size * (0.42 - layer * 0.18));
+        ctx.closePath();
+        ctx.fill();
       }
-    });
-    ctx.fillStyle = "rgba(183, 236, 152, 0.3)";
-    ctx.beginPath();
-    ctx.arc(-size * 0.22, canopyY - size * 0.26, size * 0.24, 0, Math.PI * 2);
-    ctx.fill();
+    } else if (variant === "dead") {
+      ctx.strokeStyle = "#514044";
+      ctx.lineWidth = Math.max(4, size * 0.12);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(0, size * 0.2);
+      ctx.lineTo(-size * 0.1, -size * 1.15);
+      ctx.moveTo(-size * 0.06, -size * 0.55);
+      ctx.lineTo(-size * 0.66, -size * 0.9);
+      ctx.moveTo(-size * 0.03, -size * 0.72);
+      ctx.lineTo(size * 0.61, -size * 1.02);
+      ctx.moveTo(-size * 0.4, -size * 0.76);
+      ctx.lineTo(-size * 0.58, -size * 1.12);
+      ctx.stroke();
+    } else if (variant === "crystal") {
+      ctx.shadowColor = "#b7a4ff";
+      ctx.shadowBlur = 14;
+      [
+        [-0.48, -0.42, "#aa8fe3"], [0.42, -0.5, "#7de4e2"], [0, -1.05, "#d6b8ff"], [0, -0.25, "#8e83ca"]
+      ].forEach(function (shard) {
+        ctx.fillStyle = shard[2];
+        ctx.beginPath();
+        ctx.moveTo(shard[0] * size, (shard[1] - 0.62) * size);
+        ctx.lineTo((shard[0] - 0.28) * size, (shard[1] + 0.25) * size);
+        ctx.lineTo((shard[0] + 0.28) * size, (shard[1] + 0.25) * size);
+        ctx.closePath();
+        ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillStyle = variant === "willow" ? "#537e52" : (ancient ? "#3d8663" : (tree.tint > 0.55 ? "#2f7649" : "#377f4a"));
+      var spread = variant === "redwood" ? 0.46 : 0.62;
+      [[-0.42, 0.02, 0.55], [0.42, 0.02, 0.55], [0, -0.35, spread], [0, 0.2, spread]].forEach(function (part, index) {
+        ctx.beginPath();
+        ctx.arc(part[0] * size, canopyY + part[1] * size, part[2] * size, 0, Math.PI * 2);
+        ctx.fill();
+        if (index < 3) ctx.fillStyle = ancient ? "#4fa176" : (variant === "willow" ? "#6d9b61" : "#4c9458");
+      });
+      if (variant === "willow") {
+        ctx.strokeStyle = "rgba(119,164,92,0.8)";
+        ctx.lineWidth = 3;
+        for (var vine = -2; vine <= 2; vine += 1) {
+          ctx.beginPath();
+          ctx.moveTo(vine * size * 0.28, -size * 0.45);
+          ctx.quadraticCurveTo(vine * size * 0.38 + 8, size * 0.25, vine * size * 0.3, size * 0.55);
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = "rgba(183, 236, 152, 0.3)";
+      ctx.beginPath();
+      ctx.arc(-size * 0.22, canopyY - size * 0.26, size * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (ancient) {
       var glow = tree.found ? 0.95 : 0.58 + Math.sin(state.timeMs / 260 + tree.x) * 0.2;
       ctx.strokeStyle = "rgba(119, 255, 242, " + glow + ")";
@@ -2846,7 +3403,10 @@
     ctx.lineTo(rock.r, -rock.r * 0.2);
     ctx.lineTo(rock.r * 0.75, rock.r * 0.55);
     ctx.closePath();
-    ctx.fillStyle = rock.tint > 0.5 ? "#67636e" : "#77717b";
+    var rockColors = rock.variant === "frost" ? ["#b6cbd1", "#d1e0e2"] :
+      (rock.variant === "badlands" ? ["#8f5943", "#ae7051"] :
+        (rock.variant === "crystal" ? ["#73668f", "#9a86bd"] : ["#67636e", "#77717b"]));
+    ctx.fillStyle = rock.tint > 0.5 ? rockColors[0] : rockColors[1];
     ctx.fill();
     ctx.fillStyle = "rgba(222, 226, 220, 0.25)";
     ctx.beginPath();
@@ -2855,6 +3415,63 @@
     ctx.lineTo(rock.r * 0.34, -rock.r * 0.25);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+
+  function drawWildernessLandmark(landmark) {
+    ctx.save();
+    ctx.translate(landmark.x, landmark.y);
+    ctx.fillStyle = "rgba(20,18,22,0.34)";
+    ctx.beginPath();
+    ctx.ellipse(10, 12, 96, 31, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (landmark.name.indexOf("Tree") >= 0 || landmark.name.indexOf("Grove") >= 0) {
+      var giantTree = { x: 0, y: 0, r: 92, tint: 0.8, variant: landmark.biome === "haunted" ? "dead" : "redwood" };
+      drawTree(giantTree, false);
+    } else if (landmark.name.indexOf("Arch") >= 0 || landmark.name.indexOf("Falls") >= 0) {
+      ctx.strokeStyle = landmark.biome === "frost" ? "#d4edf1" : "#9b765b";
+      ctx.lineWidth = 28;
+      ctx.beginPath();
+      ctx.arc(0, -48, 70, Math.PI, 0);
+      ctx.lineTo(70, 18);
+      ctx.moveTo(-70, -48);
+      ctx.lineTo(-70, 18);
+      ctx.stroke();
+    } else if (landmark.name.indexOf("Village") >= 0 || landmark.name.indexOf("Camp") >= 0 || landmark.name.indexOf("Hut") >= 0) {
+      ctx.fillStyle = "#7a5538";
+      ctx.fillRect(-64, -82, 128, 96);
+      ctx.fillStyle = "#af7044";
+      ctx.beginPath();
+      ctx.moveTo(-82, -80);
+      ctx.lineTo(0, -142);
+      ctx.lineTo(82, -80);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ffd477";
+      ctx.fillRect(-15, -52, 30, 40);
+    } else {
+      var landmarkColor = landmark.biome === "crystal" ? "#a992dc" :
+        (landmark.biome === "frost" ? "#c8e0e6" : (landmark.biome === "badlands" ? "#975b43" : "#77727d"));
+      ctx.fillStyle = landmarkColor;
+      ctx.fillRect(-54, -150, 108, 166);
+      ctx.fillStyle = "rgba(230,239,229,0.3)";
+      ctx.fillRect(-37, -134, 19, 112);
+      ctx.beginPath();
+      ctx.moveTo(-70, -150);
+      ctx.lineTo(0, -206);
+      ctx.lineTo(70, -150);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ffe083";
+      ctx.fillRect(-12, -82, 24, 38);
+    }
+    ctx.fillStyle = "rgba(10,20,17,0.86)";
+    ctx.fillRect(-108, 30, 216, 35);
+    ctx.fillStyle = "#fff0a0";
+    ctx.font = "900 17px Trebuchet MS, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(landmark.name.toUpperCase(), 0, 47, 204);
     ctx.restore();
   }
 
@@ -2921,6 +3538,59 @@
     ctx.restore();
   }
 
+  function drawCrystalCave(cave) {
+    ctx.save();
+    ctx.translate(cave.x, cave.y);
+    ctx.fillStyle = "rgba(22,20,29,0.38)";
+    ctx.beginPath();
+    ctx.ellipse(0, 22, 70, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = cave.checked && !cave.actual ? "#4b4855" : "#696478";
+    ctx.beginPath();
+    ctx.arc(0, 0, 64, Math.PI, 0);
+    ctx.lineTo(64, 25);
+    ctx.lineTo(-64, 25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#171620";
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 43, 49, 0, Math.PI, 0);
+    ctx.lineTo(43, 25);
+    ctx.lineTo(-43, 25);
+    ctx.closePath();
+    ctx.fill();
+    if (!cave.checked) {
+      ctx.strokeStyle = "rgba(151,225,255," + (0.55 + Math.sin(state.timeMs / 240 + cave.x) * 0.2) + ")";
+      ctx.shadowColor = "#8fdcff";
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-43, -18);
+      ctx.lineTo(-30, -42);
+      ctx.lineTo(-17, -17);
+      ctx.moveTo(28, -22);
+      ctx.lineTo(42, -48);
+      ctx.lineTo(51, -17);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    } else if (!cave.actual) {
+      ctx.strokeStyle = "#b06d79";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(-17, -12);
+      ctx.lineTo(17, 18);
+      ctx.moveTo(17, -12);
+      ctx.lineTo(-17, 18);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "rgba(143,247,255,0.34)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 38 + Math.sin(state.timeMs / 170) * 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawDiamondAndSeal() {
     ctx.save();
     ctx.translate(diamond.x, diamond.y);
@@ -2945,7 +3615,7 @@
     ctx.beginPath();
     ctx.ellipse(0, 24, 49, 18, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (!diamond.collected && state.sealOpen) {
+    if (!diamond.collected && state.sealOpen && state.diamondRevealed) {
       var bob = Math.sin(state.timeMs / 260) * 7;
       ctx.translate(0, bob - 25);
       ctx.shadowColor = "#6ff7ff";
@@ -3741,48 +4411,113 @@
     var mapY = 76;
     var mapW = 151;
     var mapH = 94;
+    var innerX = mapX + 5;
+    var innerY = mapY + 5;
+    var innerW = mapW - 10;
+    var innerH = mapH - 10;
+    var localWorldW = 3200;
+    var localWorldH = 1900;
+    var localLeft = clamp(state.player.x - localWorldW / 2, 0, WORLD_W - localWorldW);
+    var localTop = clamp(state.player.y - localWorldH / 2, 0, WORLD_H - localWorldH);
+    function miniX(worldX) { return innerX + (worldX - localLeft) / localWorldW * innerW; }
+    function miniY(worldY) { return innerY + (worldY - localTop) / localWorldH * innerH; }
     drawRoundedRect(mapX, mapY, mapW, mapH, 12, "rgba(10,27,20,0.72)", "rgba(225,255,229,0.38)");
     ctx.save();
     ctx.beginPath();
-    ctx.roundRect(mapX + 5, mapY + 5, mapW - 10, mapH - 10, 8);
+    ctx.roundRect(innerX, innerY, innerW, innerH, 8);
     ctx.clip();
-    ctx.fillStyle = "#5f9b50";
-    ctx.fillRect(mapX + 5, mapY + 5, mapW - 10, mapH - 10);
-    ctx.fillStyle = "#67636e";
-    var mountainStart = mapX + 5 + (2668 / WORLD_W) * (mapW - 10);
-    ctx.fillRect(mountainStart, mapY + 5, mapX + mapW - 5 - mountainStart, mapH - 10);
-    ctx.fillStyle = "#45434d";
-    ctx.fillRect(
-      mapX + 5 + (castle.x / WORLD_W) * (mapW - 10),
-      mapY + 5 + (castle.y / WORLD_H) * (mapH - 10),
-      Math.max(7, (castle.w / WORLD_W) * (mapW - 10)),
-      Math.max(7, (castle.h / WORLD_H) * (mapH - 10))
-    );
+    var terrainColumns = 14;
+    var terrainRows = 9;
+    for (var tileY = 0; tileY < terrainRows; tileY += 1) {
+      for (var tileX = 0; tileX < terrainColumns; tileX += 1) {
+        var sampleX = localLeft + (tileX + 0.5) / terrainColumns * localWorldW;
+        var sampleY = localTop + (tileY + 0.5) / terrainRows * localWorldH;
+        var terrainColor = staticTerrainColorAt(sampleX, sampleY);
+        ctx.fillStyle = "rgb(" + terrainColor[0] + "," + terrainColor[1] + "," + terrainColor[2] + ")";
+        ctx.fillRect(
+          innerX + tileX / terrainColumns * innerW,
+          innerY + tileY / terrainRows * innerH,
+          innerW / terrainColumns + 1,
+          innerH / terrainRows + 1
+        );
+      }
+    }
+
+    ctx.strokeStyle = "rgba(221,196,132,0.72)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    for (var roadCol = 0; roadCol < WORLD_COLS; roadCol += 1) {
+      var roadX = roadCol * BASE_WORLD_W + BASE_WORLD_W / 2;
+      if (roadX >= localLeft && roadX <= localLeft + localWorldW) {
+        ctx.beginPath();
+        ctx.moveTo(miniX(roadX), innerY);
+        ctx.lineTo(miniX(roadX), innerY + innerH);
+        ctx.stroke();
+      }
+    }
+    for (var roadRow = 0; roadRow < WORLD_ROWS; roadRow += 1) {
+      var roadY = roadRow * BASE_WORLD_H + BASE_WORLD_H / 2;
+      if (roadY >= localTop && roadY <= localTop + localWorldH) {
+        ctx.beginPath();
+        ctx.moveTo(innerX, miniY(roadY));
+        ctx.lineTo(innerX + innerW, miniY(roadY));
+        ctx.stroke();
+      }
+    }
+
     ctx.strokeStyle = "#55c4db";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    for (var y = 0; y <= WORLD_H; y += 160) {
-      var mx = mapX + 5 + (riverX(y) / WORLD_W) * (mapW - 10);
-      var my = mapY + 5 + (y / WORLD_H) * (mapH - 10);
-      if (y === 0) ctx.moveTo(mx, my);
-      else ctx.lineTo(mx, my);
-    }
-    ctx.stroke();
-    if (!state.hasMap) {
-      ctx.fillStyle = "rgba(39,37,48,0.72)";
-      ctx.fillRect(mountainStart, mapY + 5, mapX + mapW - 5 - mountainStart, mapH - 10);
-    }
+    ctx.lineWidth = 3.5;
+    riverDescriptors.forEach(function (river) {
+      var began = false;
+      ctx.beginPath();
+      for (var riverY = localTop - 80; riverY <= localTop + localWorldH + 80; riverY += 90) {
+        var riverWorldX = riverCenterX(river, riverY);
+        if (riverWorldX < localLeft - 250 || riverWorldX > localLeft + localWorldW + 250) continue;
+        if (!began) {
+          ctx.moveTo(miniX(riverWorldX), miniY(riverY));
+          began = true;
+        } else ctx.lineTo(miniX(riverWorldX), miniY(riverY));
+      }
+      if (began) ctx.stroke();
+    });
+    ctx.fillStyle = "#4da5be";
+    sectorLakes.forEach(function (lake) {
+      if (lake.x + lake.rx < localLeft || lake.x - lake.rx > localLeft + localWorldW ||
+          lake.y + lake.ry < localTop || lake.y - lake.ry > localTop + localWorldH) return;
+      ctx.beginPath();
+      ctx.ellipse(miniX(lake.x), miniY(lake.y), lake.rx / localWorldW * innerW,
+        lake.ry / localWorldH * innerH, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    wildernessLandmarks.forEach(function (landmark) {
+      if (landmark.x < localLeft || landmark.x > localLeft + localWorldW ||
+          landmark.y < localTop || landmark.y > localTop + localWorldH) return;
+      ctx.fillStyle = "#ffe18b";
+      ctx.beginPath();
+      ctx.arc(miniX(landmark.x), miniY(landmark.y), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
     var target = getObjectiveTarget();
     if (target) {
-      var tx = mapX + 5 + (target.x / WORLD_W) * (mapW - 10);
-      var ty = mapY + 5 + (target.y / WORLD_H) * (mapH - 10);
+      var tx = clamp(miniX(target.x), innerX + 5, innerX + innerW - 5);
+      var ty = clamp(miniY(target.y), innerY + 5, innerY + innerH - 5);
+      if (target.approximate) {
+        ctx.strokeStyle = "rgba(255,233,109,0.72)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.ellipse(tx, ty, target.searchRadius / localWorldW * innerW,
+          target.searchRadius / localWorldH * innerH, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.fillStyle = "#ffe96d";
       ctx.beginPath();
       ctx.arc(tx, ty, 4 + Math.sin(state.timeMs / 150) * 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    var px = mapX + 5 + (state.player.x / WORLD_W) * (mapW - 10);
-    var py = mapY + 5 + (state.player.y / WORLD_H) * (mapH - 10);
+    var px = miniX(state.player.x);
+    var py = miniY(state.player.y);
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(Math.atan2(state.player.facingY, state.player.facingX));
@@ -3802,7 +4537,7 @@
     ctx.fillStyle = "#dceee1";
     ctx.font = "700 10px Trebuchet MS, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("VALLEY MAP", mapX + mapW / 2, mapY + mapH + 13);
+    ctx.fillText("LOCAL MAP • " + state.currentSector, mapX + mapW / 2, mapY + mapH + 13);
   }
 
   function drawFullMapOverlay() {
@@ -3810,9 +4545,9 @@
     var panelY = 42;
     var panelW = 844;
     var panelH = 516;
-    var mapX = 86;
+    var mapX = 168;
     var mapY = 104;
-    var mapW = 788;
+    var mapW = 624;
     var mapH = 390;
     ctx.save();
     ctx.fillStyle = "rgba(3,12,9,0.84)";
@@ -3820,51 +4555,88 @@
     drawRoundedRect(panelX, panelY, panelW, panelH, 22, "rgba(15,38,27,0.97)", "rgba(156,231,176,0.7)");
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff0a0";
-    ctx.font = "900 30px Georgia, serif";
-    ctx.fillText("VALLEY MAP", VIEW_W / 2, 70);
+    ctx.font = "900 27px Georgia, serif";
+    ctx.fillText("THE GREAT REALM • 100 REGIONS", VIEW_W / 2, 69);
     ctx.fillStyle = "#b9dfc1";
-    ctx.font = "800 13px Trebuchet MS, sans-serif";
-    ctx.fillText("The white arrow is you • Yellow light is your next goal", VIEW_W / 2, 91);
+    ctx.font = "800 12px Trebuchet MS, sans-serif";
+    ctx.fillText("White arrow: you • Yellow light: next goal • Bright regions: explored", VIEW_W / 2, 90);
 
     ctx.save();
     ctx.beginPath();
     ctx.roundRect(mapX, mapY, mapW, mapH, 14);
     ctx.clip();
-    ctx.fillStyle = "#6da657";
-    ctx.fillRect(mapX, mapY, mapW, mapH);
-    ctx.fillStyle = "#427a49";
-    ctx.fillRect(mapX + mapW * 0.15, mapY, mapW * 0.53, mapH);
-    ctx.fillStyle = "#77727a";
-    ctx.fillRect(mapX + mapW * (2668 / WORLD_W), mapY, mapW * (1 - 2668 / WORLD_W), mapH);
+    var cellW = mapW / WORLD_COLS;
+    var cellH = mapH / WORLD_ROWS;
+    for (var row = 0; row < WORLD_ROWS; row += 1) {
+      for (var col = 0; col < WORLD_COLS; col += 1) {
+        var code = sectorCode(col, row);
+        var biome = BIOME_GRID[row][col];
+        ctx.fillStyle = BIOME_INFO[biome].map;
+        ctx.fillRect(mapX + col * cellW, mapY + row * cellH, cellW + 0.5, cellH + 0.5);
+        ctx.fillStyle = hashUnit(col, row, 901) > 0.5 ? "rgba(255,255,220,0.05)" : "rgba(9,25,18,0.05)";
+        ctx.beginPath();
+        ctx.arc(mapX + (col + 0.27) * cellW, mapY + (row + 0.33) * cellH, 8, 0, Math.PI * 2);
+        ctx.fill();
+        if (!state.visitedSectors[code]) {
+          ctx.fillStyle = "rgba(17,22,24,0.24)";
+          ctx.fillRect(mapX + col * cellW, mapY + row * cellH, cellW + 0.5, cellH + 0.5);
+        }
+        ctx.strokeStyle = "rgba(234,242,217,0.18)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mapX + col * cellW, mapY + row * cellH, cellW, cellH);
+        ctx.fillStyle = "rgba(249,245,215,0.76)";
+        ctx.font = "800 9px Trebuchet MS, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(code, mapX + col * cellW + 4, mapY + row * cellH + 11);
+      }
+    }
 
-    ctx.fillStyle = "#484650";
-    ctx.fillRect(
-      mapX + mapW * (castle.x / WORLD_W),
-      mapY + mapH * (castle.y / WORLD_H),
-      mapW * (castle.w / WORLD_W),
-      mapH * (castle.h / WORLD_H)
-    );
+    ctx.strokeStyle = "rgba(221,196,132,0.42)";
+    ctx.lineWidth = 1.2;
+    for (var roadCol = 0; roadCol < WORLD_COLS; roadCol += 1) {
+      ctx.beginPath();
+      ctx.moveTo(mapX + (roadCol + 0.5) * cellW, mapY);
+      ctx.lineTo(mapX + (roadCol + 0.5) * cellW, mapY + mapH);
+      ctx.stroke();
+    }
+    for (var roadRow = 0; roadRow < WORLD_ROWS; roadRow += 1) {
+      ctx.beginPath();
+      ctx.moveTo(mapX, mapY + (roadRow + 0.5) * cellH);
+      ctx.lineTo(mapX + mapW, mapY + (roadRow + 0.5) * cellH);
+      ctx.stroke();
+    }
 
     ctx.strokeStyle = "#47a9c2";
-    ctx.lineWidth = 16;
+    ctx.lineWidth = 3.5;
     ctx.lineCap = "round";
-    ctx.beginPath();
-    for (var y = 0; y <= WORLD_H; y += 70) {
-      var riverMapX = mapX + mapW * (riverX(y) / WORLD_W);
-      var riverMapY = mapY + mapH * (y / WORLD_H);
-      if (y === 0) ctx.moveTo(riverMapX, riverMapY);
-      else ctx.lineTo(riverMapX, riverMapY);
-    }
-    ctx.stroke();
+    riverDescriptors.forEach(function (river) {
+      ctx.beginPath();
+      for (var riverY = 0; riverY <= WORLD_H; riverY += 180) {
+        var riverMapX = mapX + mapW * (riverCenterX(river, riverY) / WORLD_W);
+        var riverMapY = mapY + mapH * (riverY / WORLD_H);
+        if (riverY === 0) ctx.moveTo(riverMapX, riverMapY);
+        else ctx.lineTo(riverMapX, riverMapY);
+      }
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = "#4ea5bc";
+    sectorLakes.forEach(function (lake) {
+      ctx.beginPath();
+      ctx.ellipse(
+        mapX + mapW * lake.x / WORLD_W,
+        mapY + mapH * lake.y / WORLD_H,
+        Math.max(2, mapW * lake.rx / WORLD_W),
+        Math.max(1.5, mapH * lake.ry / WORLD_H),
+        0, 0, Math.PI * 2
+      );
+      ctx.fill();
+    });
 
     ctx.fillStyle = "#a56b38";
-    bridges.forEach(function (bridge) {
-      ctx.fillRect(
-        mapX + mapW * ((bridge.x - bridge.w / 2) / WORLD_W),
-        mapY + mapH * ((bridge.y - bridge.h / 2) / WORLD_H),
-        mapW * (bridge.w / WORLD_W),
-        Math.max(8, mapH * (bridge.h / WORLD_H))
-      );
+    bridges.forEach(function (bridge, bridgeIndex) {
+      if (bridgeIndex > 1 && bridgeIndex % 2) return;
+      ctx.fillRect(mapX + mapW * bridge.x / WORLD_W - 2, mapY + mapH * bridge.y / WORLD_H - 1, 4, 2);
     });
 
     function mapMarker(worldX, worldY, color, radius) {
@@ -3877,41 +4649,37 @@
       return { x: x, y: y };
     }
 
-    var asterMarker = mapMarker(wizard.x, wizard.y, "#b68cff", 7);
-    ctx.fillStyle = "#f4eefc";
-    ctx.font = "800 12px Trebuchet MS, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("Aster", asterMarker.x + 10, asterMarker.y + 4);
-
-    ancientTrees.forEach(function (tree) {
-      mapMarker(tree.x, tree.y, tree.found ? "#82fff1" : "#b5e487", 7);
+    wildernessLandmarks.forEach(function (landmark) {
+      mapMarker(landmark.x, landmark.y, state.visitedSectors[landmark.sector] ? "#ffe18b" : "rgba(245,225,164,0.52)", 1.8);
     });
-    mapMarker(castle.x + castle.w / 2, castle.y + castle.h / 2, "#ff8c69", 8);
+    mapMarker(wizard.x, wizard.y, "#b68cff", 3);
+    mapMarker(castle.x + castle.w / 2, castle.y + castle.h / 2, "#ff8c69", 3.5);
 
-    if (state.hasMap) {
-      crystals.forEach(function (crystal) {
-        mapMarker(crystal.x, crystal.y, crystal.lit ? crystal.color : "#d2d3dc", 6);
-      });
-      mapMarker(diamond.x, diamond.y, "#8ff7ff", 8);
-    } else {
+    if (!state.hasMap) {
       var fogX = mapX + mapW * (2670 / WORLD_W);
+      var fogRight = mapX + mapW * (BASE_WORLD_W / WORLD_W);
+      var fogBottom = mapY + mapH * (BASE_WORLD_H / WORLD_H);
       ctx.fillStyle = "rgba(31,30,39,0.76)";
-      ctx.fillRect(fogX, mapY, mapX + mapW - fogX, mapH);
-      ctx.fillStyle = "#d7d0dc";
-      ctx.font = "900 15px Trebuchet MS, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("UNKNOWN MOUNTAIN", (fogX + mapX + mapW) / 2, mapY + mapH / 2 - 8);
-      ctx.font = "700 12px Trebuchet MS, sans-serif";
-      ctx.fillText("Take Boswer's map to reveal it", (fogX + mapX + mapW) / 2, mapY + mapH / 2 + 15);
+      ctx.fillRect(fogX, mapY, Math.max(0, fogRight - fogX), Math.max(0, fogBottom - mapY));
     }
 
     var target = getObjectiveTarget();
     if (target) {
-      var targetPoint = mapMarker(target.x, target.y, "#ffe66d", 8 + Math.sin(state.timeMs / 170) * 1.5);
+      var targetPoint = mapMarker(target.x, target.y, "#ffe66d", 4 + Math.sin(state.timeMs / 170));
+      if (target.approximate) {
+        ctx.strokeStyle = "rgba(255,230,109,0.65)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.ellipse(targetPoint.x, targetPoint.y, mapW * target.searchRadius / WORLD_W,
+          mapH * target.searchRadius / WORLD_H, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.strokeStyle = "rgba(255,230,109,0.45)";
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(targetPoint.x, targetPoint.y, 15, 0, Math.PI * 2);
+      ctx.arc(targetPoint.x, targetPoint.y, 8, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -3922,12 +4690,12 @@
     ctx.rotate(Math.atan2(state.player.facingY, state.player.facingX));
     ctx.fillStyle = "#ffffff";
     ctx.strokeStyle = "#17263b";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(13, 0);
-    ctx.lineTo(-9, -8);
+    ctx.moveTo(9, 0);
+    ctx.lineTo(-6, -6);
     ctx.lineTo(-4, 0);
-    ctx.lineTo(-9, 8);
+    ctx.lineTo(-6, 6);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -3937,7 +4705,7 @@
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff0a0";
     ctx.font = "900 15px Trebuchet MS, sans-serif";
-    ctx.fillText("YOU ARE HERE: " + state.area, VIEW_W / 2, 518);
+    ctx.fillText("YOU ARE HERE: " + state.area + " • " + Object.keys(state.visitedSectors).length + "/100 EXPLORED", VIEW_W / 2, 518);
     ctx.fillStyle = "#b9d8be";
     ctx.font = "800 12px Trebuchet MS, sans-serif";
     ctx.fillText("Press M or the map button to close", VIEW_W / 2, 542);
@@ -3947,6 +4715,7 @@
   function drawObjectiveArrow() {
     var target = getObjectiveTarget();
     if (!target) return;
+    if (target.approximate && distanceXY(state.player.x, state.player.y, target.x, target.y) <= target.searchRadius) return;
     var dx = target.x - state.player.x;
     var dy = target.y - state.player.y;
     var targetAngle = Math.atan2(dy, dx);
@@ -4605,6 +5374,20 @@
 
   window.render_game_to_text = function () {
     var camera = state.camera;
+    var currentSectorInfo = getSectorInfoAt(state.player.x, state.player.y);
+    var nearbyGenerated = { trees: 0, rocks: 0, landmarks: 0, monsters: 0 };
+    forEachWildernessObjectNear(state.player.x, state.player.y, FP_FAR, function (object) {
+      if (object.kind === "tree") nearbyGenerated.trees += 1;
+      else nearbyGenerated.rocks += 1;
+    });
+    wildernessLandmarks.forEach(function (landmark) {
+      if (distanceXY(state.player.x, state.player.y, landmark.x, landmark.y) <= FP_FAR) nearbyGenerated.landmarks += 1;
+    });
+    state.monsters.forEach(function (monster) {
+      if (!monster.defeated && distanceXY(state.player.x, state.player.y, monster.x, monster.y) <= FP_FAR) {
+        nearbyGenerated.monsters += 1;
+      }
+    });
     var visibleMonsterState = state.monsters.filter(function (monster) {
       return !monster.defeated && visibleWorldPoint(monster.x, monster.y, 60);
     }).map(function (monster) {
@@ -4631,6 +5414,30 @@
       mapOpen: state.mapOpen,
       timeMs: Math.round(state.timeMs),
       region: state.area,
+      world: {
+        width: WORLD_W,
+        height: WORLD_H,
+        baseRegionWidth: BASE_WORLD_W,
+        baseRegionHeight: BASE_WORLD_H,
+        columns: WORLD_COLS,
+        rows: WORLD_ROWS,
+        totalRegions: WORLD_COLS * WORLD_ROWS,
+        sector: currentSectorInfo.code,
+        biome: currentSectorInfo.biome,
+        biomeName: currentSectorInfo.info.name,
+        visitedRegions: Object.keys(state.visitedSectors).length,
+        totalMonsters: state.monsters.length,
+        nearbyGenerated: nearbyGenerated
+      },
+      map: {
+        kind: state.mapOpen ? "full-world" : "player-centered-local",
+        localBounds: {
+          left: round1(clamp(state.player.x - 1600, 0, WORLD_W - 3200)),
+          top: round1(clamp(state.player.y - 950, 0, WORLD_H - 1900)),
+          width: 3200,
+          height: 1900
+        }
+      },
       view: {
         mode: "first-person",
         yawDegrees: Math.round(state.player.viewAngle * 180 / Math.PI),
@@ -4652,6 +5459,14 @@
         secretRoomOpen: state.secretRoomOpen,
         gateCleared: state.gateCleared,
         crystalsLit: getLitCrystalCount() + "/3",
+        diamondSearch: {
+          approximate: state.questStage === "diamond" && !state.diamondRevealed,
+          cavesChecked: crystalCaves.filter(function (cave) { return cave.checked; }).length,
+          falseCavesChecked: crystalCaves.filter(function (cave) { return !cave.actual && cave.checked; }).length,
+          falseCavesRequired: 3,
+          cavesTotal: crystalCaves.length,
+          revealed: state.diamondRevealed
+        },
         diamondCollected: state.diamondCollected
       },
       player: {
@@ -4839,6 +5654,8 @@
       if (["return", "won"].indexOf(stage) >= 0) {
         diamond.collected = true;
         state.diamondCollected = true;
+        state.diamondRevealed = true;
+        crystalCaves.forEach(function (cave) { if (cave.actual) cave.checked = true; });
         portal.active = true;
       }
       setQuestStage(stage);

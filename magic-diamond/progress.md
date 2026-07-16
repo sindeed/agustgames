@@ -15,6 +15,10 @@ Additional requests:
 - A live minimap and full M-key map show the player's current position.
 - The adventure is viewed and controlled from first person.
 - On touch screens, dragging across the game view turns the first-person camera.
+- The world must be 100 times larger in area, feel natural rather than empty, and contain many more monsters.
+- The larger realm should contain forests, rivers, lakes, roads, mountains, ruins, villages, creepy regions, and realistic biome changes.
+- The diamond should be harder to find: the map reveals only a search area and false caves must be investigated.
+- The adventure should combine the open-nature feeling of Breath of the Wild with the caves, ruins, secrets, and puzzles of Tears of the Kingdom while keeping its own characters and world.
 
 ## Work log
 
@@ -28,8 +32,15 @@ Additional requests:
 - 2026-07-15: Passed 40 first-person browser regression checks plus an isolated pointer-lock branch check: movement/look/strafe, pause and focused controls, mouse attacks and magic, Aster dialogue, combat, horses, swimming, tornado, castle secret room, maps, desktop/mobile layouts, and the complete quest through the victory screen. All reviewed screenshots were clear and no browser errors were reported.
 - 2026-07-15: Added direct canvas drag/swipe-to-look with normalized touch sensitivity, multi-touch compatibility, pointer capture/cancellation, mouse-drag fallback, and synthetic-click protection. Touch players now receive a short swipe instruction when the adventure starts.
 - 2026-07-15: Passed the official browser smoke test and 26 real CDP touch/control checks covering swipe direction and sensitivity, taps/dead zone, vertical gestures, scrolling, map/dialog/pause cancellation, two-finger move-and-look, touch-button isolation, mouse-drag fallback, pointer-lock click safety, temporary hints, and desktop/mobile layouts. Reviewed all new screenshots; no browser errors occurred.
+- 2026-07-16: Expanded the realm from 3840×2400 to 38,400×24,000: exactly 100 times the playable area, arranged as 100 named A1–J10 regions while preserving the complete original quest valley in A1.
+- 2026-07-16: Added eight wilderness biomes, five world-length rivers, regional lakes, bridge networks, connected exploration roads, deterministic forests and rocks, 99 landmarks, and 1,584 ambient wilderness monsters for 1,599 total creatures. Faraway creature simulation sleeps to keep the huge realm fast.
+- 2026-07-16: Replaced the compressed whole-world terrain texture with detailed region-streamed first-person terrain. Added biome-specific skies, pine/frost/dead/willow/crystal trees, regional rocks, ruins, forts, villages, towers, arches, huts, and a clear southern route out of the original valley.
+- 2026-07-16: Rebuilt navigation as a player-centered local minimap plus a full 10×10 terrain atlas with biome colors, sector codes, rivers, lakes, roads, bridges, landmarks, explored shading, player direction, and quest markers.
+- 2026-07-16: Made the final diamond hunt harder. Boswer's map now marks a 760-pixel search zone; the direct road ends at the search area rather than the diamond; five false crystal caves produce misleading echoes; and three false echoes must be silenced before the sixth true cave can reveal the diamond.
+- 2026-07-16: Protected the original mountain quest from expansion bypasses with southern/eastern cliff caps and verified that normal wilderness roads cross A1→A2 and A2→B2 correctly.
+- 2026-07-16: Passed the official browser client, a 100-region sweep, eight-biome screenshot review, boundary clamps, mouse drag-to-look, real CDP touch swipe, full-map review, sealed/false/true cave flow, the complete Aster→Boswer→crystals→diamond→victory quest, performance, and console-error checks. The realm reports 38,400×24,000, 100/100 reachable regions, 1,599 monsters, and a 10-second simulation time of about 130 ms in headless testing.
 
 ## TODO
 
-- Swipe-to-look version complete and ready to publish.
-- Future polish ideas: more quests, more monster types, music, and save slots.
+- Huge-world version complete and ready to publish.
+- Future polish ideas: regional side quests, more monster body types, original music, caves that load as separate interiors, climbing/gliding, and save slots.
