@@ -8,11 +8,11 @@
     />
     <meta
       name="description"
-      content="IKEA 3:33 – ett stort 3D-äventyr om att bygga gömställen och överleva monstret som kommer på natten."
+      content="IKEA 3:33 – ett stort förstapersonsäventyr i 14 spelbara 3D-kapitel, från det oändliga varuhuset till draken och mysteriebyn."
     />
     <meta name="theme-color" content="#07182f" />
     <title>IKEA 3:33 – Agust Games</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=2" />
   </head>
   <body>
     <a class="skip-link" href="#startButton">Hoppa till startknappen</a>
@@ -25,7 +25,7 @@
             width="960"
             height="540"
             tabindex="0"
-            aria-label="IKEA 3:33. Utforska varuhuset och göm dig innan monstret kommer klockan 3:33."
+            aria-label="IKEA 3:33. Överlev varuhuset klockan 3:33 och fortsätt genom skogen, drakgrottan, hajön och alla de andra världarna."
           >
             Din webbläsare kan inte visa spelet. Prova en nyare webbläsare.
           </canvas>
@@ -34,6 +34,7 @@
             <div class="hud-block">
               <strong id="hudArea">IKEA ∞</strong>
               <span id="hudWeather">Molnigt</span>
+              <span id="hudChapter" class="hud-chapter">KAPITEL 1 / 14</span>
             </div>
             <div class="hud-clock">
               <strong id="hudClock">21:00</strong>
@@ -46,6 +47,32 @@
 
           <div id="hideMask" class="hide-mask" hidden aria-hidden="true"></div>
           <div id="cinematicCaption" class="cinematic-caption" hidden></div>
+
+          <section
+            id="choiceOverlay"
+            class="choice-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="choiceTitle"
+            aria-describedby="choiceText"
+            hidden
+          >
+            <div class="choice-panel">
+              <p class="choice-eyebrow">DU MÅSTE VÄLJA</p>
+              <h2 id="choiceTitle" class="choice-title">Vågar du fortsätta?</h2>
+              <p id="choiceText" class="choice-text">
+                Ditt val förändrar vägen genom världen.
+              </p>
+              <div class="choice-actions" role="group" aria-label="Välj vad du vill göra">
+                <button id="choicePrimary" class="choice-button choice-button-primary" type="button">
+                  FORTSÄTT
+                </button>
+                <button id="choiceSecondary" class="choice-button choice-button-secondary" type="button">
+                  STANNA KVAR
+                </button>
+              </div>
+            </div>
+          </section>
 
           <nav class="game-nav" aria-label="Spelmeny">
             <a class="pixel-icon-button" href="../" aria-label="Tillbaka till Agust Games">⌂</a>
@@ -79,7 +106,7 @@
 
               <p id="gameTagline" class="tagline">
                 Utforska ett oändligt, övergivet IKEA.<br />
-                Bygg ett gömställe och överlev <strong>3:33</strong>.
+                Överlev <strong>3:33</strong> och fly genom alla 14 kapitel.
               </p>
 
               <div class="ominous-clock" aria-hidden="true">
@@ -101,7 +128,7 @@
               </button>
 
               <p class="menu-hint">
-                Hitta den hemliga utgången. Bortom den väntar skogen – och en blå drake.
+                Bortom utgången väntar skogen, draken, hajön, spöktåget, vulkanen och mysteriebyn.
               </p>
             </div>
           </section>
@@ -133,6 +160,6 @@
         }
       }
     </script>
-    <script type="module" src="game.js?v=3"></script>
+    <script type="module" src="game.js?v=4"></script>
   </body>
 </html>

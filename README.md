@@ -18,7 +18,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 | Survivor of Days | [`survivor-blockshop/`](survivor-blockshop/) | Bygg en bas, handla block i Blockshop och skydda hjärtat i fem dygn. |
 | Wilder: The Big City | [`wilder-big-city/`](wilder-big-city/) | Utforska den stora staden Wilder i förstapersons-3D. Välj en av 19 personer (4 poliser, 5 tjuvar och 10 vanliga människor), kör fordon och besök stadens 13 byggnader. |
 | Wildbound: The Stormwake Trail | [`wildbound/`](wildbound/) | Ett stort originellt förstapersonsäventyr med vildmark, floder, vägar, bybor, häststall, strid och kreativ byggmagi. |
-| IKEA 3:33 | [`ikea-333/`](ikea-333/) | Ett procedurgenererat förstapersonsäventyr i ett oändligt övergivet varuhus. Flytta gamla möbler, bygg gömställen och överlev monstret som kommer 03:33. |
+| IKEA 3:33 | [`ikea-333/`](ikea-333/) | Ett stort förstapersonsäventyr i 14 kapitel. Överlev IKEA 03:33 och fortsätt genom skog, drakgrottor, hajö, robotaffär, spöktåg, öken, vulkan och mysteriebyn. |
 
 ## Struktur
 
@@ -29,7 +29,7 @@ agustgames/
 ├── survivor-blockshop/ ← Survivor of Days and Blockshop of Building
 ├── wilder-big-city/  ← Förstapersons-3D i staden Wilder
 ├── wildbound/        ← Stort förstapersonsäventyr i en levande vildmark
-├── ikea-333/         ← Oändligt förstapersons-3D-äventyr med möbelbygge och nattmonster
+├── ikea-333/         ← Förstapersons-3D i 14 kapitel med möbelbygge, drake och nattmonster
 └── ...               ← nya spel läggs i egna mappar
 ```
 

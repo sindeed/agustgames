@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=1";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -11,6 +12,7 @@ const touchJoystick = document.getElementById("touchJoystick");
 const touchKnob = document.getElementById("touchKnob");
 const gameHud = document.getElementById("gameHud");
 const hudArea = document.getElementById("hudArea");
+const hudChapter = document.getElementById("hudChapter");
 const hudWeather = document.getElementById("hudWeather");
 const hudClock = document.getElementById("hudClock");
 const hudDay = document.getElementById("hudDay");
@@ -20,6 +22,11 @@ const hudToast = document.getElementById("hudToast");
 const hideMask = document.getElementById("hideMask");
 const cinematicCaption = document.getElementById("cinematicCaption");
 const webglError = document.getElementById("webglError");
+const choiceOverlay = document.getElementById("choiceOverlay");
+const choiceTitle = document.getElementById("choiceTitle");
+const choiceText = document.getElementById("choiceText");
+const choicePrimary = document.getElementById("choicePrimary");
+const choiceSecondary = document.getElementById("choiceSecondary");
 
 const FIXED_STEP = 1 / 60;
 const FIXED_MS = 1000 / 60;
@@ -47,6 +54,9 @@ let rainbow;
 let monsterModel;
 let cinematicRoot = null;
 let cinematicIndex = -1;
+let journeyWorld = null;
+let journeyFurniture = [];
+let choiceHandlers = null;
 let manualTime = false;
 let manualAccumulator = 0;
 let accumulator = 0;
@@ -72,16 +82,18 @@ const LoopbackTransport = {
 const chapters = {
   warehouse: { next: "forest_houses", generator: "endless-indoor" },
   forest_houses: { next: "dragon_caves", generator: "endless-outdoor" },
-  dragon_caves: { next: "blue_dragon_flight", generator: "caves" },
-  blue_dragon_flight: { next: "shark_island" },
-  shark_island: { next: "boat_journey" },
-  boat_journey: { next: "electric_hollow" },
+  dragon_caves: { next: "dragon_flight", generator: "caves" },
+  dragon_flight: { next: "shark_island" },
+  shark_island: { next: "boat_ride" },
+  boat_ride: { next: "electric_hollow" },
   electric_hollow: { next: "robot_shop", enemy: "rattleman" },
   robot_shop: { next: "haunted_house" },
   haunted_house: { next: "ghost_station", enemy: "rattleman" },
-  ghost_station: { branches: ["ghost_train_trap", "desert", "volcano_island", "mystery_village"] },
+  ghost_station: { choice: { board: "ghost_train", refuse: "desert" } },
+  ghost_train: { trap: true, retry: "ghost_station" },
   desert: { portal: "warehouse", enemy: "rattleman" },
-  volcano_island: { fail: "warehouse" },
+  desert_onward: { next: "volcano_island" },
+  volcano_island: { next: "mystery_village", fail: "warehouse" },
   mystery_village: { sign: "VILLAGE FROM 1920", language: "old-artifacts-English" }
 };
 
@@ -137,7 +149,8 @@ const state = {
   network: { role: LoopbackTransport.role, status: LoopbackTransport.status },
   monster: {
     id: "rattleman", active: false, x: 0, z: 0, mode: "sleeping",
-    targetPlayerId: "p1", lastSeenX: 24, lastSeenZ: 24, sawHide: false, breakHideTick: 0
+    targetPlayerId: "p1", lastSeenX: 24, lastSeenZ: 24, sawHide: false, breakHideTick: 0,
+    speedScale: 1
   },
   held: null,
   markers: [],
@@ -150,10 +163,15 @@ const state = {
   prompt: "",
   exitFound: false,
   exitUnlocked: false,
+  journey: {
+    index: -1, elapsed: 0, stage: "", objective: "", timer: 0,
+    flags: {}, collected: [], loop: 0, failedChapter: null
+  },
   cinematic: { time: 0, phase: "" }
 };
 
 function player() { return state.playersById[state.localPlayerId]; }
+function inWarehouse() { return state.chapter === "warehouse"; }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function distance2D(ax, az, bx, bz) { return Math.hypot(ax - bx, az - bz); }
 function chunkKey(cx, cz) { return `${cx}:${cz}`; }
@@ -666,9 +684,16 @@ function initScene() {
 }
 
 function allLoadedDescriptors() {
+  if (!inWarehouse()) return journeyFurniture.filter((desc) => !desc.removed && state.held?.id !== desc.id);
   const result = [];
   loadedChunks.forEach(({ data }) => data.objects.forEach((desc) => { if (!desc.removed && state.held?.id !== desc.id) result.push(desc); }));
   return result;
+}
+
+function pointColliderDistance(x, z, collider) {
+  const dx = Math.max(Math.abs(x - collider.x) - collider.w / 2, 0);
+  const dz = Math.max(Math.abs(z - collider.z) - collider.d / 2, 0);
+  return Math.hypot(dx, dz);
 }
 
 function pointAabbDistance(x, z, desc) {
@@ -679,6 +704,11 @@ function pointAabbDistance(x, z, desc) {
 }
 
 function collides(x, z, radius = PLAYER_RADIUS, ignoreId = null) {
+  if (!inWarehouse() && journeyWorld) {
+    const b = journeyWorld.bounds;
+    if (b && (x < b.minX + radius || x > b.maxX - radius || z < b.minZ + radius || z > b.maxZ - radius)) return true;
+    if (journeyWorld.colliders.some((collider) => pointColliderDistance(x, z, collider) < radius)) return true;
+  }
   return allLoadedDescriptors().some((desc) => desc.id !== ignoreId && pointAabbDistance(x, z, desc) < radius);
 }
 
@@ -697,6 +727,7 @@ function lineBlocked(ax, az, bx, bz) {
     const x = ax + (bx - ax) * t;
     const z = az + (bz - az) * t;
     if (tall.some((desc) => pointAabbDistance(x, z, desc) < .08)) return true;
+    if (!inWarehouse() && journeyWorld?.colliders.some((collider) => pointColliderDistance(x, z, collider) < .08)) return true;
   }
   return false;
 }
@@ -773,6 +804,7 @@ function spawnMonster() {
   state.monster.lastSeenX = p.x;
   state.monster.lastSeenZ = p.z;
   state.monster.sawHide = false;
+  state.monster.speedScale = 1;
   state.monsterDays[state.day] = true;
   monsterModel.visible = true;
   showToast("03:33 — SKRAMLAREN HAR VAKNAT!", 5);
@@ -795,10 +827,11 @@ function caught() {
   state.monster.z = p.z + dz * 2.75;
   p.yaw = Math.atan2(-dx, -dz);
   p.pitch = .9;
+  if (!inWarehouse()) state.journey.failedChapter = state.chapter;
   hideMask.hidden = true;
   touchControls.hidden = true;
   if (document.pointerLockElement) document.exitPointerLock();
-  showToast("Skramlaren hittade dig. Tryck R eller E för att försöka igen.", 10);
+  showToast(`${inWarehouse() ? "Skramlaren hittade dig." : `Skramlaren följde efter till ${chapterTitle()}.`} Tryck R eller E för att försöka igen.`, 10);
   tone(45, .9, "sawtooth", .04);
 }
 
@@ -823,7 +856,7 @@ function updateMonster(dt) {
   const dx = tx - monster.x;
   const dz = tz - monster.z;
   const length = Math.max(.001, Math.hypot(dx, dz));
-  let speed = monster.mode === "chasing" ? 4.25 : 2.35;
+  let speed = (monster.mode === "chasing" ? 4.25 : 2.35) * (monster.speedScale || 1);
   if (state.weather.type === "tsunami") speed *= .55;
   const mx = dx / length * speed * dt;
   const mz = dz / length * speed * dt;
@@ -841,6 +874,10 @@ function updateMonster(dt) {
 function tryHide() {
   const p = player();
   if (state.mode !== "playing") return;
+  if (!inWarehouse() && state.chapter !== "haunted_house") {
+    showToast("Här finns inget möbelgömställe. Fortsätt mot målet!", 2.5);
+    return;
+  }
   if (p.hidden) {
     p.hidden = false; p.hiddenBy = null; state.monster.sawHide = false;
     hideMask.hidden = true;
@@ -863,6 +900,7 @@ function tryHide() {
 }
 
 function removeFromChunk(desc) {
+  if (!inWarehouse()) return;
   const data = chunkStates.get(desc.chunkKey);
   if (!data) return;
   data.objects = data.objects.filter((item) => item.id !== desc.id);
@@ -870,6 +908,10 @@ function removeFromChunk(desc) {
 }
 
 function addToChunk(desc, cx, cz) {
+  if (!inWarehouse()) {
+    if (!journeyFurniture.includes(desc)) journeyFurniture.push(desc);
+    return;
+  }
   const data = ensureChunkState(cx, cz);
   desc.chunkKey = data.key;
   if (!data.objects.includes(desc)) data.objects.push(desc);
@@ -899,10 +941,14 @@ function placementPosition() {
 function canPlace(desc, x, z) {
   const oldX = desc.x, oldZ = desc.z;
   desc.x = x; desc.z = z;
-  const blocked = allLoadedDescriptors().some((other) => other.id !== desc.id && descriptorsOverlap(desc, other, .15));
+  const blockedByFurniture = allLoadedDescriptors().some((other) => other.id !== desc.id && descriptorsOverlap(desc, other, .15));
+  const bounds = descriptorBounds(desc);
+  const blockedByWorld = !inWarehouse() && journeyWorld?.colliders.some((collider) =>
+    pointColliderDistance(x, z, collider) < Math.min(bounds.w, bounds.d) * .42
+  );
   const playerBlocked = pointAabbDistance(player().x, player().z, desc) < PLAYER_RADIUS + .15;
   desc.x = oldX; desc.z = oldZ;
-  return !blocked && !playerBlocked;
+  return !blockedByFurniture && !blockedByWorld && !playerBlocked;
 }
 
 function placeHeld() {
@@ -915,6 +961,14 @@ function placeHeld() {
   desc.x = placement.x; desc.z = placement.z;
   desc.group.position.set(desc.x, 0, desc.z);
   desc.group.rotation.set(0, desc.rotation, 0);
+  if (!inWarehouse()) {
+    if (!journeyFurniture.includes(desc)) journeyFurniture.push(desc);
+    journeyWorld.root.add(desc.group);
+    objectPatches[desc.id] = { revision: (objectPatches[desc.id]?.revision || 0) + 1, x: desc.x, z: desc.z, rotation: desc.rotation, carriedBy: null };
+    state.held = null; player().carryingObjectId = null;
+    showToast(hauntedFortScore() >= 5 ? "Barrikaden är stark nog. Gör dig redo!" : "Möbeln är placerad.", 2.8);
+    return;
+  }
   const cx = chunkCoord(desc.x), cz = chunkCoord(desc.z);
   addToChunk(desc, cx, cz);
   loadChunk(cx, cz);
@@ -941,18 +995,455 @@ function makeMarker() {
   arrow.rotation.z = -Math.PI / 2; arrow.position.y = 1.75; root.add(arrow);
   root.position.set(p.x, 0, p.z); root.rotation.y = p.yaw;
   scene.add(root);
-  state.markers.push({ id: `marker-${state.markers.length + 1}`, ownerId: p.id, x: p.x, z: p.z, group: root });
+  state.markers.push({ id: `marker-${state.markers.length + 1}`, ownerId: p.id, chapter: state.chapter, x: p.x, z: p.z, group: root });
   showToast(`Ljuspil ${state.markers.length} visar vägen tillbaka.`, 2);
+}
+
+const journeyObjectives = {
+  forest_houses: "Utforska husen, följ stigen och hitta ingången till drakgrottan",
+  dragon_caves: "Följ de blå klomärkena genom grottan till den stora draken",
+  dragon_flight: "Styr draken genom de lysande ringarna mot ön",
+  shark_island: "Vänta på båten — simma ut först när hajarna flyr",
+  boat_ride: "Håll dig kvar på båten när havet blir allt märkligare",
+  electric_hollow: "Följ de elektriskt blå larverna och nå draken före monstret",
+  robot_shop: "Undersök gubben och titta på hans högra sida",
+  haunted_house: "Hämta möbler ur förrådet och bygg en stark barrikad",
+  ghost_station: "Undersök spöktåget och välj om du verkligen vågar gå ombord",
+  ghost_train: "Tåget stannar aldrig och det finns ingen mat...",
+  desert: "Använd kartmärket: välj IKEA-grottan eller hitta vägen till vulkanön",
+  volcano_island: "Lyssna på vulkanen och nå flyktbåten innan utbrottet",
+  mystery_village: "Hitta tre gamla ledtrådar och lös mysteriet 1910 / 1920"
+};
+
+const journeyClock = {
+  forest_houses: 14 * 60, dragon_caves: 18 * 60, dragon_flight: 16 * 60, shark_island: 17 * 60,
+  boat_ride: 19 * 60, electric_hollow: 23 * 60, robot_shop: 20 * 60,
+  haunted_house: 2 * 60 + 25, ghost_station: 23 * 60 + 10,
+  ghost_train: 23 * 60 + 30, desert: 19 * 60 + 20,
+  volcano_island: 17 * 60 + 30, mystery_village: 21 * 60
+};
+
+function chapterTitle(chapter = state.chapter) {
+  return CHAPTER_INFO[chapter]?.title || chapter.replaceAll("_", " ").toUpperCase();
+}
+
+function setJourneyObjective(text) {
+  state.journey.objective = text;
+  gameStatus.textContent = text;
+}
+
+function dropHeldSafely() {
+  if (!state.held) return;
+  const desc = state.held;
+  camera.remove(desc.group);
+  desc.group.position.set(desc.x, 0, desc.z);
+  desc.group.rotation.set(0, desc.rotation, 0);
+  if (inWarehouse()) {
+    const root = loadedChunks.get(desc.chunkKey)?.root;
+    (root || scene).add(desc.group);
+  } else if (journeyWorld) journeyWorld.root.add(desc.group);
+  state.held = null;
+  player().carryingObjectId = null;
+}
+
+function closeChoice(runHandler = null) {
+  if (choiceOverlay) choiceOverlay.hidden = true;
+  const handlers = choiceHandlers;
+  choiceHandlers = null;
+  state.paused = false;
+  if (runHandler && handlers?.[runHandler]) handlers[runHandler]();
+  canvas.focus();
+}
+
+function openChoice({ title, text, primary, secondary, onPrimary, onSecondary }) {
+  if (!choiceOverlay) {
+    (onPrimary || onSecondary)?.();
+    return;
+  }
+  choiceTitle.textContent = title;
+  choiceText.textContent = text;
+  choicePrimary.textContent = primary;
+  choiceSecondary.textContent = secondary;
+  choiceHandlers = { primary: onPrimary, secondary: onSecondary };
+  choiceOverlay.hidden = false;
+  state.paused = true;
+  keys.clear();
+  if (document.pointerLockElement) document.exitPointerLock();
+  choicePrimary.focus();
+}
+
+function hideWarehouseWorld(hidden) {
+  loadedChunks.forEach(({ root }) => { root.visible = !hidden; });
+  state.markers.forEach((marker) => { if (marker.group) marker.group.visible = !hidden && (marker.chapter || "warehouse") === "warehouse"; });
+}
+
+function clearJourneyWorld() {
+  dropHeldSafely();
+  if (journeyWorld) {
+    journeyFurniture.filter((desc) => desc.group?.userData.engineSharedResources).forEach((desc) => {
+      journeyWorld.root.remove(desc.group);
+      const disposableMaterials = new Set();
+      desc.group.traverse((object) => {
+        if (object.geometry && ![boxGeometry, cylinderGeometry, sphereGeometry].includes(object.geometry)) object.geometry.dispose();
+        const objectMaterials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+        objectMaterials.forEach((mat) => { if (!Object.values(materials).includes(mat)) disposableMaterials.add(mat); });
+      });
+      disposableMaterials.forEach((mat) => mat.dispose());
+      desc.group.clear();
+    });
+    scene.remove(journeyWorld.root);
+    disposeJourneyWorld(journeyWorld);
+  }
+  journeyWorld = null;
+  journeyFurniture = [];
+}
+
+function configureJourneyStart(chapter) {
+  const flags = {};
+  if (chapter === "dragon_flight") Object.assign(flags, { ringsPassed: 0 });
+  if (chapter === "shark_island") Object.assign(flags, { boatReady: false, boarded: false, boatWindow: 0 });
+  if (chapter === "boat_ride") Object.assign(flags, { helmUsed: false });
+  if (chapter === "robot_shop") Object.assign(flags, { robotStage: 0, buttonsRevealed: false, exitOpen: false });
+  if (chapter === "haunted_house") Object.assign(flags, { furnitureTaken: 0, attackStarted: false, attackTime: 0, defended: false });
+  if (chapter === "ghost_station") Object.assign(flags, { trainDeparting: false });
+  if (chapter === "desert") Object.assign(flags, { monsterRisen: false, caveSeen: false });
+  if (chapter === "volcano_island") Object.assign(flags, { eruptionIn: 28, escaped: false });
+  if (chapter === "mystery_village") Object.assign(flags, { gateOpen: false });
+  return flags;
+}
+
+function enterJourneyChapter(chapter, { quiet = false } = {}) {
+  if (!JOURNEY_ORDER.includes(chapter)) throw new Error(`Okänt resekapitel: ${chapter}`);
+  closeChoice();
+  dropHeldSafely();
+  disposeCinematicRoot();
+  clearJourneyWorld();
+  hideWarehouseWorld(true);
+  state.chapter = chapter;
+  state.mode = "playing";
+  state.paused = false;
+  state.monster.active = false;
+  state.monster.mode = "sleeping";
+  monsterModel.visible = false;
+  hideMask.hidden = true;
+  cinematicCaption.hidden = true;
+  state.journey.index = JOURNEY_ORDER.indexOf(chapter);
+  state.journey.elapsed = 0;
+  state.journey.stage = "start";
+  state.journey.timer = 0;
+  state.journey.flags = configureJourneyStart(chapter);
+  state.journey.collected = [];
+  state.journey.failedChapter = null;
+  state.journey.objective = journeyObjectives[chapter];
+  journeyWorld = buildJourneyWorld(chapter);
+  journeyFurniture = journeyWorld.furniture || [];
+  journeyFurniture.forEach((desc) => {
+    desc.group = desc.group || desc.mesh;
+    desc.rotation = Number.isFinite(desc.rotation) ? desc.rotation : desc.group?.rotation.y || 0;
+    desc.removed = Boolean(desc.removed);
+    if (!desc.group) desc.group = buildFurnitureModel(desc);
+    if (!desc.group.parent) journeyWorld.root.add(desc.group);
+  });
+  scene.add(journeyWorld.root);
+  const p = player();
+  p.x = journeyWorld.spawn.x;
+  p.y = chapter === "dragon_flight" ? 3 : chapter === "boat_ride" ? 1.05 : journeyWorld.spawn.y || 0;
+  p.z = journeyWorld.spawn.z;
+  p.yaw = journeyWorld.spawn.yaw ?? 0;
+  p.pitch = 0;
+  p.hidden = false;
+  p.hiddenBy = null;
+  p.flashlight = ["dragon_caves", "electric_hollow", "robot_shop", "haunted_house", "ghost_station", "ghost_train", "mystery_village"].includes(chapter);
+  state.clockMinutes = journeyClock[chapter] ?? state.clockMinutes;
+  setWeather(["shark_island", "boat_ride"].includes(chapter) ? "clear" : chapter === "volcano_island" ? "cloudy" : "cloudy", 40);
+  updateWeather(0);
+  updatePrompt();
+  if (!quiet) showToast(`${chapterTitle(chapter)} — ${state.journey.objective}`, 5);
+  render();
+}
+
+function enterNextJourneyChapter() {
+  const next = JOURNEY_ORDER[state.journey.index + 1];
+  if (next) enterJourneyChapter(next);
+}
+
+function returnToWarehouse(message = "Portalen för dig tillbaka till IKEA.") {
+  closeChoice();
+  clearJourneyWorld();
+  state.chapter = "warehouse";
+  state.mode = "playing";
+  state.paused = false;
+  state.monster.active = false;
+  monsterModel.visible = false;
+  hideWarehouseWorld(false);
+  const p = player();
+  p.x = 24; p.y = 0; p.z = 24; p.yaw = -Math.PI / 2; p.pitch = 0;
+  p.hidden = false; p.hiddenBy = null; p.flashlight = true;
+  state.clockMinutes = 21 * 60;
+  lastChunkKey = "";
+  refreshChunks(true);
+  setWeather("cloudy", 18);
+  updateWeather(0);
+  updatePrompt();
+  showToast(message, 5);
+}
+
+function failJourney(message, retryChapter = state.chapter) {
+  state.journey.failedChapter = retryChapter;
+  state.mode = "gameover";
+  state.monster.active = false;
+  monsterModel.visible = false;
+  player().hidden = false;
+  hideMask.hidden = true;
+  touchControls.hidden = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  showToast(`${message} Tryck R eller E för att försöka igen.`, 10);
+  tone(48, .8, "sawtooth", .035);
+}
+
+function nearestJourneyInteractable(maxExtra = 0) {
+  if (!journeyWorld) return null;
+  const p = player();
+  let best = null;
+  let bestDistance = Infinity;
+  journeyWorld.interactables.forEach((item) => {
+    if (item.disabled || item.mesh?.visible === false) return;
+    const d = distance2D(p.x, p.z, item.x, item.z);
+    if (d <= (item.radius || 3.2) + maxExtra && d < bestDistance) { best = item; bestDistance = d; }
+  });
+  return best;
+}
+
+function hauntedDoorPosition() {
+  const door = journeyWorld?.actors?.frontDoor || journeyWorld?.actors?.door;
+  if (door?.position) return door.position;
+  const spots = journeyWorld?.interactables?.filter((item) => item.kind === "build_spot") || [];
+  if (spots.length) return {
+    x: spots.reduce((sum, item) => sum + item.x, 0) / spots.length,
+    z: spots.reduce((sum, item) => sum + item.z, 0) / spots.length
+  };
+  const interaction = journeyWorld?.interactables?.find((item) => item.kind === "house_door");
+  return interaction || { x: 0, z: -18 };
+}
+
+function hauntedFortScore() {
+  if (state.chapter !== "haunted_house") return 0;
+  const door = hauntedDoorPosition();
+  return journeyFurniture.filter((desc) => distance2D(desc.x, desc.z, door.x, door.z) < 8).length;
+}
+
+function createJourneyFurnitureVisual(desc) {
+  const template = journeyFurniture.find((item) => item.type === desc.type && item.group && !item.group.userData.engineSharedResources);
+  if (template) {
+    const clone = template.group.clone(true);
+    clone.position.set(desc.x, 0, desc.z);
+    clone.rotation.set(0, desc.rotation, 0);
+    clone.userData.descriptor = desc;
+    return clone;
+  }
+  const group = buildFurnitureModel(desc);
+  group.userData.engineSharedResources = true;
+  return group;
+}
+
+function takeStorageFurniture() {
+  if (state.held) { showToast("Placera möbeln du redan bär först.", 2); return; }
+  const types = ["wardrobe", "sofa", "table", "crate", "chair", "bed"];
+  const type = types[state.journey.flags.furnitureTaken % types.length];
+  const p = player();
+  const desc = {
+    id: `haunted-storage-${state.journey.flags.furnitureTaken + 1}`,
+    type, x: p.x, z: p.z, rotation: 0, removed: false, group: null
+  };
+  desc.group = createJourneyFurnitureVisual(desc);
+  journeyFurniture.push(desc);
+  journeyWorld.root.add(desc.group);
+  state.journey.flags.furnitureTaken += 1;
+  pickUp(desc);
+  setJourneyObjective(`Bygg framför ytterdörren: ${hauntedFortScore()} / 5 möbler på plats`);
+}
+
+function collectVillageClue(item) {
+  if (state.journey.collected.includes(item.id)) { showToast("Den här ledtråden har ni redan läst.", 2); return; }
+  state.journey.collected.push(item.id);
+  if (item.mesh?.material?.emissive) item.mesh.material.emissive.setHex(0x4a8f57);
+  const clues = [
+    "En dagbok säger: 'We arrived in 1910.'",
+    "Skylten säger VILLAGE FROM 1920 — tio år saknas.",
+    "En trasig klocka har stannat exakt 03:33."
+  ];
+  showToast(clues[(state.journey.collected.length - 1) % clues.length], 5);
+  if (state.journey.collected.length >= 3) {
+    state.journey.flags.gateOpen = true;
+    if (journeyWorld.actors.gate) journeyWorld.actors.gate.visible = true;
+    setJourneyObjective("Mysteriets port har öppnats — välj nästa nya obby");
+    tone(523, .3); tone(659, .4, "sine", .025, .22);
+  } else setJourneyObjective(`Hitta gamla ledtrådar: ${state.journey.collected.length} / 3`);
+}
+
+function interactJourney() {
+  if (state.held) { placeHeld(); return; }
+  if (state.chapter === "haunted_house") {
+    const desc = nearestObject((item) => furnitureTypes[item.type]?.movable, 2.8);
+    if (desc) { pickUp(desc); return; }
+  }
+  const item = nearestJourneyInteractable();
+  if (!item) { showToast("Inget att använda här.", 1.5); return; }
+  switch (item.kind) {
+    case "house":
+      state.journey.flags.mapFound = true;
+      setJourneyObjective("En gammal karta visar blå klomärken i norr — hitta drakgrottan.");
+      showToast("I huset hittar ni en karta över skogen och grottan.", 4);
+      break;
+    case "cave_entrance":
+    case "dragon_cave":
+      enterNextJourneyChapter();
+      break;
+    case "blue_dragon":
+    case "dragon":
+      enterNextJourneyChapter();
+      break;
+    case "dragon_rescue":
+      state.monster.active = false;
+      monsterModel.visible = false;
+      showToast("Den blå draken kastar sig mellan er och monstret — ni räddas!", 4);
+      enterNextJourneyChapter();
+      break;
+    case "signal":
+      state.journey.elapsed = Math.max(state.journey.elapsed, 9.7);
+      showToast("Signalelden tänds. Båten styr mot ön!", 3);
+      break;
+    case "boat":
+      if (!state.journey.flags.boatReady) showToast("Båten är inte framme än. Hajarna är fortfarande här!", 3);
+      else { state.journey.flags.boarded = true; enterNextJourneyChapter(); }
+      break;
+    case "helm":
+      state.journey.flags.helmUsed = true;
+      setJourneyObjective("Styr båten mellan klipporna med A/D eller joysticken");
+      showToast("Ni tar ratten — styr vänster och höger genom vågorna!", 3);
+      break;
+    case "robot":
+      state.journey.flags.robotStage = Math.max(1, state.journey.flags.robotStage);
+      setJourneyObjective("Han vänder aldrig höger. Smyg runt till hans högra sida och leta efter knappar.");
+      showToast("Gubben vinkar: Hej, hej, hej, hej...", 4);
+      break;
+    case "robot_buttons":
+    case "buttons":
+      if (player().x < .5) { showToast("Knapparna sitter på hans högra sida.", 2.5); break; }
+      state.journey.flags.buttonsRevealed = true;
+      state.journey.flags.exitOpen = true;
+      if (journeyWorld.actors.buttons) {
+        const buttons = Array.isArray(journeyWorld.actors.buttons) ? journeyWorld.actors.buttons : [journeyWorld.actors.buttons];
+        buttons.forEach((button) => { button.visible = true; });
+      }
+      if (journeyWorld.actors.robot) journeyWorld.actors.robot.rotation.y = -Math.PI / 2;
+      setJourneyObjective("Det är en robot och maten är plast — spring till utgången!");
+      showToast("KLICK! Gubbens sida öppnas. Han är en ROBOT!", 4);
+      break;
+    case "shop_exit":
+    case "exit":
+    case "chapter_exit":
+      if (state.chapter === "robot_shop" && !state.journey.flags.exitOpen) showToast("Dörren är låst. Undersök gubben först.", 2.5);
+      else if (state.chapter === "haunted_house" && !state.journey.flags.defended) showToast("Ni måste förstärka huset innan ni lämnar det.", 2.5);
+      else enterNextJourneyChapter();
+      break;
+    case "storage":
+    case "furniture_storage":
+    case "infinite_storage":
+      takeStorageFurniture();
+      break;
+    case "ghost_train":
+    case "train_door":
+    case "board_train":
+      openChoice({
+        title: "SPÖKTÅGET ÄR TOMT",
+        text: "Om ni går ombord kan ni inte gå av igen — och där finns ingen mat.",
+        primary: "GÅ OMBORD ÄNDÅ",
+        secondary: "STANNA PÅ PERRONGEN",
+        onPrimary: () => enterJourneyChapter("ghost_train"),
+        onSecondary: () => { state.journey.flags.trainDeparting = true; state.journey.elapsed = 0; setJourneyObjective("Bra val. Tåget lämnar stationen — nästa stopp är öknen."); }
+      });
+      break;
+    case "refuse_train":
+      state.journey.flags.trainDeparting = true;
+      state.journey.elapsed = 0;
+      setJourneyObjective("Ni stannar på perrongen. Tåget lämnar er — öknen blir nästa värld.");
+      showToast("Dörrarna stängs. Bra val: ni fastnade inte för alltid.", 4);
+      break;
+    case "desert_cave":
+    case "cave_portal":
+    case "desert_cave_return":
+      state.journey.flags.caveSeen = true;
+      openChoice({
+        title: "GROTTAN GÅR TILL IKEA",
+        text: "Ni får välja: hoppa tillbaka till början eller stanna i öknen och hitta vägen vidare.",
+        primary: "HOPPA TILL IKEA",
+        secondary: "STANNA I ÖKNEN",
+        onPrimary: () => returnToWarehouse("Grottportalen släpper er tillbaka i det oändliga IKEA.") ,
+        onSecondary: () => setJourneyObjective("Ni stannar. Följ det röda skenet mot vulkanön.")
+      });
+      break;
+    case "map":
+      state.journey.flags.mapRead = true;
+      setJourneyObjective("Kartan visar X vid grottan i nordväst och en glödande väg mot vulkanön.");
+      showToast("X = grottan tillbaka till IKEA. ▲ = vägen vidare.", 4);
+      break;
+    case "volcano_portal":
+    case "desert_exit":
+      enterJourneyChapter("volcano_island");
+      break;
+    case "escape_boat":
+    case "volcano_escape":
+      state.journey.flags.escaped = true;
+      enterNextJourneyChapter();
+      break;
+    case "village_clue":
+    case "clue":
+      collectVillageClue(item);
+      break;
+    case "old_sign":
+      showToast("VILLAGE FROM 1920 — men en annan skylt säger 1910...", 5);
+      setJourneyObjective("Utforska byn och hitta de tre engelska ledtrådarna");
+      break;
+    case "warning":
+      showToast(`Marken mullrar. Utbrottet kommer om ungefär ${Math.max(1, Math.ceil(state.journey.flags.eruptionIn))} sekunder!`, 4);
+      break;
+    case "locked_door":
+      showToast("Dörren går inte att öppna. Tåget har ingen slutstation.", 3);
+      break;
+    case "sign":
+      showToast(item.label || "Ni läser skylten.", 3);
+      break;
+    case "build_spot":
+      setJourneyObjective(`Placera gamla möbler här: ${hauntedFortScore()} / 5`);
+      showToast("Bär hit möbler från det oändliga förrådet.", 3);
+      break;
+    case "mystery_gate":
+    case "village_gate":
+      if (!state.journey.flags.gateOpen) showToast("Porten behöver tre ledtrådar.", 2.5);
+      else openChoice({
+        title: "MYSTERIET FORTSÄTTER",
+        text: "Bakom porten skapas en ny obby. Resan kan börja om med nya hemligheter.",
+        primary: "BÖRJA NÄSTA OBBY",
+        secondary: "STANNA I BYN",
+        onPrimary: () => { state.journey.loop += 1; enterJourneyChapter("forest_houses"); },
+        onSecondary: () => showToast("Ni stannar och letar efter ännu fler mysterier.", 3)
+      });
+      break;
+    default:
+      showToast(item.label || "Ni undersöker föremålet.", 2.5);
+  }
 }
 
 function interact() {
   if (state.mode === "gameover" || state.mode === "ending") { resetGame(); return; }
   if (state.mode !== "playing" || state.paused || player().hidden) return;
+  if (!inWarehouse()) { interactJourney(); return; }
   const exit = nearestObject((desc) => desc.type === "exit", 3.1);
   if (exit) {
     state.exitFound = true;
     if (!state.exitUnlocked) { showToast("Dörren öppnas först efter att du överlevt en IKEA-natt.", 3); return; }
-    startCinematic(); return;
+    enterJourneyChapter("forest_houses"); return;
   }
   if (state.held) { placeHeld(); return; }
   const desc = nearestObject((item) => furnitureTypes[item.type].movable, 2.8);
@@ -967,6 +1458,7 @@ function updateClock(dt) {
   const old = state.clockMinutes;
   state.clockMinutes += dt * CLOCK_SPEED;
   if (state.clockMinutes >= 1440) { state.clockMinutes -= 1440; state.day += 1; }
+  if (!inWarehouse()) return;
   const monsterMinute = 3 * 60 + 33;
   if (!state.monsterDays[state.day] && crossedClock(old, state.clockMinutes, monsterMinute)) spawnMonster();
   if (state.monster.active && crossedClock(old, state.clockMinutes, 6 * 60)) {
@@ -1047,6 +1539,239 @@ function updateWeather(dt) {
   }
 }
 
+function spawnJourneyMonster(distance = 22, speedScale = .8) {
+  if (state.monster.active) return;
+  const p = player();
+  const behindX = Math.sin(p.yaw);
+  const behindZ = Math.cos(p.yaw);
+  state.monster.x = p.x + behindX * distance;
+  state.monster.z = p.z + behindZ * distance;
+  state.monster.active = true;
+  state.monster.mode = "hunting";
+  state.monster.targetPlayerId = state.localPlayerId;
+  state.monster.lastSeenX = p.x;
+  state.monster.lastSeenZ = p.z;
+  state.monster.sawHide = false;
+  state.monster.speedScale = speedScale;
+  monsterModel.visible = true;
+  showToast("Skramlaren har följt efter er till den här världen!", 4);
+  monsterArrivalSound();
+}
+
+function pulseMaterial(object, value) {
+  if (!object) return;
+  object.traverse?.((child) => {
+    if (child.material?.emissiveIntensity != null) child.material.emissiveIntensity = value;
+  });
+}
+
+function updateJourneyActors(dt) {
+  if (!journeyWorld) return;
+  const actors = journeyWorld.actors || {};
+  const t = state.journey.elapsed;
+  const dragon = actors.dragon || actors.blueDragon;
+  if (dragon && state.chapter !== "dragon_flight") {
+    if (dragon.userData.baseY == null) dragon.userData.baseY = dragon.position.y;
+    dragon.position.y = dragon.userData.baseY + Math.sin(t * 1.7) * .25;
+    dragon.rotation.y += Math.sin(t * .9) * dt * .08;
+  }
+  const rings = actors.rings || [];
+  rings.forEach((ring, index) => { ring.rotation.z += dt * (.28 + index * .04); });
+  const larvae = actors.larvae || actors.larvaClusters || [];
+  larvae.forEach((larva, index) => pulseMaterial(larva, 2.8 + Math.sin(t * 3 + index) * 1.4));
+  const sharks = actors.sharks || [];
+  sharks.forEach((shark, index) => {
+    if (shark.userData.angle == null) {
+      shark.userData.angle = Math.atan2(shark.position.z, shark.position.x);
+      shark.userData.radius = Math.max(18, Math.hypot(shark.position.x, shark.position.z));
+    }
+    const flee = state.journey.flags.boatReady ? Math.min(36, (t - 10) * 8) : 0;
+    const angle = shark.userData.angle + t * (.32 + index * .025);
+    const radius = shark.userData.radius + Math.max(0, flee);
+    shark.position.x = Math.cos(angle) * radius;
+    shark.position.z = Math.sin(angle) * radius;
+    shark.rotation.y = -angle;
+    if (radius > 55) shark.visible = false;
+  });
+  const robotArm = actors.robotArm || actors.wavingArm;
+  if (robotArm) robotArm.rotation.z = -.35 + Math.sin(t * 5) * .5;
+  const train = actors.train;
+  if (train && state.chapter === "ghost_station" && state.journey.flags.trainDeparting) train.position.z -= dt * 8;
+  const lava = actors.lava;
+  if (lava && state.chapter === "volcano_island") {
+    const danger = clamp(1 - state.journey.flags.eruptionIn / 28, 0, 1);
+    const lavaObjects = Array.isArray(lava) ? lava : [lava];
+    lavaObjects.forEach((object, index) => {
+      if (object.userData.baseScaleY == null) object.userData.baseScaleY = object.scale.y;
+      object.scale.y = object.userData.baseScaleY * (1 + danger * (index === 0 ? 1.2 : .35));
+      pulseMaterial(object, 2 + danger * 5);
+    });
+  }
+}
+
+function updateJourney(dt) {
+  if (inWarehouse() || !journeyWorld) return;
+  state.journey.elapsed += dt;
+  state.journey.timer += dt;
+  updateJourneyActors(dt);
+  const flags = state.journey.flags;
+  const actors = journeyWorld.actors || {};
+  switch (state.chapter) {
+    case "forest_houses":
+      if (state.journey.elapsed > 18 && !state.monster.active) spawnJourneyMonster(25, .68);
+      break;
+    case "shark_island": {
+      if (!flags.boatReady && state.journey.elapsed >= 10) {
+        flags.boatReady = true;
+        flags.boatWindow = 12;
+        if (actors.boat) actors.boat.position.z = -31;
+        setJourneyObjective("NU! Hajarna flyr — simma snabbt ut och tryck E vid båten!");
+        showToast("BÅTEN KOMMER! Hajarna simmar bort!", 4);
+        tone(330, .3, "square", .025); tone(440, .3, "square", .02, .35);
+      }
+      if (flags.boatReady) {
+        flags.boatWindow -= dt;
+        const boat = actors.boat;
+        if (boat) {
+          const item = journeyWorld.interactables.find((entry) => entry.kind === "boat");
+          if (item) { item.x = boat.position.x; item.z = boat.position.z; }
+        }
+        if (flags.boatWindow <= 0 && !flags.boarded) {
+          enterJourneyChapter("shark_island", { quiet: true });
+          showToast("Båten hann åka. En ny närmar sig...", 3);
+          return;
+        }
+      } else if (distance2D(player().x, player().z, 0, 0) > 18) {
+        failJourney("En haj tog dig när du simmade ut för tidigt!", "shark_island");
+        return;
+      }
+      break;
+    }
+    case "boat_ride": {
+      const boat = actors.boat;
+      if (boat) {
+        boat.position.z -= dt * 11;
+        boat.rotation.z = Math.sin(state.journey.elapsed * 2.4) * .035;
+        player().x = boat.position.x;
+        // Stå på fördäcket. Den gamla platsen låg inne i hyttväggen och
+        // gjorde hela vyn grå när båtfärden startade.
+        player().y = 1.05;
+        player().z = boat.position.z - 4.2;
+        const helm = journeyWorld.interactables.find((entry) => entry.kind === "helm");
+        if (helm) { helm.x = boat.position.x; helm.z = boat.position.z - 5.7; }
+      }
+      if (state.journey.elapsed > 10) {
+        showToast("Däcket brister — ni faller ner i ett enormt hål!", 3);
+        enterNextJourneyChapter();
+        return;
+      }
+      break;
+    }
+    case "electric_hollow":
+      if (state.journey.elapsed > 6 && !state.monster.active) spawnJourneyMonster(24, .78);
+      break;
+    case "haunted_house": {
+      const fort = hauntedFortScore();
+      if (!flags.attackStarted && fort >= 5) {
+        flags.attackStarted = true;
+        flags.attackTime = 0;
+        setJourneyObjective("Barrikaden är klar — håll ut medan monstret slår mot huset!");
+        showToast("03:33 — MONSTRET ÄR UTANFÖR HUSET!", 4);
+        monsterArrivalSound();
+        if (actors.monster) actors.monster.visible = true;
+      }
+      if (flags.attackStarted) {
+        flags.attackTime += dt;
+        if (actors.monster) {
+          actors.monster.position.x = Math.sin(flags.attackTime * 2.2) * 2;
+          actors.monster.rotation.z = Math.sin(flags.attackTime * 4) * .05;
+        }
+        if (flags.attackTime >= 10) {
+          flags.defended = true;
+          showToast("Barrikaden höll! En dörr öppnas mot spökstationen.", 4);
+          enterNextJourneyChapter();
+          return;
+        }
+      }
+      break;
+    }
+    case "ghost_station":
+      if (flags.trainDeparting && state.journey.elapsed > 4) {
+        enterJourneyChapter("desert");
+        return;
+      }
+      break;
+    case "ghost_train":
+      if (actors.train) actors.train.position.x = Math.sin(state.journey.elapsed * 5) * .08;
+      if (state.journey.elapsed > 20) {
+        failJourney("Tåget fortsatte för alltid och maten tog slut.", "ghost_station");
+        return;
+      }
+      break;
+    case "desert":
+      if (state.journey.elapsed > 12 && !flags.monsterRisen) {
+        flags.monsterRisen = true;
+        spawnJourneyMonster(28, .72);
+        setJourneyObjective("Sandmonstret har vaknat — hitta grottan eller det röda vulkanskenet!");
+      }
+      break;
+    case "volcano_island":
+      flags.eruptionIn -= dt;
+      if (flags.eruptionIn <= 10 && !flags.warned) {
+        flags.warned = true;
+        showToast("VULKANEN DÅNAR — SPRING TILL FLYKTBÅTEN!", 5);
+        tone(55, 1.1, "sawtooth", .04); tone(42, 1.5, "square", .025, .7);
+      }
+      if (flags.eruptionIn <= 0 && !flags.escaped) {
+        returnToWarehouse("Vulkanen exploderade. Lavan skickar er tillbaka till IKEA!");
+        return;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+function updateDragonFlight(dt, forward, strafe) {
+  const p = player();
+  const climb = forward;
+  p.x += strafe * 9 * dt;
+  p.y = clamp(p.y + climb * 5 * dt, 1, 8);
+  p.z -= 10 * dt;
+  p.x = clamp(p.x, journeyWorld.bounds.minX + 3, journeyWorld.bounds.maxX - 3);
+  p.yaw = 0;
+  p.pitch = clamp((3.2 - p.y) * .05, -.35, .35);
+  p.moving = true;
+  const dragon = journeyWorld.actors.dragon || journeyWorld.actors.blueDragon;
+  if (dragon) {
+    // Draken ska synas under spelaren utan att vingarna täcker flygringarna.
+    dragon.scale.setScalar(.34);
+    dragon.position.set(p.x, p.y - 2.4, p.z - 6);
+    dragon.rotation.y = 0;
+  }
+  const rings = journeyWorld.actors.rings || [];
+  rings.forEach((ring) => {
+    if (!ring.visible) return;
+    if (Math.hypot(p.x - ring.position.x, p.y - ring.position.y, p.z - ring.position.z) < 6) {
+      ring.visible = false;
+      state.journey.flags.ringsPassed += 1;
+      showToast(`Vindring ${state.journey.flags.ringsPassed} / ${rings.length}`, 2);
+      tone(660, .18, "sine", .02);
+    }
+  });
+  setJourneyObjective(`Flyg mot ön · vindringar ${state.journey.flags.ringsPassed} / ${rings.length || 3} (minst 4)`);
+  if (p.z <= journeyWorld.bounds.minZ + 12) {
+    const requiredRings = Math.min(4, rings.length);
+    if (state.journey.flags.ringsPassed >= requiredRings) enterNextJourneyChapter();
+    else {
+      p.x = 0; p.y = 3; p.z = journeyWorld.spawn.z;
+      state.journey.flags.ringsPassed = 0;
+      rings.forEach((ring) => { ring.visible = true; });
+      showToast(`Draken gör ett nytt varv — flyg genom minst ${requiredRings} ringar!`, 4);
+    }
+  }
+}
+
 function updatePlayer(dt) {
   const p = player();
   p.moving = false;
@@ -1062,12 +1787,28 @@ function updatePlayer(dt) {
   strafe += touch.x;
   if (keys.has("ArrowLeft")) p.yaw += 1.9 * dt;
   if (keys.has("ArrowRight")) p.yaw -= 1.9 * dt;
+  if (state.chapter === "dragon_flight") {
+    updateDragonFlight(dt, forward, strafe);
+    return;
+  }
+  if (state.chapter === "boat_ride") {
+    const boat = journeyWorld?.actors?.boat;
+    if (boat) {
+      boat.position.x = clamp(boat.position.x + strafe * 8 * dt, -9, 9);
+      p.x = boat.position.x;
+      p.moving = Math.abs(strafe) > .04;
+      p.sprinting = false;
+    }
+    return;
+  }
   const length = Math.hypot(forward, strafe);
   if (length > .04) {
     forward /= Math.max(1, length);
     strafe /= Math.max(1, length);
     const sprint = keys.has("ShiftLeft") || keys.has("ShiftRight");
-    const speed = sprint ? 6.6 : 4.15;
+    let speed = sprint ? 6.6 : 4.15;
+    if (state.chapter === "shark_island" && distance2D(p.x, p.z, 0, 0) > 14) speed *= .58;
+    if (state.chapter === "desert") speed *= .92;
     const forwardX = -Math.sin(p.yaw);
     const forwardZ = -Math.cos(p.yaw);
     const rightX = Math.cos(p.yaw);
@@ -1079,7 +1820,7 @@ function updatePlayer(dt) {
     p.moving = true;
     p.sprinting = sprint;
   }
-  refreshChunks();
+  if (inWarehouse()) refreshChunks();
 }
 
 function updateCamera() {
@@ -1089,16 +1830,17 @@ function updateCamera() {
   const p = player();
   const hiddenHeight = p.hidden ? .92 : PLAYER_EYE;
   const bob = p.moving ? Math.sin(state.timeMs * (p.sprinting ? .014 : .009)) * .035 : 0;
-  camera.position.set(p.x, hiddenHeight + Math.abs(bob), p.z);
+  camera.position.set(p.x, p.y + hiddenHeight + Math.abs(bob), p.z);
   camera.rotation.y = p.yaw;
   camera.rotation.x = p.pitch + bob * .12;
   flashlight.visible = p.flashlight && (state.mode === "playing" || state.mode === "gameover");
   // En svagare fångststråle visar ansiktet utan den utfrätta vita cirkeln.
-  flashlight.intensity = state.mode === "gameover" ? 6 : 18;
+  flashlight.intensity = state.mode === "gameover" ? 6 : inWarehouse() ? 18 : 24;
   sun.position.set(p.x - 28, 44, p.z - 34);
-  sun.target.position.set(p.x, 0, p.z);
+  sun.target.position.set(p.x, p.y, p.z);
   sun.target.updateMatrixWorld();
   sky.position.copy(camera.position);
+  if (journeyWorld?.actors?.sky) journeyWorld.actors.sky.position.copy(camera.position);
 }
 
 function updateLighting() {
@@ -1128,6 +1870,18 @@ function updateLighting() {
   sky.userData.uniforms.bottomColor.value.copy(bottom);
   scene.background.copy(top);
   scene.fog.color.copy(bottom);
+  if (!inWarehouse() && journeyWorld) {
+    const dimChapter = ["dragon_caves", "electric_hollow", "ghost_train"].includes(state.chapter);
+    const electricHollow = state.chapter === "electric_hollow";
+    hemisphere.intensity = Math.max(hemisphere.intensity, electricHollow ? 1.08 : dimChapter ? .72 : 1.02);
+    sun.intensity = Math.max(sun.intensity, electricHollow ? .92 : dimChapter ? .68 : 1.08);
+    scene.fog.density = electricHollow ? .006 : dimChapter ? .0085 : .0065;
+    const worldColor = journeyWorld.root.userData.backgroundColor;
+    if (Number.isFinite(worldColor)) {
+      scene.background.setHex(worldColor);
+      scene.fog.color.setHex(worldColor).multiplyScalar(electricHollow ? .68 : dimChapter ? .48 : .72);
+    }
+  }
 }
 
 function updateMonsterModel() {
@@ -1151,6 +1905,16 @@ function updatePrompt() {
   const p = player();
   if (state.mode !== "playing") { state.prompt = ""; return; }
   if (p.hidden) { state.prompt = "H · Lämna gömstället"; return; }
+  if (!inWarehouse()) {
+    if (state.held) { state.prompt = "E · Placera   R · Vrid"; return; }
+    if (state.chapter === "haunted_house") {
+      const desc = nearestObject((item) => furnitureTypes[item.type]?.movable, 2.8);
+      if (desc) { state.prompt = `E · Bär ${furnitureTypes[desc.type].name}`; return; }
+    }
+    const item = nearestJourneyInteractable(.45);
+    state.prompt = item ? (item.label || "E · Undersök") : "";
+    return;
+  }
   const exit = nearestObject((desc) => desc.type === "exit", 3.2);
   if (exit) {
     state.exitFound = true;
@@ -1178,10 +1942,15 @@ function weatherName() {
 }
 
 function currentZone() {
+  if (!inWarehouse()) return chapterTitle();
   return ensureChunkState(chunkCoord(player().x), chunkCoord(player().z)).zone;
 }
 
 function objectiveText() {
+  if (!inWarehouse()) {
+    if (state.mode === "gameover") return `Försök igen: ${chapterTitle()}`;
+    return state.journey.objective || journeyObjectives[state.chapter];
+  }
   if (state.mode === "cinematic") return "Resan fortsätter genom alla era världar";
   if (state.mode === "gameover") return "Försök igen och göm dig tidigare";
   if (state.nightsSurvived > 0) return "Hitta den hemliga utgången";
@@ -1192,11 +1961,26 @@ function objectiveText() {
 function updateHud() {
   gameHud.hidden = state.mode === "title";
   if (gameHud.hidden) return;
-  hudArea.textContent = state.mode === "cinematic" ? "NÄSTA VÄRLD" : `IKEA ∞ · ${currentZone()}`;
-  hudWeather.textContent = `${weatherName()} · ruta ${chunkCoord(player().x)}:${chunkCoord(player().z)}`;
+  const totalChapters = JOURNEY_ORDER.length + 1;
+  const chapterNumber = inWarehouse() ? 1 : state.journey.index + 2;
+  if (hudChapter) hudChapter.textContent = `KAPITEL ${chapterNumber} / ${totalChapters}`;
+  hudArea.textContent = state.mode === "cinematic" ? "NÄSTA VÄRLD" : inWarehouse() ? `IKEA ∞ · ${currentZone()}` : chapterTitle();
+  hudWeather.textContent = inWarehouse()
+    ? `${weatherName()} · ruta ${chunkCoord(player().x)}:${chunkCoord(player().z)}`
+    : `${weatherName()} · position ${Math.round(player().x)}:${Math.round(player().z)}`;
   hudClock.textContent = formatClock();
   hudClock.style.color = state.monster.active ? "#ff6259" : "#fff3a7";
-  hudDay.textContent = `Dygn ${state.day} · överlevda nätter ${state.nightsSurvived}`;
+  if (state.chapter === "shark_island") {
+    hudDay.textContent = state.journey.flags.boatReady
+      ? `Båten åker om ${Math.max(0, Math.ceil(state.journey.flags.boatWindow))} s`
+      : `Båten kommer om ${Math.max(0, Math.ceil(10 - state.journey.elapsed))} s`;
+  } else if (state.chapter === "boat_ride") hudDay.textContent = `Styr A/D · ${Math.max(0, Math.ceil(10 - state.journey.elapsed))} s kvar`;
+  else if (state.chapter === "ghost_train") hudDay.textContent = `Instängd ${Math.min(20, Math.floor(state.journey.elapsed))} / 20 s`;
+  else if (state.chapter === "volcano_island") hudDay.textContent = `Utbrott om ${Math.max(0, Math.ceil(state.journey.flags.eruptionIn))} s`;
+  else if (state.chapter === "haunted_house") hudDay.textContent = state.journey.flags.attackStarted
+    ? `Belägring ${Math.min(10, Math.floor(state.journey.flags.attackTime))} / 10 s`
+    : `Barrikad ${hauntedFortScore()} / 5`;
+  else hudDay.textContent = `Dygn ${state.day} · överlevda nätter ${state.nightsSurvived}`;
   hudObjective.textContent = objectiveText();
   hudPrompt.textContent = state.prompt;
   hudPrompt.hidden = !state.prompt;
@@ -1212,6 +1996,8 @@ function updateSimulation(dt) {
   if (state.mode === "cinematic") { updateCinematic(dt); return; }
   updateClock(dt);
   updateWeather(dt);
+  updateJourney(dt);
+  if (state.mode !== "playing" || state.paused) return;
   updatePlayer(dt);
   updateMonster(dt);
   updatePrompt();
@@ -1232,6 +2018,11 @@ function render() {
 
 function pauseGame(force = null) {
   if (state.mode !== "playing") return;
+  if (choiceHandlers) {
+    state.paused = true;
+    showToast("Välj ett av alternativen först.", 1.5);
+    return;
+  }
   state.paused = force == null ? !state.paused : Boolean(force);
   keys.clear(); touch.x = 0; touch.y = 0;
   if (state.paused && document.pointerLockElement) document.exitPointerLock();
@@ -1251,6 +2042,13 @@ function startGame() {
 }
 
 function resetGame() {
+  if (!inWarehouse()) {
+    const retryChapter = state.journey.failedChapter || state.chapter;
+    enterJourneyChapter(retryChapter, { quiet: true });
+    touchControls.hidden = !touchDevice;
+    showToast(`Nytt försök: ${chapterTitle(retryChapter)}.`, 4);
+    return;
+  }
   const p = player();
   disposeCinematicRoot();
   state.mode = "playing";
@@ -1262,7 +2060,7 @@ function resetGame() {
   state.monster.mode = "sleeping";
   state.monster.sawHide = false;
   monsterModel.visible = false;
-  p.x = 24; p.z = 24; p.yaw = -Math.PI / 2; p.pitch = 0;
+  p.x = 24; p.y = 0; p.z = 24; p.yaw = -Math.PI / 2; p.pitch = 0;
   p.hidden = false; p.hiddenBy = null;
   p.flashlight = true;
   hideMask.hidden = true;
@@ -1377,6 +2175,8 @@ function bindInputs() {
       if (button.dataset.action === "marker") makeMarker();
     });
   });
+  choicePrimary?.addEventListener("click", () => closeChoice("primary"));
+  choiceSecondary?.addEventListener("click", () => closeChoice("secondary"));
   window.addEventListener("blur", () => { keys.clear(); resetTouch(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden && state.mode === "playing") pauseGame(true); });
 }
@@ -1625,13 +2425,13 @@ function renderGameToText() {
   const p = player();
   const current = { x: chunkCoord(p.x), z: chunkCoord(p.z) };
   return JSON.stringify({
-    coordinateSystem: "Endless world metres; x east/right, y up, z south/down. Chunks are 48x48 metres.",
+    coordinateSystem: "World metres; x east/right, y up, z south/down. IKEA uses endless 48x48 metre chunks; later chapters use their own bounded worlds.",
     mode: state.mode,
     paused: state.paused,
     chapter: state.chapter,
     view: "firstPerson3d-high-resolution",
     world: {
-      endless: true,
+      endless: inWarehouse() || state.chapter === "mystery_village",
       worldSeed: state.worldSeed,
       chunkSize: CHUNK_SIZE,
       currentChunk: current,
@@ -1641,6 +2441,24 @@ function renderGameToText() {
       objectPatchCount: Object.keys(objectPatches).length,
       nextChapterGraph: chapters
     },
+    journey: !inWarehouse() ? {
+      order: JOURNEY_ORDER,
+      chapterIndex: state.journey.index,
+      chapterNumber: state.journey.index + 2,
+      totalChapters: JOURNEY_ORDER.length + 1,
+      elapsedSeconds: Math.round(state.journey.elapsed * 10) / 10,
+      stage: state.journey.stage,
+      objective: state.journey.objective,
+      flags: { ...state.journey.flags },
+      collected: [...state.journey.collected],
+      interactables: (journeyWorld?.interactables || []).filter((item) => !item.disabled && item.mesh?.visible !== false).map((item) => ({
+        id: item.id, kind: item.kind, x: Math.round(item.x * 10) / 10, z: Math.round(item.z * 10) / 10,
+        distance: Math.round(distance2D(p.x, p.z, item.x, item.z) * 10) / 10,
+        label: item.label
+      })).sort((a, b) => a.distance - b.distance).slice(0, 10),
+      choiceOpen: Boolean(choiceHandlers),
+      loop: state.journey.loop
+    } : null,
     network: state.network,
     localPlayerId: state.localPlayerId,
     players: Object.values(state.playersById).map((item) => ({
@@ -1657,11 +2475,11 @@ function renderGameToText() {
       distanceToLocalPlayer: state.monster.active ? Math.round(distance2D(p.x, p.z, state.monster.x, state.monster.z) * 10) / 10 : null,
       lineOfSight: state.monster.active ? !lineBlocked(state.monster.x, state.monster.z, p.x, p.z) : false
     },
-    building: { heldObjectId: state.held?.id || null, coverScore: coverScore(), markers: state.markers.length },
-    exit: {
+    building: { heldObjectId: state.held?.id || null, coverScore: coverScore(), hauntedFortScore: hauntedFortScore(), markers: state.markers.length },
+    exit: inWarehouse() ? {
       chunk: EXIT_CHUNK, found: state.exitFound, unlocked: state.exitUnlocked,
       distance: Math.round(distance2D(p.x, p.z, EXIT_CHUNK.x * CHUNK_SIZE + 24, EXIT_CHUNK.z * CHUNK_SIZE + 12))
-    },
+    } : null,
     objective: objectiveText(),
     prompt: state.prompt,
     toast: state.tick < state.toastUntilTick ? state.toast : "",
@@ -1689,19 +2507,40 @@ function teleport(x, z, yaw = null) {
   const p = player();
   p.x = Number(x); p.z = Number(z);
   if (Number.isFinite(yaw)) p.yaw = Number(yaw);
-  lastChunkKey = "";
-  refreshChunks(true);
+  if (inWarehouse()) {
+    lastChunkKey = "";
+    refreshChunks(true);
+  }
   updatePrompt(); render();
   return JSON.parse(renderGameToText());
 }
 
 function addTestFurniture(type, x, z, id) {
   const desc = { id, type, x, z, rotation: 0, removed: false, group: null };
+  if (!inWarehouse()) {
+    desc.group = createJourneyFurnitureVisual(desc);
+    journeyFurniture.push(desc);
+    journeyWorld.root.add(desc.group);
+    return desc;
+  }
   const cx = chunkCoord(x), cz = chunkCoord(z);
   addToChunk(desc, cx, cz);
   const loaded = loadedChunks.get(chunkKey(cx, cz));
   if (loaded) { desc.group = buildFurnitureModel(desc); loaded.root.add(desc.group); }
   return desc;
+}
+
+function teleportNearJourney(kindOrId) {
+  const item = journeyWorld?.interactables.find((entry) => entry.kind === kindOrId || entry.id === kindOrId);
+  if (!item) return null;
+  const offset = Math.min(1.8, Math.max(.6, (item.radius || 3) * .45));
+  const p = player();
+  p.x = item.x;
+  p.z = item.z + offset;
+  p.yaw = 0;
+  updatePrompt();
+  render();
+  return JSON.parse(renderGameToText());
 }
 
 window.__ikea333Test = {
@@ -1730,6 +2569,16 @@ window.__ikea333Test = {
     render(); return JSON.parse(renderGameToText());
   },
   startCinematic: () => { startCinematic(); render(); return JSON.parse(renderGameToText()); },
+  enterChapter: (chapter) => { enterJourneyChapter(chapter); return JSON.parse(renderGameToText()); },
+  nearJourney: (kindOrId) => teleportNearJourney(kindOrId),
+  setJourneyElapsed: (seconds) => { state.journey.elapsed = Number(seconds); render(); return JSON.parse(renderGameToText()); },
+  setVolcanoTimer: (seconds) => { state.journey.flags.eruptionIn = Number(seconds); render(); return JSON.parse(renderGameToText()); },
+  choose: (which) => { closeChoice(which === "secondary" ? "secondary" : "primary"); render(); return JSON.parse(renderGameToText()); },
+  placeHauntedFort: () => {
+    const door = hauntedDoorPosition();
+    [[-3, 1], [-1.5, 1], [0, 1], [1.5, 1], [3, 1]].forEach(([dx, dz], index) => addTestFurniture("crate", door.x + dx, door.z + dz, `test-haunted-${index}`));
+    render(); return JSON.parse(renderGameToText());
+  },
   awaitChunksIdle: () => Promise.resolve(JSON.parse(renderGameToText())),
   reset: () => { resetGame(); render(); return JSON.parse(renderGameToText()); },
   snapshot: () => JSON.parse(renderGameToText())

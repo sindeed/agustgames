@@ -18,15 +18,28 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1 och `game.js?v=3` som ES-modul.
+- `index.html` laddar Three.js 0.185.1 och `game.js?v=4` som ES-modul.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
 - Senaste kontrollerna gav inga console- eller page-fel.
 
-## Nästa stora version
+## 2026-07-16 – hela resan är nu spelbar
 
-- Göra varje värld efter IKEA till ett fullt spelbart kapitel; i denna version visas de som en 3D-teaser efter den spelbara IKEA-natten.
+- Ersatte 3D-teasern med 13 riktiga spelvärldar efter IKEA, totalt 14 kapitel.
+- Kapitlen ligger i berättelsens ordning: IKEA → enorma skogen och husen → drakgrottorna → drakflygningen → hajarnas ö → båtfärden → elektriska hålet → robotaffären → hemsökta huset → spökstationen och tågfällan → öknen → vulkanön → mysteriebyn.
+- Varje värld har egen 3D-miljö, mål, interaktioner, ljus, ljudstämning, risker och en riktig övergång till nästa plats.
+- Drakflygningen har styrning och vindringar. Hajarna flyr när båten kommer. Spöktåget är ett riktigt riskval, ökenportalen kan föra spelaren tillbaka till IKEA och vulkanens lava gör detsamma om tiden tar slut.
+- Det hemsökta husets förråd ger oändligt många gamla möbler som går att bära, vrida och bygga barrikad med.
+- Mysteriebyn använder svenska speltexter men engelska gamla skyltar och ledtrådar, bland annat `VILLAGE FROM 1920` och `FOUNDED 1910`.
+- Lade till kapitelmätare, responsiva vägvalsknappar och utökat testläge som beskriver aktiv värld, mål, timers, faror, ledtrådar och val.
+- En automatisk genomspelning verifierar hela kedjan, tågfällans omstart och den nya obby-loopen utan konsol- eller sidfel.
+- Riktiga tangentprov verifierar att draken måste passera minst fyra flygringar, båten går att styra med A/D, förrådet nås genom en riktig dörr och spöktåget går att utforska innan fällan slår igen.
+- Mobilen använder nu en fullhög porträttvy. I 390 × 844 ryms startknapp, HUD, mål, val och touchkontroller utan scroll, klippning eller överlapp.
+- Alla 14 startvyer, de mörka kapitlen och den rörliga båtriggen är visuellt kontrollerade. Den officiella Playwright-klienten och slutprovet rapporterar inga console- eller page-fel.
+
+## Kvar att bygga vidare på
+
 - Bygga riktig tvåspelar-online med server och synk. Koden har redan separata spelar-id:n, monstermål och en transportgräns, men denna version är solo.
 - Ersätta fler procedurmodeller och syntetiska toner med specialbyggda 3D-modeller, animationer och inspelade miljöljud.
 - Utöka tsunami/tornado, uppdrag, inventarie, sparfil och mysterierna i byn.

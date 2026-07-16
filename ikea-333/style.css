@@ -170,6 +170,16 @@ canvas {
   font-size: clamp(0.52rem, 1.4vmin, 0.7rem);
 }
 
+.hud-block .hud-chapter {
+  margin-top: 3px;
+  padding-top: 4px;
+  color: var(--paper-yellow);
+  font-size: clamp(0.48rem, 1.25vmin, 0.63rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  border-top: 1px solid rgb(255 217 40 / 38%);
+}
+
 .hud-clock {
   top: 12px;
   left: 50%;
@@ -254,6 +264,141 @@ canvas {
 
 .cinematic-caption[hidden] {
   display: none;
+}
+
+.choice-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  overflow: auto;
+  place-items: center;
+  padding: clamp(14px, 5vmin, 48px);
+  background:
+    radial-gradient(circle at 50% 45%, rgb(16 67 108 / 58%), transparent 58%),
+    rgb(1 7 14 / 86%);
+  backdrop-filter: blur(7px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ikea-yellow) var(--night-blue);
+}
+
+.choice-overlay[hidden] {
+  display: none;
+}
+
+.choice-panel {
+  position: relative;
+  display: grid;
+  width: min(100%, 620px);
+  justify-items: center;
+  gap: clamp(9px, 2.4vmin, 18px);
+  padding: clamp(18px, 5vmin, 42px);
+  text-align: center;
+  background:
+    linear-gradient(145deg, rgb(8 34 62 / 96%), rgb(2 14 28 / 98%)),
+    var(--night-blue);
+  border: 3px solid var(--ikea-yellow);
+  box-shadow:
+    0 0 0 4px var(--ikea-blue),
+    9px 10px 0 rgb(0 0 0 / 70%),
+    0 20px 55px rgb(0 0 0 / 55%);
+}
+
+.choice-panel::before {
+  position: absolute;
+  inset: 7px;
+  pointer-events: none;
+  content: "";
+  border: 1px solid rgb(255 255 255 / 13%);
+}
+
+.choice-eyebrow,
+.choice-title,
+.choice-text {
+  position: relative;
+  margin: 0;
+}
+
+.choice-eyebrow {
+  padding: 4px 9px;
+  color: var(--danger);
+  font-size: clamp(0.56rem, 1.55vmin, 0.72rem);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  background: rgb(0 0 0 / 42%);
+  border-left: 3px solid var(--danger);
+}
+
+.choice-title {
+  max-width: 19ch;
+  color: var(--ikea-yellow);
+  font: 900 clamp(1.25rem, 4.7vmin, 2.25rem)/1.08 Impact, Haettenschweiler, "Arial Black", sans-serif;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  text-shadow: 3px 4px 0 rgb(0 0 0 / 68%);
+}
+
+.choice-text {
+  max-width: 46ch;
+  color: #e8f4ff;
+  font: 700 clamp(0.72rem, 2vmin, 0.95rem)/1.45 "Segoe UI", Arial, sans-serif;
+}
+
+.choice-actions {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 2.6vmin, 18px);
+  width: min(100%, 520px);
+  margin-top: clamp(2px, 1vmin, 8px);
+}
+
+.choice-button {
+  min-height: 56px;
+  padding: 12px 16px;
+  color: var(--white);
+  font: 900 clamp(0.72rem, 2.25vmin, 1rem)/1.15 "Courier New", monospace;
+  letter-spacing: 0.035em;
+  cursor: pointer;
+  border: 3px solid var(--white);
+  border-radius: 0;
+  box-shadow: 5px 5px 0 rgb(0 0 0 / 68%);
+  touch-action: manipulation;
+  transition: filter 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.choice-button-primary {
+  color: var(--ink);
+  background: var(--ikea-yellow);
+  border-color: var(--white);
+}
+
+.choice-button-secondary {
+  background: var(--ikea-blue);
+  border-color: var(--ikea-blue-light);
+}
+
+.choice-button:hover {
+  filter: brightness(1.15);
+  transform: translateY(-2px);
+  box-shadow: 7px 7px 0 rgb(0 0 0 / 68%);
+}
+
+.choice-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 68%);
+}
+
+.choice-button:focus-visible {
+  outline: 4px solid var(--danger);
+  outline-offset: 4px;
+}
+
+.choice-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.75) brightness(0.7);
+  transform: none;
+  box-shadow: 3px 3px 0 rgb(0 0 0 / 58%);
 }
 
 .game-nav {
@@ -659,6 +804,30 @@ canvas {
 }
 
 @media (max-width: 520px) and (orientation: portrait) {
+  :root {
+    --pixel: 3px;
+  }
+
+  .game-page {
+    display: block;
+    min-height: 100dvh;
+    padding:
+      max(4px, env(safe-area-inset-top))
+      max(4px, env(safe-area-inset-right))
+      max(4px, env(safe-area-inset-bottom))
+      max(4px, env(safe-area-inset-left));
+  }
+
+  .game-shell {
+    width: calc(100vw - 8px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    height: calc(100dvh - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .canvas-frame {
+    height: 100%;
+    aspect-ratio: auto;
+  }
+
   .game-title {
     flex-direction: column;
     align-items: center;
@@ -673,6 +842,129 @@ canvas {
   .eyebrow,
   .menu-hint {
     display: none;
+  }
+
+  .start-overlay {
+    padding: 18px 12px;
+  }
+
+  .menu-panel {
+    gap: 11px;
+  }
+
+  .hud-block {
+    top: 62px;
+    right: 8px;
+    left: 8px;
+    grid-template-columns: 1fr auto;
+    min-width: 0;
+    padding: 6px 9px;
+  }
+
+  .hud-block strong {
+    grid-column: 1 / -1;
+    font-size: 0.75rem;
+  }
+
+  .hud-block span {
+    font-size: 0.57rem;
+  }
+
+  .hud-block .hud-chapter {
+    grid-column: 2;
+    margin: 0;
+    padding: 0;
+    border-top: 0;
+  }
+
+  .hud-clock {
+    top: 8px;
+    min-width: 84px;
+    padding: 5px 9px;
+  }
+
+  .hud-clock strong {
+    font-size: 1rem;
+  }
+
+  .hud-toast {
+    top: 122px;
+    max-width: calc(100% - 24px);
+    padding: 8px 10px;
+    font-size: 0.66rem;
+  }
+
+  .hud-objective {
+    right: 8px;
+    bottom: 112px;
+    left: 8px;
+    max-width: none;
+    padding: 7px 9px;
+    font-size: 0.66rem;
+  }
+
+  .hud-prompt {
+    bottom: 166px;
+    max-width: calc(100% - 32px);
+    padding: 7px 10px;
+    font-size: 0.68rem;
+    text-align: center;
+  }
+
+  .touch-controls {
+    inset: auto 9px 9px;
+  }
+
+  .touch-joystick {
+    width: 84px;
+    height: 84px;
+  }
+
+  .touch-actions {
+    width: 118px;
+  }
+
+  .touch-action {
+    min-height: 40px;
+  }
+
+  .touch-action-main {
+    min-height: 86px;
+  }
+
+  .choice-overlay {
+    padding: 7px;
+  }
+
+  .choice-panel {
+    gap: 5px;
+    padding: 9px 11px 10px;
+  }
+
+  .choice-eyebrow {
+    display: none;
+  }
+
+  .choice-title {
+    font-size: clamp(0.95rem, 5.2vw, 1.2rem);
+  }
+
+  .choice-text {
+    font-size: clamp(0.58rem, 2.8vw, 0.7rem);
+    line-height: 1.25;
+  }
+
+  .choice-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 1px;
+  }
+
+  .choice-button {
+    min-height: 48px;
+    padding: 6px 5px;
+    font-size: clamp(0.55rem, 2.7vw, 0.68rem);
+    box-shadow: 3px 3px 0 rgb(0 0 0 / 68%);
   }
 }
 
