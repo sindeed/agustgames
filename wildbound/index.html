@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#132a26">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <link rel="stylesheet" href="style.css?v=20260716-1">
+  <title>Wildbound: The Stormwake Trail</title>
+</head>
+<body>
+  <main class="game-shell">
+    <section class="game-frame" id="game-frame" aria-label="Wildbound game">
+      <canvas id="game" width="960" height="600" tabindex="0" aria-label="Wildbound first-person adventure"></canvas>
+
+      <nav class="top-bar" aria-label="Game options">
+        <a class="round-button" id="home-button" href="../" aria-label="Back to Agust Games">⌂</a>
+        <div class="top-actions">
+          <button class="round-button" id="pause-button" aria-label="Pause game">Ⅱ</button>
+          <button class="round-button" id="map-button" aria-label="Open world map">🗺️</button>
+          <button class="round-button" id="sound-button" aria-label="Sound on or off">🔊</button>
+          <button class="round-button" id="fullscreen-button" aria-label="Toggle fullscreen">⛶</button>
+        </div>
+      </nav>
+
+      <section class="hud hidden" id="hud" aria-live="polite">
+        <div class="survival-hud">
+          <div class="hearts" id="hearts" aria-label="Five hearts">♥ ♥ ♥ ♥ ♥</div>
+          <div class="stamina" aria-label="Stamina">
+            <span>STAMINA</span>
+            <div class="stamina-track"><i id="stamina-fill"></i></div>
+          </div>
+        </div>
+        <div class="quest-hud">
+          <p class="region-name" id="region-name">Windrest Highlands</p>
+          <p class="objective" id="objective">Follow the old road to Bramblewick Stable</p>
+        </div>
+        <div class="boss-hud hidden" id="boss-hud" aria-label="Boss health">
+          <strong id="boss-name">STORMWAKE WARDEN</strong>
+          <div class="boss-health-track"><i id="boss-health-fill"></i></div>
+        </div>
+        <canvas class="minimap" id="minimap" width="180" height="180" aria-label="Local map"></canvas>
+        <div class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <p class="interaction-prompt hidden" id="interaction-prompt"></p>
+        <div class="weapon-readout" id="weapon-readout"><span>⚔</span><b>Wayfarer blade</b></div>
+      </section>
+
+      <section class="screen-layer start-screen" id="start-screen">
+        <div class="start-panel">
+          <div class="title-lockup">
+            <span class="chapter">A HUGE FIRST-PERSON ADVENTURE</span>
+            <h1>Wildbound</h1>
+            <p class="subtitle">The Stormwake Trail</p>
+          </div>
+          <p class="story-copy">The Hollow King has taken Elara beyond the Stormwall. As Ryn, cross a vast living realm of rivers, villages, stables, ruins and wild creatures. Every road is a choice. Everything you build can become a way forward.</p>
+
+          <div class="hero-and-controls">
+            <div class="hero-choice" aria-label="Your hero">
+              <div class="hero-portrait" aria-hidden="true">
+                <span class="hero-hair"></span>
+                <span class="hero-face"></span>
+                <span class="hero-cloak"></span>
+                <span class="hero-sword"></span>
+              </div>
+              <div><small>YOUR HERO</small><strong>RYN</strong><em>THE LAST WAYFARER</em></div>
+              <span class="chosen-mark">✓</span>
+            </div>
+
+            <div class="control-grid">
+              <span><b>WASD</b> Walk</span>
+              <span><b>Mouse / drag</b> Look</span>
+              <span><b>Shift</b> Sprint</span>
+              <span><b>Space</b> Jump / glide</span>
+              <span><b>Click / F</b> Attack</span>
+              <span><b>E / Enter</b> Talk / ride</span>
+              <span><b>Q</b> Aether grip</span>
+              <span><b>R / X</b> Turn / attach</span>
+              <span><b>M</b> World map</span>
+              <span><b>Esc</b> Pause</span>
+            </div>
+          </div>
+
+          <button class="main-button" id="start-button"><span>Begin the journey</span><i>▶</i></button>
+          <p class="loading-note" id="loading-note">Building the realm…</p>
+        </div>
+      </section>
+
+      <dialog class="game-dialog" id="pause-dialog">
+        <p class="dialog-kicker">JOURNEY PAUSED</p>
+        <h2>The wilds will wait.</h2>
+        <button class="main-button compact" id="resume-button">Continue</button>
+      </dialog>
+
+      <dialog class="game-dialog" id="respawn-dialog">
+        <p class="dialog-kicker">RYN HAS FALLEN</p>
+        <h2>The wind carries you home.</h2>
+        <p>You will return to the last safe fire with your quest progress.</p>
+        <button class="main-button compact" id="respawn-button">Rise again</button>
+      </dialog>
+
+      <dialog class="game-dialog victory-dialog" id="victory-dialog">
+        <p class="dialog-kicker">THE STORMWALL IS BROKEN</p>
+        <h2>Elara is free!</h2>
+        <p>The Hollow King has fallen, the roads are open and warm light returns to the enormous realm of Aeria.</p>
+        <p class="victory-stats" id="victory-stats"></p>
+        <button class="main-button compact" id="play-again-button">Explore again</button>
+      </dialog>
+
+      <section class="dialogue-box hidden" id="dialogue-box" aria-live="polite">
+        <p id="speaker-name">Stable keeper</p>
+        <div id="dialogue-text">Welcome, traveller.</div>
+        <span>Press E / ENTER</span>
+      </section>
+
+      <section class="world-map-layer hidden" id="map-overlay" aria-label="World map">
+        <div class="map-frame">
+          <div class="map-heading"><span>THE REALM OF AERIA</span><button id="close-map-button" aria-label="Close map">×</button></div>
+          <canvas id="world-map-canvas" width="760" height="470"></canvas>
+          <p>Drag your path across sixteen great regions. More lands will open as the journey grows.</p>
+        </div>
+      </section>
+
+      <section class="touch-controls hidden" id="touch-controls" aria-label="Touch controls">
+        <div class="joystick" id="joystick"><i id="joystick-knob"></i></div>
+        <div class="touch-actions">
+          <button id="sprint-button" data-action="sprint" aria-label="Sprint"><span>»</span>RUN</button>
+          <button id="jump-button" data-action="jump" aria-label="Jump or glide"><span>⇧</span>JUMP</button>
+          <button id="action-button" data-action="attack" aria-label="Attack"><span>⚔</span>STRIKE</button>
+          <button data-action="interact" aria-label="Talk, use, or ride"><span>✋</span>USE</button>
+          <button data-action="grip" aria-label="Aether grip"><span>✦</span>GRIP</button>
+          <button data-action="rotate" aria-label="Rotate held object"><span>↻</span>TURN</button>
+          <button data-action="attach" aria-label="Attach held objects"><span>◆</span>JOIN</button>
+        </div>
+      </section>
+
+      <div class="rotate-message" aria-hidden="true"><b>↻</b><span>Turn the screen sideways to enter the wilds</span></div>
+      <div class="webgl-error hidden" id="webgl-error">This adventure needs WebGL and an internet connection the first time it loads.</div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="game.js?v=20260716-3"></script>
+</body>
+</html>
