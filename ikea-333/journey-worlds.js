@@ -1002,9 +1002,9 @@ function buildBoatRide() {
   const boat = addBoat(context, 0, -1.62, 0, 1.65, Math.PI, boatRig);
   boat.name = "journey-boat";
   const helmMat = material(context, "helm", { color: 0x6b4429, roughness: 0.72, metalness: 0.08 });
-  const helm = torus(context, 0.58, 0.08, helmMat, 0, 2.15, -5.7, { x: 0, y: 0, z: 0 }, boatRig);
+  const helm = torus(context, 0.38, 0.065, helmMat, 0, 2.15, -5.7, { x: 0, y: 0, z: 0 }, boatRig);
   for (let i = 0; i < 8; i += 1) {
-    const spoke = box(context, 0.065, 1.18, 0.065, helmMat, 0, 2.15, -5.7, 0, boatRig);
+    const spoke = box(context, 0.055, .78, 0.055, helmMat, 0, 2.15, -5.7, 0, boatRig);
     spoke.rotation.z = i * Math.PI / 4;
   }
   interactable(context, "boat-helm", "helm", 0, .3, 3.2, "Ta ratten och styr med A/D", helm);

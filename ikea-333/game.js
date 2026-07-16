@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=1";
+import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=2";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -2186,6 +2186,7 @@ function resize() {
   const width = canvas.clientWidth || 960;
   const height = canvas.clientHeight || 540;
   camera.aspect = width / height;
+  camera.fov = height > width ? 92 : 75;
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, touchDevice ? 1.25 : 1.8));
   renderer.setSize(width, height, false);
