@@ -79,7 +79,7 @@ export const CHAPTER_INFO = Object.freeze({
   },
   volcano_island: {
     title: "Vulkanön",
-    objective: "Lyssna efter mullret och nå flyktbåten innan lavan kommer.",
+    objective: "Vulkanen exploderar efter 30 sekunder. Nå flyktbåten innan lavan kommer.",
     next: "mystery_village",
     fail: "warehouse"
   },
@@ -1760,7 +1760,7 @@ function buildVolcanoIsland() {
     pointLight(context, 0xff6d22, 25, 16, x, 3.2, z);
     warningBeacons.push(beacon);
   }
-  const warningSign = textPanel(context, "VULKANEN VAKNAR\nSPRING TILL BÅTEN!", {
+  const warningSign = textPanel(context, "VULKANEN VAKNAR\nFLY INOM 30 SEKUNDER!", {
     x: 0, y: 3.7, z: 51, width: 10, height: 3.1, background: "#3d1811",
     border: "#ff8a45", color: "#ffd2a3", font: "Arial, sans-serif", fontSize: 104,
     emissive: 0x6b180a, emissiveIntensity: 1.4

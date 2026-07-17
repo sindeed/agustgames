@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=3";
+import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=4";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -1011,7 +1011,7 @@ const journeyObjectives = {
   ghost_station: "Spöktåget avgår exakt 03:33 — välj om du verkligen vågar gå ombord",
   ghost_train: "Vänta på avgången 03:33. Sedan stannar tåget aldrig...",
   desert: "Använd kartmärket: välj IKEA-grottan eller hitta vägen till vulkanön",
-  volcano_island: "Lyssna på vulkanen och nå flyktbåten innan utbrottet",
+  volcano_island: "Vulkanen exploderar om 30 sekunder — nå flyktbåten i tid",
   mystery_village: "Hitta tre gamla ledtrådar och lös mysteriet 1910 / 1920"
 };
 
@@ -1025,6 +1025,8 @@ const journeyClock = {
 
 const GHOST_DEPARTURE_SECONDS = 20;
 const GHOST_TRAIN_TRAP_SECONDS = 20;
+const VOLCANO_ERUPTION_SECONDS = 30;
+const VOLCANO_TIMER_EPSILON = .001;
 
 function chapterTitle(chapter = state.chapter) {
   return CHAPTER_INFO[chapter]?.title || chapter.replaceAll("_", " ").toUpperCase();
@@ -1115,7 +1117,7 @@ function configureJourneyStart(chapter) {
     departed: false, departureCountdown: GHOST_DEPARTURE_SECONDS, travelTime: 0
   });
   if (chapter === "desert") Object.assign(flags, { monsterRisen: false, caveSeen: false });
-  if (chapter === "volcano_island") Object.assign(flags, { eruptionIn: 28, escaped: false });
+  if (chapter === "volcano_island") Object.assign(flags, { eruptionIn: VOLCANO_ERUPTION_SECONDS, escaped: false });
   if (chapter === "mystery_village") Object.assign(flags, { gateOpen: false });
   return flags;
 }
@@ -1425,7 +1427,7 @@ function interactJourney() {
       setJourneyObjective("Utforska byn och hitta de tre engelska ledtrådarna");
       break;
     case "warning":
-      showToast(`Marken mullrar. Utbrottet kommer om ungefär ${Math.max(1, Math.ceil(state.journey.flags.eruptionIn))} sekunder!`, 4);
+      showToast(`Marken mullrar. Utbrottet kommer om ungefär ${Math.max(1, Math.ceil(state.journey.flags.eruptionIn - VOLCANO_TIMER_EPSILON))} sekunder!`, 4);
       break;
     case "locked_door":
       showToast("Dörren går inte att öppna. Tåget har ingen slutstation.", 3);
@@ -1624,7 +1626,7 @@ function updateJourneyActors(dt) {
   }
   const lava = actors.lava;
   if (lava && state.chapter === "volcano_island") {
-    const danger = clamp(1 - state.journey.flags.eruptionIn / 28, 0, 1);
+    const danger = clamp(1 - state.journey.flags.eruptionIn / VOLCANO_ERUPTION_SECONDS, 0, 1);
     const lavaObjects = Array.isArray(lava) ? lava : [lava];
     lavaObjects.forEach((object, index) => {
       if (object.userData.baseScaleY == null) object.userData.baseScaleY = object.scale.y;
@@ -1770,13 +1772,14 @@ function updateJourney(dt) {
       }
       break;
     case "volcano_island":
-      flags.eruptionIn -= dt;
+      flags.eruptionIn = Math.max(0, flags.eruptionIn - dt);
       if (flags.eruptionIn <= 10 && !flags.warned) {
         flags.warned = true;
         showToast("VULKANEN DÅNAR — SPRING TILL FLYKTBÅTEN!", 5);
         tone(55, 1.1, "sawtooth", .04); tone(42, 1.5, "square", .025, .7);
       }
-      if (flags.eruptionIn <= 0 && !flags.escaped) {
+      if (flags.eruptionIn <= VOLCANO_TIMER_EPSILON && !flags.escaped) {
+        flags.eruptionIn = 0;
         returnToWarehouse("Vulkanen exploderade. Lavan skickar er tillbaka till IKEA!");
         return;
       }
@@ -2035,7 +2038,7 @@ function updateHud() {
   else if (state.chapter === "ghost_train") hudDay.textContent = state.journey.flags.departed
     ? `Instängd ${Math.min(GHOST_TRAIN_TRAP_SECONDS, Math.floor(state.journey.flags.travelTime))} / ${GHOST_TRAIN_TRAP_SECONDS} s`
     : `Avgång 03:33 · ${Math.max(0, Math.ceil(state.journey.flags.departureCountdown))} s`;
-  else if (state.chapter === "volcano_island") hudDay.textContent = `Utbrott om ${Math.max(0, Math.ceil(state.journey.flags.eruptionIn))} s`;
+  else if (state.chapter === "volcano_island") hudDay.textContent = `Utbrott om ${Math.max(0, Math.ceil(state.journey.flags.eruptionIn - VOLCANO_TIMER_EPSILON))} s`;
   else if (state.chapter === "haunted_house") hudDay.textContent = state.journey.flags.attackStarted
     ? `Belägring ${Math.min(10, Math.floor(state.journey.flags.attackTime))} / 10 s`
     : `Barrikad ${hauntedFortScore()} / 5`;

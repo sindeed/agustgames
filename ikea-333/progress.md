@@ -18,7 +18,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1 och `game.js?v=6` som ES-modul.
+- `index.html` laddar Three.js 0.185.1 och `game.js?v=7` som ES-modul.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
@@ -50,6 +50,13 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 - Efter tjugo sekunder slår klockan 03:33, dörren låses och tåget kör iväg. Den som stannar på perrongen fortsätter till öknen.
 - Den som går ombord väntar inne i tåget till 03:33; därefter börjar den tjugo sekunder långa tågfällan.
 - Deterministiska webbläsartester verifierar ombordstigning, perrongval, missat tåg, pausad nedräkning och tågfällans omstart utan console- eller page-fel. Hela kedjan genom alla 14 kapitel passerar fortfarande.
+
+## 2026-07-17 – Vulkanön exploderar efter 30 sekunder
+
+- Vulkanens nedräkning börjar på 30 sekunder när spelaren kommer till ön.
+- Vid noll exploderar vulkanen och lavan skickar spelaren tillbaka till IKEA; flyktbåten leder fortfarande vidare till mysteriebyn.
+- Lavaanimationens styrka följer hela 30-sekunderstimern och de sista tio sekunderna har den starka varningen kvar.
+- Deterministisk Chromium-QA verifierar att spelaren är kvar vid 29,999 sekunder och skickas till IKEA vid exakt 30,000 sekunder, utan console- eller page-fel.
 
 ## Nya idéer från Agust och kusinen
 
