@@ -27,6 +27,11 @@ const choiceTitle = document.getElementById("choiceTitle");
 const choiceText = document.getElementById("choiceText");
 const choicePrimary = document.getElementById("choicePrimary");
 const choiceSecondary = document.getElementById("choiceSecondary");
+const chapterOverlay = document.getElementById("chapterOverlay");
+const chapterGrid = document.getElementById("chapterGrid");
+const chapterCloseButton = document.getElementById("chapterCloseButton");
+const chapterMenuButton = document.getElementById("chapterMenuButton");
+const chapterStartButton = document.getElementById("chapterStartButton");
 
 const FIXED_STEP = 1 / 60;
 const FIXED_MS = 1000 / 60;
@@ -57,6 +62,7 @@ let cinematicIndex = -1;
 let journeyWorld = null;
 let journeyFurniture = [];
 let choiceHandlers = null;
+let chapterMenuRestorePaused = false;
 let manualTime = false;
 let manualAccumulator = 0;
 let accumulator = 0;
@@ -1072,7 +1078,98 @@ const MUSEUM_MIDNIGHT_SECONDS = 30;
 const JOURNEY_TIMER_EPSILON = .001;
 
 function chapterTitle(chapter = state.chapter) {
+  if (chapter === "warehouse") return "Det oändliga IKEA";
   return CHAPTER_INFO[chapter]?.title || chapter.replaceAll("_", " ").toUpperCase();
+}
+
+function chapterMenuEntries() {
+  return ["warehouse", ...JOURNEY_ORDER].map((chapter, index) => ({
+    chapter,
+    number: index + 1,
+    title: chapterTitle(chapter)
+  }));
+}
+
+function refreshChapterMenu() {
+  chapterGrid?.querySelectorAll("[data-chapter]").forEach((button) => {
+    const active = button.dataset.chapter === state.chapter;
+    button.setAttribute("aria-current", active ? "true" : "false");
+  });
+}
+
+function buildChapterMenu() {
+  if (!chapterGrid) return;
+  chapterGrid.replaceChildren();
+  chapterMenuEntries().forEach(({ chapter, number, title }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chapter-select-button";
+    button.dataset.chapter = chapter;
+    button.setAttribute("aria-label", `Kapitel ${number}: ${title}`);
+    const numberLabel = document.createElement("span");
+    numberLabel.className = "chapter-number";
+    numberLabel.textContent = String(number).padStart(2, "0");
+    const nameLabel = document.createElement("strong");
+    nameLabel.className = "chapter-name";
+    nameLabel.textContent = title;
+    button.append(numberLabel, nameLabel);
+    button.addEventListener("click", () => selectChapter(chapter));
+    chapterGrid.append(button);
+  });
+  refreshChapterMenu();
+}
+
+function openChapterMenu() {
+  if (!chapterOverlay) return;
+  if (choiceHandlers) {
+    showToast("Gör berättelsevalet först.", 2);
+    choicePrimary?.focus();
+    return;
+  }
+  chapterMenuRestorePaused = state.paused;
+  refreshChapterMenu();
+  chapterOverlay.hidden = false;
+  state.paused = true;
+  keys.clear();
+  resetTouch();
+  touchControls.hidden = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  const current = chapterGrid?.querySelector(`[data-chapter="${state.chapter}"]`)
+    || chapterGrid?.querySelector("[data-chapter]");
+  current?.focus();
+  render();
+}
+
+function closeChapterMenu() {
+  if (!chapterOverlay || chapterOverlay.hidden) return;
+  chapterOverlay.hidden = true;
+  state.paused = state.mode === "playing" ? chapterMenuRestorePaused : false;
+  touchControls.hidden = state.mode !== "playing" || !touchDevice;
+  if (state.mode === "title") (chapterStartButton || startButton).focus();
+  else canvas.focus();
+  render();
+}
+
+function selectChapter(chapter) {
+  const entry = chapterMenuEntries().find((item) => item.chapter === chapter);
+  if (!entry) return;
+  ensureAudio();
+  if (chapterOverlay) chapterOverlay.hidden = true;
+  startOverlay.hidden = true;
+  gameHud.hidden = false;
+  state.paused = false;
+  if (chapter === "warehouse") {
+    if (state.mode === "title") startGame();
+    else returnToWarehouse(`Hoppade till kapitel 1: ${entry.title}.`);
+  } else {
+    enterJourneyChapter(chapter, { quiet: true });
+    showToast(`Hoppade till kapitel ${entry.number}: ${entry.title}.`, 4);
+  }
+  touchControls.hidden = !touchDevice;
+  refreshChapterMenu();
+  gameStatus.textContent = `Kapitel ${entry.number}: ${entry.title}`;
+  canvas.focus();
+  render();
 }
 
 function setJourneyObjective(text) {
@@ -2946,8 +3043,14 @@ function updateJoystick(event) {
 function bindInputs() {
   window.addEventListener("keydown", (event) => {
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Escape"].includes(event.code)) event.preventDefault();
+    if (event.repeat && event.code === "KeyK") return;
+    if (chapterOverlay && !chapterOverlay.hidden) {
+      if (event.code === "Escape" || event.code === "KeyK") closeChapterMenu();
+      return;
+    }
+    if (event.code === "KeyK") { openChapterMenu(); return; }
     if (state.mode === "title" && ["Enter", "Space"].includes(event.code)) { startGame(); return; }
-    if (event.repeat && ["KeyE", "KeyR", "KeyH", "KeyM", "KeyL", "KeyF", "KeyP"].includes(event.code)) return;
+    if (event.repeat && ["KeyE", "KeyR", "KeyH", "KeyM", "KeyK", "KeyL", "KeyF", "KeyP"].includes(event.code)) return;
     keys.add(event.code);
     if (event.code === "KeyE" || event.code === "Enter") interact();
     else if (event.code === "KeyR") { if (state.mode === "gameover") resetGame(); else rotateHeld(); }
@@ -3006,6 +3109,10 @@ function bindInputs() {
   });
   choicePrimary?.addEventListener("click", () => closeChoice("primary"));
   choiceSecondary?.addEventListener("click", () => closeChoice("secondary"));
+  chapterMenuButton?.addEventListener("click", openChapterMenu);
+  chapterStartButton?.addEventListener("click", openChapterMenu);
+  chapterCloseButton?.addEventListener("click", closeChapterMenu);
+  chapterOverlay?.addEventListener("click", (event) => { if (event.target === chapterOverlay) closeChapterMenu(); });
   window.addEventListener("blur", () => { keys.clear(); resetTouch(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden && state.mode === "playing") pauseGame(true); });
 }
@@ -3260,6 +3367,12 @@ function renderGameToText() {
     paused: state.paused,
     chapter: state.chapter,
     view: "firstPerson3d-high-resolution",
+    chapterSelection: {
+      open: Boolean(chapterOverlay && !chapterOverlay.hidden),
+      currentNumber: Math.max(1, JOURNEY_ORDER.indexOf(state.chapter) + 2),
+      choiceCount: JOURNEY_ORDER.length + 1,
+      choices: chapterOverlay && !chapterOverlay.hidden ? chapterMenuEntries().map((entry) => entry.chapter) : []
+    },
     world: {
       endless: inWarehouse() || state.chapter === "mystery_village",
       worldSeed: state.worldSeed,
@@ -3316,7 +3429,7 @@ function renderGameToText() {
     nearbyFurniture: nearbyFurnitureState(),
     cinematic: state.mode === "cinematic" || state.mode === "ending" ? { phase: state.cinematic.phase, time: Math.round(state.cinematic.time * 10) / 10 } : null,
     renderer: renderer ? { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures } : null,
-    controls: "WASD/pilar gå; mus/drag titta; Shift spring; E bär/placera/använd; R vrid; H göm; M vägpil; L ficklampa; F helskärm; Esc/P paus."
+    controls: "WASD/pilar gå; mus/drag titta; Shift spring; E bär/placera/använd; R vrid; H göm; M vägpil; K välj kapitel; L ficklampa; F helskärm; Esc/P paus."
   });
 }
 
@@ -3441,6 +3554,9 @@ window.__ikea333Test = {
     [[-3, 1], [-1.5, 1], [0, 1], [1.5, 1], [3, 1]].forEach(([dx, dz], index) => addTestFurniture("crate", door.x + dx, door.z + dz, `test-haunted-${index}`));
     render(); return JSON.parse(renderGameToText());
   },
+  openChapterMenu: () => { openChapterMenu(); return JSON.parse(renderGameToText()); },
+  closeChapterMenu: () => { closeChapterMenu(); return JSON.parse(renderGameToText()); },
+  selectChapter: (chapter) => { selectChapter(chapter); return JSON.parse(renderGameToText()); },
   awaitChunksIdle: () => Promise.resolve(JSON.parse(renderGameToText())),
   reset: () => { resetGame(); render(); return JSON.parse(renderGameToText()); },
   snapshot: () => JSON.parse(renderGameToText())
@@ -3450,6 +3566,7 @@ function init() {
   try {
     initRenderer();
     initScene();
+    buildChapterMenu();
     bindInputs();
     startButton.addEventListener("click", startGame);
     fullscreenButton.addEventListener("click", toggleFullscreen);

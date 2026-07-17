@@ -410,6 +410,12 @@ canvas {
   pointer-events: none;
 }
 
+.game-nav-actions {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
 .pixel-icon-button {
   display: grid;
   width: 42px;
@@ -678,6 +684,159 @@ canvas {
     7px 7px 0 rgb(0 0 0 / 72%);
   transform: translateY(0);
   transition: filter 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.start-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+  width: min(100%, 610px);
+}
+
+.chapter-start-button {
+  color: var(--white);
+  background: var(--ikea-blue);
+  border-color: var(--ikea-blue-light);
+}
+
+.chapter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  display: grid;
+  place-items: center;
+  padding: clamp(10px, 3vmin, 28px);
+  background:
+    radial-gradient(circle at 50% 30%, rgb(22 92 149 / 55%), transparent 60%),
+    rgb(1 7 14 / 94%);
+  backdrop-filter: blur(8px);
+}
+
+.chapter-overlay[hidden] {
+  display: none;
+}
+
+.chapter-panel {
+  display: flex;
+  width: min(100%, 860px);
+  max-height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: clamp(13px, 2.6vmin, 24px);
+  overflow: hidden;
+  background: linear-gradient(145deg, rgb(8 34 62 / 98%), rgb(2 14 28 / 99%));
+  border: 3px solid var(--ikea-yellow);
+  box-shadow:
+    0 0 0 4px var(--ikea-blue),
+    9px 10px 0 rgb(0 0 0 / 70%),
+    0 20px 55px rgb(0 0 0 / 60%);
+}
+
+.chapter-panel-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chapter-panel-header h2,
+.chapter-eyebrow,
+.chapter-select-text {
+  margin: 0;
+}
+
+.chapter-panel-header h2 {
+  color: var(--ikea-yellow);
+  font: 900 clamp(1.35rem, 4vmin, 2.4rem)/1 Impact, Haettenschweiler, "Arial Black", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chapter-eyebrow {
+  color: #b9d9f2;
+  font-size: clamp(0.5rem, 1.4vmin, 0.68rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.chapter-select-text {
+  color: #e8f4ff;
+  font: 700 clamp(0.62rem, 1.7vmin, 0.82rem)/1.35 "Segoe UI", Arial, sans-serif;
+}
+
+.chapter-close-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: var(--white);
+  font: 900 1.6rem/1 "Courier New", monospace;
+  cursor: pointer;
+  background: #751e27;
+  border: 2px solid var(--danger);
+  box-shadow: 3px 3px 0 rgb(0 0 0 / 65%);
+}
+
+.chapter-grid {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 3px 5px 8px 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ikea-yellow) var(--night-blue);
+}
+
+.chapter-select-button {
+  display: grid;
+  min-height: 62px;
+  grid-template-columns: 36px 1fr;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  color: var(--white);
+  text-align: left;
+  cursor: pointer;
+  background: rgb(5 29 54 / 92%);
+  border: 2px solid var(--ikea-blue-light);
+  box-shadow: 3px 3px 0 rgb(0 0 0 / 58%);
+}
+
+.chapter-select-button:hover,
+.chapter-select-button:focus-visible,
+.chapter-select-button[aria-current="true"] {
+  color: var(--ink);
+  outline: 2px solid var(--white);
+  outline-offset: -4px;
+  background: var(--ikea-yellow);
+  border-color: var(--white);
+}
+
+.chapter-number {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--ink);
+  font: 900 0.8rem/1 "Courier New", monospace;
+  background: var(--ikea-yellow);
+  border: 2px solid var(--white);
+}
+
+.chapter-select-button:hover .chapter-number,
+.chapter-select-button:focus-visible .chapter-number,
+.chapter-select-button[aria-current="true"] .chapter-number {
+  color: var(--white);
+  background: var(--ikea-blue);
+}
+
+.chapter-name {
+  font: 900 clamp(0.58rem, 1.65vmin, 0.76rem)/1.2 "Segoe UI", Arial, sans-serif;
 }
 
 .start-button:hover {
@@ -965,6 +1124,50 @@ canvas {
     padding: 6px 5px;
     font-size: clamp(0.55rem, 2.7vw, 0.68rem);
     box-shadow: 3px 3px 0 rgb(0 0 0 / 68%);
+  }
+
+  .start-actions {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .chapter-overlay {
+    padding: 7px;
+  }
+
+  .chapter-panel {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .chapter-panel-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .chapter-select-text {
+    font-size: 0.62rem;
+  }
+
+  .chapter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .chapter-select-button {
+    min-height: 56px;
+    grid-template-columns: 29px 1fr;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .chapter-number {
+    width: 28px;
+    height: 28px;
+    font-size: 0.67rem;
+  }
+
+  .chapter-name {
+    font-size: 0.58rem;
   }
 }
 

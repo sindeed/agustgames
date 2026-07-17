@@ -18,7 +18,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1 och `game.js?v=9` som ES-modul.
+- `index.html` laddar Three.js 0.185.1, `style.css?v=3` och `game.js?v=10` som ES-modul.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
@@ -73,6 +73,14 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 - Fyrstadens tsunaminedräkning börjar nu på exakt 60 sekunder.
 - Vågförlopp, varning, skyddsrum, förlust och omstart använder samma enminutstimer.
 - Chromium-QA verifierar start på 60 sekunder, fortsatt spel vid 59,999 sekunder, oskyddad förlust vid 60,000 sekunder, omstart till 60 och överlevnad i fyrens skyddsrum utan console- eller page-fel.
+
+## 2026-07-17 – välj fritt bland alla 23 kapitel
+
+- Startmenyn har nu en stor `VÄLJ KAPITEL`-knapp med alla 23 världar upplåsta, numrerade och namngivna på svenska.
+- Under spelet öppnas samma väljare med kapitelknappen uppe till höger eller tangenten K. Världen pausas medan menyn är öppen och fortsätter korrekt när den stängs.
+- Ett val startar det valda kapitlet direkt i högupplöst 3D från första person. Det går även att hoppa tillbaka till det oändliga IKEA från vilket senare kapitel som helst.
+- Mobilvyn använder två kolumner och en intern skrollista så att även kapitel 23 går att nå utan sidscroll eller klippning.
+- Samtliga 23 riktiga kapitelhopp passerar automatisk Chromium-QA. En separat kontroll med 155 tester verifierar svenska titlar, tangentbord, pausläge, berättelseval, dator- och mobilvy samt noll console- eller page-fel.
 
 ## Nya idéer från Agust och kusinen
 

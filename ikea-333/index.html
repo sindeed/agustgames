@@ -12,7 +12,7 @@
     />
     <meta name="theme-color" content="#07182f" />
     <title>IKEA 3:33 – Agust Games</title>
-    <link rel="stylesheet" href="style.css?v=2" />
+    <link rel="stylesheet" href="style.css?v=3" />
   </head>
   <body>
     <a class="skip-link" href="#startButton">Hoppa till startknappen</a>
@@ -74,9 +74,36 @@
             </div>
           </section>
 
+          <section
+            id="chapterOverlay"
+            class="chapter-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chapterSelectTitle"
+            aria-describedby="chapterSelectText"
+            hidden
+          >
+            <div class="chapter-panel">
+              <header class="chapter-panel-header">
+                <div>
+                  <p class="chapter-eyebrow">ALLA VÄRLDAR ÄR UPPLÅSTA</p>
+                  <h2 id="chapterSelectTitle">Välj kapitel</h2>
+                </div>
+                <button id="chapterCloseButton" class="chapter-close-button" type="button" aria-label="Stäng kapitelväljaren">×</button>
+              </header>
+              <p id="chapterSelectText" class="chapter-select-text">
+                Hoppa direkt till vilken värld du vill. Du kan öppna den här menyn igen när som helst.
+              </p>
+              <div id="chapterGrid" class="chapter-grid" role="group" aria-label="Spelets 23 kapitel"></div>
+            </div>
+          </section>
+
           <nav class="game-nav" aria-label="Spelmeny">
             <a class="pixel-icon-button" href="../" aria-label="Tillbaka till Agust Games">⌂</a>
-            <button class="pixel-icon-button" id="fullscreenButton" type="button" aria-label="Helskärm">⛶</button>
+            <div class="game-nav-actions">
+              <button class="pixel-icon-button" id="chapterMenuButton" type="button" aria-label="Välj kapitel">☷</button>
+              <button class="pixel-icon-button" id="fullscreenButton" type="button" aria-label="Helskärm">⛶</button>
+            </div>
           </nav>
 
           <div id="touchControls" class="touch-controls" aria-label="Pekkontroller" hidden>
@@ -118,14 +145,20 @@
                 <p>
                   <strong>Dator:</strong> WASD/pilar = gå · mus = titta · E = bär/placera/använd
                 </p>
-                <p><strong>Göm:</strong> H · vägpil: M · spring: Shift · ficklampa: L · helskärm: F</p>
+                <p><strong>Göm:</strong> H · vägpil: M · kapitel: K · spring: Shift · ficklampa: L · helskärm: F</p>
                 <p><strong>Mobil:</strong> Joystick och knappar visas när spelet startar.</p>
               </div>
 
-              <button id="startButton" class="start-button" type="button">
-                <span aria-hidden="true">▶</span>
-                STARTA NATTEN
-              </button>
+              <div class="start-actions">
+                <button id="startButton" class="start-button" type="button">
+                  <span aria-hidden="true">▶</span>
+                  STARTA NATTEN
+                </button>
+                <button id="chapterStartButton" class="start-button chapter-start-button" type="button">
+                  <span aria-hidden="true">☷</span>
+                  VÄLJ KAPITEL
+                </button>
+              </div>
 
               <p class="menu-hint">
                 Bortom utgången väntar draken, hajarna, spöktåget, vulkanen, skolan, tsunamin och fler skräckvärldar.
@@ -160,6 +193,6 @@
         }
       }
     </script>
-    <script type="module" src="game.js?v=9"></script>
+    <script type="module" src="game.js?v=10"></script>
   </body>
 </html>
