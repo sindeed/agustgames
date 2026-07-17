@@ -180,6 +180,24 @@ canvas {
   border-top: 1px solid rgb(255 217 40 / 38%);
 }
 
+.hud-block .hud-online {
+  justify-self: start;
+  margin-top: 3px;
+  padding: 3px 7px;
+  color: #d9ffe7;
+  font-size: clamp(0.48rem, 1.25vmin, 0.64rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 2px #000;
+  background: rgb(5 76 49 / 82%);
+  border: 1px solid #55efa0;
+  box-shadow: 0 0 10px rgb(85 239 160 / 28%);
+}
+
+.hud-online[hidden] {
+  display: none;
+}
+
 .hud-clock {
   top: 12px;
   left: 50%;
@@ -418,8 +436,8 @@ canvas {
 
 .pixel-icon-button {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   color: var(--white);
   font: 900 1.35rem/1 "Courier New", monospace;
@@ -430,6 +448,12 @@ canvas {
   border: 2px solid var(--ikea-yellow);
   border-radius: 0;
   box-shadow: 3px 3px 0 rgb(0 0 0 / 62%);
+}
+
+.online-menu-button {
+  color: var(--ikea-yellow);
+  font-size: 0.78rem;
+  letter-spacing: -0.04em;
 }
 
 .pixel-icon-button:hover,
@@ -688,9 +712,24 @@ canvas {
 
 .start-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 13px;
   width: min(100%, 610px);
+}
+
+.start-actions .start-button {
+  min-width: 0;
+  padding-inline: clamp(8px, 2.2vmin, 18px);
+  font-size: clamp(0.7rem, 2.05vmin, 0.96rem);
+}
+
+.online-start-button {
+  color: var(--white);
+  background: #08764c;
+  border-color: #55efa0;
+  box-shadow:
+    0 0 0 3px #044c32,
+    7px 7px 0 rgb(0 0 0 / 72%);
 }
 
 .chapter-start-button {
@@ -839,6 +878,366 @@ canvas {
   font: 900 clamp(0.58rem, 1.65vmin, 0.76rem)/1.2 "Segoe UI", Arial, sans-serif;
 }
 
+.online-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  padding: clamp(8px, 2.5vmin, 24px);
+  background:
+    linear-gradient(135deg, rgb(7 89 165 / 24%), transparent 42%),
+    radial-gradient(circle at 50% 25%, rgb(22 113 169 / 58%), transparent 58%),
+    rgb(1 7 14 / 95%);
+  backdrop-filter: blur(9px);
+}
+
+.online-overlay[hidden],
+.online-room-details[hidden],
+.online-setup[hidden],
+.online-share-actions [hidden],
+.online-leave-button[hidden] {
+  display: none;
+}
+
+.online-panel {
+  display: flex;
+  width: min(100%, 800px);
+  max-height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding: clamp(12px, 2.5vmin, 22px);
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgb(8 40 72 / 99%), rgb(2 14 28 / 99%)),
+    var(--night-blue);
+  border: 3px solid var(--ikea-yellow);
+  box-shadow:
+    0 0 0 4px var(--ikea-blue),
+    8px 9px 0 rgb(0 0 0 / 72%),
+    0 20px 55px rgb(0 0 0 / 62%);
+}
+
+.online-panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.online-panel-header h2,
+.online-eyebrow,
+.online-intro-text,
+.online-room-label,
+.online-room-heading h3,
+.online-safety-note {
+  margin: 0;
+}
+
+.online-panel-header h2 {
+  color: var(--ikea-yellow);
+  font: 900 clamp(1.35rem, 4vmin, 2.35rem)/1 Impact, Haettenschweiler, "Arial Black", sans-serif;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 rgb(0 0 0 / 62%);
+}
+
+.online-eyebrow {
+  color: #aeeccc;
+  font-size: clamp(0.5rem, 1.35vmin, 0.68rem);
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.online-close-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: var(--white);
+  font: 900 1.65rem/1 "Courier New", monospace;
+  cursor: pointer;
+  background: #751e27;
+  border: 2px solid var(--danger);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgb(0 0 0 / 65%);
+}
+
+.online-status {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  color: #d8ecff;
+  font: 800 clamp(0.62rem, 1.65vmin, 0.78rem)/1.25 "Segoe UI", Arial, sans-serif;
+  background: rgb(0 0 0 / 32%);
+  border-left: 3px solid var(--ikea-blue-light);
+}
+
+.online-status-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  background: #8ba0b3;
+  border: 2px solid #dbe9f5;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.online-status[data-status="loading"] .online-status-dot,
+.online-status[data-status="creating"] .online-status-dot,
+.online-status[data-status="waiting"] .online-status-dot,
+.online-status[data-status="connecting"] .online-status-dot,
+.online-status[data-status="reconnecting"] .online-status-dot {
+  color: var(--ikea-yellow);
+  background: var(--ikea-yellow);
+}
+
+.online-status[data-status="connected"] .online-status-dot {
+  color: #55efa0;
+  background: #55efa0;
+}
+
+.online-status[data-status="error"] .online-status-dot,
+.online-status[data-status="disconnected"] .online-status-dot {
+  color: var(--danger);
+  background: var(--danger);
+}
+
+.hud-block .hud-online[data-status="loading"],
+.hud-block .hud-online[data-status="creating"],
+.hud-block .hud-online[data-status="waiting"],
+.hud-block .hud-online[data-status="connecting"],
+.hud-block .hud-online[data-status="reconnecting"] {
+  color: #fff6b6;
+  background: rgb(92 73 5 / 88%);
+  border-color: var(--ikea-yellow);
+}
+
+.hud-block .hud-online[data-status="error"],
+.hud-block .hud-online[data-status="disconnected"] {
+  color: #ffe5e8;
+  background: rgb(106 19 32 / 90%);
+  border-color: var(--danger);
+}
+
+.online-panel-content {
+  min-height: 0;
+  padding: 1px 6px 5px 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ikea-yellow) var(--night-blue);
+}
+
+.online-intro-text {
+  max-width: 72ch;
+  color: #e8f4ff;
+  font: 700 clamp(0.66rem, 1.75vmin, 0.84rem)/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+.online-setup {
+  display: grid;
+  grid-template-columns: minmax(165px, 0.9fr) auto minmax(280px, 1.45fr);
+  align-items: end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.online-or {
+  align-self: center;
+  color: #9eb8ce;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.online-join-group {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.online-join-group label,
+.online-invite-label {
+  color: var(--paper-yellow);
+  font: 900 clamp(0.56rem, 1.5vmin, 0.7rem)/1.2 "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.025em;
+}
+
+.online-join-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.online-button,
+.online-leave-button,
+.online-room-input,
+.online-invite-field {
+  min-height: 48px;
+  border-radius: 0;
+}
+
+.online-button,
+.online-leave-button {
+  padding: 9px 13px;
+  font: 900 clamp(0.64rem, 1.75vmin, 0.82rem)/1.1 "Courier New", monospace;
+  letter-spacing: 0.035em;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 65%);
+}
+
+.online-button {
+  color: var(--white);
+  background: var(--ikea-blue);
+  border: 2px solid var(--ikea-blue-light);
+}
+
+.online-create-button {
+  color: var(--ink);
+  background: var(--ikea-yellow);
+  border-color: var(--white);
+}
+
+.online-join-button {
+  color: var(--ink);
+  background: #55efa0;
+  border-color: #d9ffe7;
+}
+
+.online-room-input,
+.online-invite-field {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 11px;
+  color: var(--white);
+  font: 900 0.8rem/1 "Courier New", monospace;
+  letter-spacing: 0.055em;
+  background: rgb(1 9 19 / 88%);
+  border: 2px solid #7ebbe8;
+  box-shadow: inset 3px 3px 0 rgb(0 0 0 / 36%);
+}
+
+.online-room-input::placeholder {
+  color: #7993aa;
+  opacity: 1;
+}
+
+.online-room-input:disabled,
+.online-button:disabled,
+.online-leave-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.72) brightness(0.72);
+}
+
+.online-room-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: clamp(10px, 2vmin, 16px);
+  background:
+    linear-gradient(135deg, rgb(7 89 165 / 28%), transparent 58%),
+    rgb(1 10 21 / 68%);
+  border: 2px solid #55efa0;
+  box-shadow: inset 0 0 0 2px rgb(0 0 0 / 42%);
+}
+
+.online-room-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.online-room-label {
+  color: #55efa0;
+  font-size: 0.57rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.online-room-heading h3 {
+  color: var(--white);
+  font: 900 clamp(0.7rem, 1.9vmin, 0.92rem)/1.25 "Segoe UI", Arial, sans-serif;
+}
+
+.online-room-code {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--ink);
+  font-size: clamp(0.75rem, 2vmin, 0.96rem);
+  letter-spacing: 0.08em;
+  background: var(--ikea-yellow);
+  border: 2px solid var(--white);
+}
+
+.online-invite-field[readonly] {
+  color: #b9d9f2;
+  cursor: text;
+}
+
+.online-share-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.online-share-button {
+  color: var(--ink);
+  background: var(--ikea-yellow);
+  border-color: var(--white);
+}
+
+.online-copy-button {
+  background: var(--ikea-blue);
+}
+
+.online-leave-button {
+  justify-self: start;
+  min-height: 44px;
+  color: #ffd9d6;
+  background: rgb(96 20 28 / 84%);
+  border: 2px solid var(--danger);
+}
+
+.online-safety-note {
+  margin-top: 10px;
+  color: #9eb8ce;
+  font: 700 clamp(0.55rem, 1.45vmin, 0.68rem)/1.3 "Segoe UI", Arial, sans-serif;
+}
+
+.online-button:hover,
+.online-leave-button:hover,
+.online-close-button:hover {
+  filter: brightness(1.14);
+  transform: translateY(-1px);
+}
+
+.online-button:active,
+.online-leave-button:active,
+.online-close-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 65%);
+}
+
+.online-button:focus-visible,
+.online-leave-button:focus-visible,
+.online-close-button:focus-visible,
+.online-room-input:focus-visible,
+.online-invite-field:focus-visible {
+  outline: 3px solid var(--danger);
+  outline-offset: 3px;
+}
+
 .start-button:hover {
   filter: brightness(1.12);
   transform: translateY(-2px);
@@ -957,8 +1356,91 @@ canvas {
   }
 
   .start-button {
-    min-height: 40px;
+    min-height: 44px;
     padding-block: 7px;
+  }
+
+  .start-actions {
+    gap: 8px;
+  }
+
+  .online-overlay {
+    padding: 6px 9px;
+  }
+
+  .online-panel {
+    gap: 6px;
+    padding: 9px 12px;
+  }
+
+  .online-panel-header h2 {
+    font-size: clamp(1.15rem, 6vh, 1.6rem);
+  }
+
+  .online-status {
+    min-height: 30px;
+    padding-block: 4px;
+  }
+
+  .online-intro-text {
+    line-height: 1.25;
+  }
+
+  .online-setup {
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .online-button,
+  .online-room-input,
+  .online-invite-field {
+    min-height: 44px;
+  }
+
+  .online-room-details {
+    position: relative;
+    grid-template-columns: minmax(180px, 0.85fr) minmax(180px, 1.4fr) auto;
+    align-items: end;
+    gap: 6px;
+    margin-top: 9px;
+    padding: 8px 10px;
+  }
+
+  .online-room-heading {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .online-invite-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .online-invite-field {
+    grid-row: 1;
+    grid-column: 2 / 4;
+  }
+
+  .online-share-actions {
+    grid-row: 2;
+    grid-column: 1 / 3;
+  }
+
+  .online-leave-button {
+    grid-row: 2;
+    grid-column: 3;
+    justify-self: stretch;
+  }
+
+  .online-safety-note {
+    display: none;
   }
 }
 
@@ -1131,6 +1613,12 @@ canvas {
     gap: 9px;
   }
 
+  .start-actions .start-button {
+    width: min(100%, 290px);
+    justify-self: center;
+    font-size: 0.86rem;
+  }
+
   .chapter-overlay {
     padding: 7px;
   }
@@ -1168,6 +1656,66 @@ canvas {
 
   .chapter-name {
     font-size: 0.58rem;
+  }
+
+  .online-overlay {
+    padding: 7px;
+  }
+
+  .online-panel {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .online-panel-header h2 {
+    font-size: 1.28rem;
+  }
+
+  .online-eyebrow {
+    font-size: 0.5rem;
+  }
+
+  .online-intro-text {
+    font-size: 0.67rem;
+  }
+
+  .online-setup {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .online-or {
+    justify-self: center;
+  }
+
+  .online-create-button {
+    width: 100%;
+  }
+
+  .online-join-row {
+    grid-template-columns: minmax(0, 1fr) 104px;
+  }
+
+  .online-room-heading {
+    align-items: end;
+  }
+
+  .online-share-actions {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .online-leave-button {
+    width: 100%;
+  }
+
+  .hud-block .hud-online {
+    grid-column: 1 / -1;
+    margin-top: 0;
+    padding: 2px 6px;
+    font-size: 0.5rem;
   }
 }
 

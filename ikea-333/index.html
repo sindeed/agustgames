@@ -12,7 +12,7 @@
     />
     <meta name="theme-color" content="#07182f" />
     <title>IKEA 3:33 – Agust Games</title>
-    <link rel="stylesheet" href="style.css?v=3" />
+    <link rel="stylesheet" href="style.css?v=4" />
   </head>
   <body>
     <a class="skip-link" href="#startButton">Hoppa till startknappen</a>
@@ -35,6 +35,9 @@
               <strong id="hudArea">IKEA ∞</strong>
               <span id="hudWeather">Molnigt</span>
               <span id="hudChapter" class="hud-chapter">KAPITEL 1 / 23</span>
+              <span id="hudOnline" class="hud-online" aria-live="polite" hidden>
+                ONLINE · 1 / 2
+              </span>
             </div>
             <div class="hud-clock">
               <strong id="hudClock">21:00</strong>
@@ -98,9 +101,124 @@
             </div>
           </section>
 
+          <section
+            id="onlineOverlay"
+            class="online-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="onlineTitle"
+            aria-describedby="onlineIntroText"
+            hidden
+          >
+            <div id="onlinePanel" class="online-panel">
+              <header class="online-panel-header">
+                <div>
+                  <p class="online-eyebrow">ÖVERLEV TILLSAMMANS</p>
+                  <h2 id="onlineTitle">Spela online</h2>
+                </div>
+                <button
+                  id="onlineCloseButton"
+                  class="online-close-button"
+                  type="button"
+                  aria-label="Stäng onlinemenyn"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div
+                id="onlineStatus"
+                class="online-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span class="online-status-dot" aria-hidden="true"></span>
+                <span id="onlineStatusText">Inte ansluten ännu</span>
+              </div>
+
+              <div class="online-panel-content">
+                <p id="onlineIntroText" class="online-intro-text">
+                  En spelare skapar ett rum och skickar länken i Meddelanden. Kompisen öppnar länken och hoppar in i samma äventyr.
+                </p>
+
+                <div class="online-setup" role="group" aria-label="Skapa eller gå med i ett onlinerum">
+                  <button id="onlineCreateButton" class="online-button online-create-button" type="button">
+                    SKAPA ETT RUM
+                  </button>
+
+                  <span class="online-or" aria-hidden="true">ELLER</span>
+
+                  <div class="online-join-group">
+                    <label for="onlineRoomInput">Klistra in kompisens inbjudningslänk</label>
+                    <div class="online-join-row">
+                      <input
+                        id="onlineRoomInput"
+                        class="online-room-input"
+                        type="text"
+                        inputmode="text"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        spellcheck="false"
+                        maxlength="220"
+                        placeholder="KLISTRA IN INBJUDNINGSLÄNK"
+                        aria-label="Kompisens inbjudningslänk"
+                      />
+                      <button id="onlineJoinButton" class="online-button online-join-button" type="button">
+                        GÅ MED
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <section
+                  id="onlineRoomDetails"
+                  class="online-room-details"
+                  aria-labelledby="onlineRoomDetailsTitle"
+                  hidden
+                >
+                  <div class="online-room-heading">
+                    <div>
+                      <p class="online-room-label">DITT RUM</p>
+                      <h3 id="onlineRoomDetailsTitle">Skicka länken till din kompis</h3>
+                    </div>
+                    <strong id="onlineRoomCode" class="online-room-code" aria-label="Rumskod">—</strong>
+                  </div>
+
+                  <label class="online-invite-label" for="onlineInviteField">Inbjudningslänk</label>
+                  <input
+                    id="onlineInviteField"
+                    class="online-invite-field"
+                    type="text"
+                    readonly
+                    aria-label="Inbjudningslänk att skicka till din kompis"
+                  />
+
+                  <div class="online-share-actions">
+                    <button id="onlineShareButton" class="online-button online-share-button" type="button">
+                      DELA I MEDDELANDEN
+                    </button>
+                    <button id="onlineCopyButton" class="online-button online-copy-button" type="button">
+                      KOPIERA LÄNK
+                    </button>
+                  </div>
+
+                  <button id="onlineLeaveButton" class="online-leave-button" type="button">
+                    LÄMNA RUMMET
+                  </button>
+                </section>
+
+                <p class="online-safety-note">
+                  Dela bara länken med någon du känner. Rummet har plats för två spelare.
+                </p>
+              </div>
+            </div>
+          </section>
+
           <nav class="game-nav" aria-label="Spelmeny">
             <a class="pixel-icon-button" href="../" aria-label="Tillbaka till Agust Games">⌂</a>
             <div class="game-nav-actions">
+              <button class="pixel-icon-button online-menu-button" id="onlineMenuButton" type="button" aria-label="Spela online">2P</button>
               <button class="pixel-icon-button" id="chapterMenuButton" type="button" aria-label="Välj kapitel">☷</button>
               <button class="pixel-icon-button" id="fullscreenButton" type="button" aria-label="Helskärm">⛶</button>
             </div>
@@ -154,6 +272,10 @@
                   <span aria-hidden="true">▶</span>
                   STARTA NATTEN
                 </button>
+                <button id="onlineStartButton" class="start-button online-start-button" type="button">
+                  <span aria-hidden="true">2P</span>
+                  SPELA ONLINE
+                </button>
                 <button id="chapterStartButton" class="start-button chapter-start-button" type="button">
                   <span aria-hidden="true">☷</span>
                   VÄLJ KAPITEL
@@ -193,6 +315,6 @@
         }
       }
     </script>
-    <script type="module" src="game.js?v=10"></script>
+    <script type="module" src="game.js?v=11"></script>
   </body>
 </html>

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=5";
+import { createMultiplayerTransport, parseOnlineRoom, shortOnlineRoomCode } from "./multiplayer.js?v=1";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -32,6 +33,23 @@ const chapterGrid = document.getElementById("chapterGrid");
 const chapterCloseButton = document.getElementById("chapterCloseButton");
 const chapterMenuButton = document.getElementById("chapterMenuButton");
 const chapterStartButton = document.getElementById("chapterStartButton");
+const onlineOverlay = document.getElementById("onlineOverlay");
+const onlineCloseButton = document.getElementById("onlineCloseButton");
+const onlineMenuButton = document.getElementById("onlineMenuButton");
+const onlineStartButton = document.getElementById("onlineStartButton");
+const onlineStatus = document.getElementById("onlineStatus");
+const onlineStatusText = document.getElementById("onlineStatusText");
+const onlineIntroText = document.getElementById("onlineIntroText");
+const onlineCreateButton = document.getElementById("onlineCreateButton");
+const onlineRoomInput = document.getElementById("onlineRoomInput");
+const onlineJoinButton = document.getElementById("onlineJoinButton");
+const onlineRoomDetails = document.getElementById("onlineRoomDetails");
+const onlineRoomCode = document.getElementById("onlineRoomCode");
+const onlineInviteField = document.getElementById("onlineInviteField");
+const onlineShareButton = document.getElementById("onlineShareButton");
+const onlineCopyButton = document.getElementById("onlineCopyButton");
+const onlineLeaveButton = document.getElementById("onlineLeaveButton");
+const hudOnline = document.getElementById("hudOnline");
 
 const FIXED_STEP = 1 / 60;
 const FIXED_MS = 1000 / 60;
@@ -63,6 +81,15 @@ let journeyWorld = null;
 let journeyFurniture = [];
 let choiceHandlers = null;
 let chapterMenuRestorePaused = false;
+let onlineMenuRestorePaused = false;
+let onlineApplyingWorld = false;
+let onlineLastPoseSentAt = 0;
+let onlineLastWorldSentAt = 0;
+let onlineLastPingSentAt = 0;
+let onlineLastRemoteSequence = 0;
+let onlineChapterEpoch = 0;
+let onlineSpawnSeparationPending = false;
+let lastRemoteChunkSignature = "";
 let manualTime = false;
 let manualAccumulator = 0;
 let accumulator = 0;
@@ -74,16 +101,25 @@ const keys = new Set();
 const loadedChunks = new Map();
 const chunkStates = new Map();
 const objectPatches = Object.create(null);
+const remotePlayerModels = new Map();
+const remotePoseTargets = new Map();
 const input = { moveX: 0, moveZ: 0, lookX: 0, lookY: 0, sprint: false };
 const touch = { stickId: null, lookId: null, lastX: 0, lastY: 0, x: 0, y: 0 };
 
-const LoopbackTransport = {
-  role: "offline-host",
-  status: "solo",
-  sendRealtime() {},
-  sendReliable() {},
-  close() {}
+const SoloTransportState = {
+  role: "solo", status: "solo", transport: "peerjs", roomId: "", inviteUrl: "",
+  connected: false, playerCount: 1, maxPlayers: 2, reconnectAttempts: 0,
+  latencyMs: null, lastError: "", remotePlayerId: ""
 };
+
+function makePlayer(id, overrides = {}) {
+  return {
+    id, x: 24, y: 0, z: 24, yaw: -Math.PI / 2, pitch: 0,
+    hidden: false, hiddenBy: null, flashlight: true, carryingObjectId: null,
+    moving: false, sprinting: false, connected: true, chapter: "warehouse",
+    ...overrides
+  };
+}
 
 const chapters = {
   warehouse: { next: "forest_houses", generator: "endless-indoor" },
@@ -154,14 +190,10 @@ const state = {
   nightsSurvived: 0,
   monsterDays: Object.create(null),
   playersById: {
-    p1: {
-      id: "p1", x: 24, y: 0, z: 24, yaw: -Math.PI / 2, pitch: 0,
-      hidden: false, hiddenBy: null, flashlight: true, carryingObjectId: null,
-      moving: false, sprinting: false
-    }
+    p1: makePlayer("p1")
   },
   localPlayerId: "p1",
-  network: { role: LoopbackTransport.role, status: LoopbackTransport.status },
+  network: { ...SoloTransportState },
   monster: {
     id: "rattleman", active: false, x: 0, z: 0, mode: "sleeping",
     targetPlayerId: "p1", lastSeenX: 24, lastSeenZ: 24, sawHide: false, breakHideTick: 0,
@@ -184,6 +216,8 @@ const state = {
   },
   cinematic: { time: 0, phase: "" }
 };
+
+let onlineTransport = null;
 
 function player() { return state.playersById[state.localPlayerId]; }
 function inWarehouse() { return state.chapter === "warehouse"; }
@@ -464,7 +498,7 @@ function loadChunk(cx, cz) {
   sign.position.set(centerX, 5.5, centerZ - 10);
   root.add(sign);
   data.objects.forEach((desc) => {
-    if (desc.removed || state.held?.id === desc.id) return;
+    if (desc.removed || state.held?.id === desc.id || objectPatches[desc.id]?.carriedBy) return;
     desc.group = buildFurnitureModel(desc);
     root.add(desc.group);
   });
@@ -500,8 +534,13 @@ function refreshChunks(force = false) {
   const cx = chunkCoord(p.x);
   const cz = chunkCoord(p.z);
   const centerKey = chunkKey(cx, cz);
-  if (!force && centerKey === lastChunkKey) return;
+  const remoteChunks = Object.values(state.playersById)
+    .filter((item) => item.id !== state.localPlayerId && item.connected && item.chapter === "warehouse")
+    .map((item) => ({ cx: chunkCoord(item.x), cz: chunkCoord(item.z) }));
+  const remoteSignature = remoteChunks.map((item) => chunkKey(item.cx, item.cz)).sort().join("|");
+  if (!force && centerKey === lastChunkKey && remoteSignature === lastRemoteChunkSignature) return;
   lastChunkKey = centerKey;
+  lastRemoteChunkSignature = remoteSignature;
   const needed = new Set();
   for (let x = cx - ACTIVE_RADIUS; x <= cx + ACTIVE_RADIUS; x += 1) {
     for (let z = cz - ACTIVE_RADIUS; z <= cz + ACTIVE_RADIUS; z += 1) {
@@ -509,6 +548,14 @@ function refreshChunks(force = false) {
       loadChunk(x, z);
     }
   }
+  remoteChunks.forEach((remote) => {
+    for (let x = remote.cx - 1; x <= remote.cx + 1; x += 1) {
+      for (let z = remote.cz - 1; z <= remote.cz + 1; z += 1) {
+        needed.add(chunkKey(x, z));
+        loadChunk(x, z);
+      }
+    }
+  });
   [...loadedChunks.keys()].forEach((key) => { if (!needed.has(key)) unloadChunk(key); });
 }
 
@@ -642,6 +689,122 @@ function createMonster() {
   return root;
 }
 
+function createPlayerNameSprite(text = "KOMPIS") {
+  const labelCanvas = document.createElement("canvas");
+  labelCanvas.width = 384;
+  labelCanvas.height = 96;
+  const context = labelCanvas.getContext("2d");
+  context.fillStyle = "rgba(2, 18, 34, .9)";
+  context.fillRect(5, 5, 374, 86);
+  context.strokeStyle = "#ffd928";
+  context.lineWidth = 7;
+  context.strokeRect(8, 8, 368, 80);
+  context.fillStyle = "#ffffff";
+  context.font = "900 42px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, 192, 51);
+  const texture = new THREE.CanvasTexture(labelCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(2.7, .68, 1);
+  sprite.position.y = 2.75;
+  sprite.renderOrder = 20;
+  sprite.userData.labelTexture = texture;
+  return sprite;
+}
+
+function createRemotePlayerModel(id) {
+  const root = new THREE.Group();
+  const blue = new THREE.MeshStandardMaterial({ color: 0x0872bd, roughness: .72 });
+  const yellow = new THREE.MeshStandardMaterial({ color: 0xffd928, roughness: .62 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xd69a71, roughness: .82 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x12243a, roughness: .9 });
+  const glow = new THREE.MeshStandardMaterial({ color: 0xdff6ff, emissive: 0x7bd9ff, emissiveIntensity: 3.2, roughness: .25 });
+  root.add(meshBox(.78, 1.05, .42, blue, 0, 1.25, 0));
+  root.add(meshBox(.62, .62, .58, skin, 0, 2.05, -.02));
+  root.add(meshBox(.82, .3, .62, yellow, 0, 2.4, .02));
+  root.add(meshBox(.16, .16, .08, glow, 0, 2.13, -.35));
+  const arms = [];
+  [-1, 1].forEach((side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * .53, 1.66, 0);
+    pivot.add(meshBox(.2, .86, .2, yellow, 0, -.37, 0));
+    root.add(pivot);
+    arms.push(pivot);
+  });
+  const legs = [];
+  [-1, 1].forEach((side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * .23, .78, 0);
+    pivot.add(meshBox(.25, .82, .28, dark, 0, -.39, 0));
+    root.add(pivot);
+    legs.push(pivot);
+  });
+  const carried = meshBox(.7, .7, .7, materials.wood, 0, 1.18, -.62);
+  carried.visible = false;
+  root.add(carried);
+  root.add(createPlayerNameSprite("KOMPIS"));
+  root.userData = { playerId: id, arms, legs, carried, ownedMaterials: [blue, yellow, skin, dark, glow] };
+  root.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+  root.visible = false;
+  scene.add(root);
+  remotePlayerModels.set(id, root);
+  return root;
+}
+
+function disposeRemotePlayerModel(id) {
+  const model = remotePlayerModels.get(id);
+  if (!model) return;
+  scene?.remove(model);
+  model.userData.ownedMaterials?.forEach((material) => material.dispose());
+  model.traverse((child) => {
+    if (child.isSprite) {
+      child.userData.labelTexture?.dispose();
+      child.material?.dispose();
+    }
+  });
+  remotePlayerModels.delete(id);
+  remotePoseTargets.delete(id);
+}
+
+function updateRemotePlayerModels() {
+  const remoteIds = Object.keys(state.playersById).filter((id) => id !== state.localPlayerId);
+  [...remotePlayerModels.keys()].forEach((id) => { if (!remoteIds.includes(id)) disposeRemotePlayerModel(id); });
+  remoteIds.forEach((id) => {
+    const remote = state.playersById[id];
+    const model = remotePlayerModels.get(id) || createRemotePlayerModel(id);
+    const sameWorld = remote.connected && remote.chapter === state.chapter && state.network.connected && state.mode !== "title";
+    model.visible = Boolean(sameWorld);
+    if (!sameWorld) {
+      model.userData.positionReady = false;
+      return;
+    }
+    const target = remotePoseTargets.get(id) || remote;
+    if (!model.userData.positionReady) {
+      model.position.set(target.x, target.y || 0, target.z);
+      model.rotation.y = target.yaw || 0;
+      model.userData.positionReady = true;
+    } else {
+      model.position.x = THREE.MathUtils.lerp(model.position.x, target.x, .24);
+      model.position.y = THREE.MathUtils.lerp(model.position.y, target.y || 0, .24);
+      model.position.z = THREE.MathUtils.lerp(model.position.z, target.z, .24);
+      model.rotation.y += Math.atan2(Math.sin((target.yaw || 0) - model.rotation.y), Math.cos((target.yaw || 0) - model.rotation.y)) * .24;
+    }
+    const pace = target.moving ? (target.sprinting ? 13 : 8) : 0;
+    const swing = pace ? Math.sin(state.timeMs * .001 * pace) * .58 : 0;
+    model.userData.arms[0].rotation.x = swing;
+    model.userData.arms[1].rotation.x = -swing;
+    model.userData.legs[0].rotation.x = -swing;
+    model.userData.legs[1].rotation.x = swing;
+    model.userData.carried.visible = Boolean(target.carryingObjectId);
+    model.scale.y = target.hidden ? .58 : 1;
+    const local = player();
+    model.visible = distance2D(local.x, local.z, target.x, target.z) >= .78;
+  });
+}
+
 function initRenderer() {
   renderer = new THREE.WebGLRenderer({
     canvas,
@@ -699,9 +862,11 @@ function initScene() {
 }
 
 function allLoadedDescriptors() {
-  if (!inWarehouse()) return journeyFurniture.filter((desc) => !desc.removed && state.held?.id !== desc.id);
+  if (!inWarehouse()) return journeyFurniture.filter((desc) => !desc.removed && state.held?.id !== desc.id && !objectPatches[desc.id]?.carriedBy);
   const result = [];
-  loadedChunks.forEach(({ data }) => data.objects.forEach((desc) => { if (!desc.removed && state.held?.id !== desc.id) result.push(desc); }));
+  loadedChunks.forEach(({ data }) => data.objects.forEach((desc) => {
+    if (!desc.removed && state.held?.id !== desc.id && !objectPatches[desc.id]?.carriedBy) result.push(desc);
+  }));
   return result;
 }
 
@@ -788,6 +953,665 @@ function showToast(text, seconds = 2.8) {
   gameStatus.textContent = text;
 }
 
+function safeNetworkClone(value, fallback = {}) {
+  try { return JSON.parse(JSON.stringify(value)); } catch { return fallback; }
+}
+
+function isKnownChapter(chapter) {
+  return chapter === "warehouse" || JOURNEY_ORDER.includes(chapter);
+}
+
+function onlineGuestConnected() {
+  return state.network.role === "guest" && state.network.connected;
+}
+
+function onlineHostConnected() {
+  return state.network.role === "host" && state.network.connected;
+}
+
+function onlineRemotePlayerId() {
+  if (state.network.role === "host") return "p2";
+  if (state.network.role === "guest") return "p1";
+  return "";
+}
+
+function ensureOnlineRemotePlayer(id = onlineRemotePlayerId()) {
+  if (!id || id === state.localPlayerId) return null;
+  if (!state.playersById[id]) {
+    const local = player();
+    state.playersById[id] = makePlayer(id, {
+      x: local.x + Math.cos(local.yaw) * 1.6,
+      y: local.y,
+      z: local.z - Math.sin(local.yaw) * 1.6,
+      connected: true,
+      chapter: state.chapter
+    });
+  }
+  state.playersById[id].connected = true;
+  return state.playersById[id];
+}
+
+function configureGuestPlayer() {
+  if (state.localPlayerId === "p2") return;
+  dropHeldSafely();
+  const previous = player();
+  state.playersById.p2 = makePlayer("p2", {
+    x: previous.x + 3.2, y: previous.y, z: previous.z + 1.2,
+    yaw: previous.yaw, pitch: previous.pitch, flashlight: previous.flashlight,
+    chapter: state.chapter, connected: true
+  });
+  state.playersById.p1 = makePlayer("p1", { connected: true, chapter: state.chapter });
+  state.localPlayerId = "p2";
+  state.monster.targetPlayerId = "p2";
+  onlineSpawnSeparationPending = true;
+}
+
+function separateGuestFromHostAtSpawn() {
+  if (!onlineSpawnSeparationPending || !onlineGuestConnected()) return;
+  const local = player();
+  const host = state.playersById.p1;
+  if (!local || !host || host.chapter !== state.chapter) return;
+  const rightX = Math.cos(host.yaw || 0);
+  const rightZ = -Math.sin(host.yaw || 0);
+  const forwardX = -Math.sin(host.yaw || 0);
+  const forwardZ = -Math.cos(host.yaw || 0);
+  const offsets = [
+    [rightX * 3.2, rightZ * 3.2],
+    [-rightX * 3.2, -rightZ * 3.2],
+    [-forwardX * 3.2, -forwardZ * 3.2],
+    [forwardX * 3.2, forwardZ * 3.2]
+  ];
+  const safe = offsets.find(([dx, dz]) => !collides(host.x + dx, host.z + dz, PLAYER_RADIUS));
+  if (safe) {
+    local.x = host.x + safe[0];
+    local.y = host.y || 0;
+    local.z = host.z + safe[1];
+    local.yaw = Math.atan2(local.x - host.x, local.z - host.z);
+    local.pitch = 0;
+    onlineTransport?.send("pose", serializeOnlinePlayer(local));
+  }
+  onlineSpawnSeparationPending = false;
+}
+
+function removeOnlineRemotePlayer() {
+  const remoteId = onlineRemotePlayerId() || state.network.remotePlayerId;
+  if (!remoteId || remoteId === state.localPlayerId) return;
+  delete state.playersById[remoteId];
+  disposeRemotePlayerModel(remoteId);
+  lastRemoteChunkSignature = "";
+  if (inWarehouse()) refreshChunks(true);
+}
+
+function restoreSoloPlayer() {
+  const current = player() || state.playersById.p1 || makePlayer("p1");
+  [...remotePlayerModels.keys()].forEach(disposeRemotePlayerModel);
+  state.playersById = {
+    p1: makePlayer("p1", {
+      x: current.x, y: current.y, z: current.z, yaw: current.yaw, pitch: current.pitch,
+      hidden: current.hidden, hiddenBy: current.hiddenBy, flashlight: current.flashlight,
+      carryingObjectId: current.carryingObjectId, moving: current.moving,
+      sprinting: current.sprinting, chapter: state.chapter, connected: true
+    })
+  };
+  state.localPlayerId = "p1";
+  state.monster.targetPlayerId = "p1";
+  onlineSpawnSeparationPending = false;
+  remotePoseTargets.clear();
+  lastRemoteChunkSignature = "";
+  if (inWarehouse()) refreshChunks(true);
+}
+
+function onlineStatusLabel() {
+  const labels = {
+    solo: "SOLO · INTE ANSLUTEN",
+    loading: "LADDAR ONLINELÄGET…",
+    creating: "SKAPAR RUM…",
+    waiting: "VÄNTAR PÅ KOMPIS · 1 / 2",
+    connecting: "ANSLUTER TILL KOMPISEN…",
+    connected: "ONLINE · 2 / 2 SPELARE",
+    reconnecting: "ANSLUTER IGEN…",
+    disconnected: "ANSLUTNINGEN BRÖTS",
+    error: "ONLINEFEL"
+  };
+  return labels[state.network.status] || String(state.network.status || "ONLINE").toUpperCase();
+}
+
+function refreshOnlineUi() {
+  if (!onlineOverlay) return;
+  const status = state.network.status || "solo";
+  const active = state.network.role !== "solo";
+  const busy = ["loading", "creating", "connecting", "reconnecting"].includes(status);
+  const invitedRoom = parseOnlineRoom(onlineRoomInput?.value || location.href);
+  if (onlineStatus) onlineStatus.dataset.status = status;
+  if (onlineStatusText) onlineStatusText.textContent = state.network.lastError || onlineStatusLabel();
+  if (onlineCreateButton) onlineCreateButton.disabled = busy || active;
+  if (onlineJoinButton) onlineJoinButton.disabled = busy || active || !invitedRoom;
+  const setup = onlineOverlay.querySelector(".online-setup");
+  if (setup) setup.hidden = active;
+  if (onlineRoomDetails) onlineRoomDetails.hidden = !active;
+  if (onlineRoomCode) onlineRoomCode.textContent = shortOnlineRoomCode(state.network.roomId) || "—";
+  if (onlineInviteField) onlineInviteField.value = state.network.inviteUrl || "";
+  if (onlineShareButton) onlineShareButton.hidden = state.network.role !== "host";
+  if (onlineCopyButton) onlineCopyButton.hidden = state.network.role !== "host";
+  if (onlineLeaveButton) onlineLeaveButton.hidden = !active;
+  if (onlineIntroText) {
+    if (state.network.lastError) onlineIntroText.textContent = state.network.lastError;
+    else if (status === "waiting") onlineIntroText.textContent = "Rummet är klart. Skicka länken i Meddelanden och håll spelet öppet medan du väntar.";
+    else if (status === "connected") onlineIntroText.textContent = "Ni är anslutna! Stäng menyn och utforska samma 3D-värld tillsammans.";
+    else if (invitedRoom && !active) onlineIntroText.textContent = "Din kompis har bjudit in dig. Tryck GÅ MED för att hoppa in i samma värld.";
+    else onlineIntroText.textContent = "En spelare skapar ett rum och skickar länken i Meddelanden. Kompisen öppnar länken och hoppar in i samma äventyr.";
+  }
+  if (hudOnline) {
+    hudOnline.hidden = status === "solo";
+    hudOnline.dataset.status = status;
+    hudOnline.textContent = status === "connected" ? "ONLINE · 2 / 2" : status === "waiting" ? "ONLINE · 1 / 2" : onlineStatusLabel();
+  }
+  if (onlineMenuButton) {
+    onlineMenuButton.dataset.status = status;
+    onlineMenuButton.setAttribute("aria-label", status === "connected" ? "Online: två spelare anslutna" : "Spela online");
+  }
+  if (!onlineOverlay.hidden && setup?.hidden && setup.contains(document.activeElement)) {
+    requestAnimationFrame(() => {
+      const next = state.network.role === "host" && !onlineShareButton?.hidden
+        ? onlineShareButton
+        : onlineLeaveButton || onlineCloseButton;
+      next?.focus();
+    });
+  }
+}
+
+function trapFocusInOnlineMenu(event) {
+  if (event.code !== "Tab" || !onlineOverlay || onlineOverlay.hidden) return false;
+  const focusable = [...onlineOverlay.querySelectorAll("button, input, [href], [tabindex]")]
+    .filter((element) => !element.hidden && !element.disabled && element.tabIndex >= 0 && element.getClientRects().length);
+  if (!focusable.length) {
+    event.preventDefault();
+    onlineCloseButton?.focus();
+    return true;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === first || !onlineOverlay.contains(document.activeElement))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || !onlineOverlay.contains(document.activeElement))) {
+    event.preventDefault();
+    first.focus();
+  }
+  return true;
+}
+
+function openOnlineMenu() {
+  if (!onlineOverlay) return;
+  if (choiceHandlers) {
+    showToast("Gör berättelsevalet först.", 2);
+    choicePrimary?.focus();
+    return;
+  }
+  if (chapterOverlay && !chapterOverlay.hidden) closeChapterMenu();
+  onlineMenuRestorePaused = state.paused;
+  if (!state.network.connected) state.paused = true;
+  keys.clear();
+  resetTouch();
+  touchControls.hidden = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  onlineOverlay.hidden = false;
+  refreshOnlineUi();
+  const invited = parseOnlineRoom(onlineRoomInput?.value || location.href);
+  if (invited && state.network.role === "solo") onlineJoinButton?.focus();
+  else if (state.network.role === "host") (onlineShareButton || onlineCloseButton)?.focus();
+  else onlineCreateButton?.focus();
+  render();
+}
+
+function closeOnlineMenu() {
+  if (!onlineOverlay || onlineOverlay.hidden) return;
+  onlineOverlay.hidden = true;
+  state.paused = state.mode === "playing" ? onlineMenuRestorePaused : false;
+  touchControls.hidden = state.mode !== "playing" || !touchDevice;
+  if (state.mode === "title") (onlineStartButton || startButton).focus();
+  else canvas.focus();
+  render();
+}
+
+async function copyOnlineInviteLink() {
+  const link = state.network.inviteUrl;
+  if (!link) return false;
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard saknas");
+    await navigator.clipboard.writeText(link);
+    showToast("Inbjudningslänken är kopierad. Klistra in den i Meddelanden!", 4);
+    if (onlineIntroText) onlineIntroText.textContent = "Länken är kopierad. Klistra in den i ett meddelande till din kompis.";
+    return true;
+  } catch {
+    onlineInviteField?.focus();
+    onlineInviteField?.select();
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch { copied = false; }
+    if (copied) {
+      showToast("Inbjudningslänken är kopierad.", 3);
+      return true;
+    }
+    if (onlineIntroText) onlineIntroText.textContent = "Markera länken nedan, kopiera den och klistra in den i Meddelanden.";
+    return false;
+  }
+}
+
+async function shareOnlineInvite() {
+  const link = state.network.inviteUrl;
+  if (!link) return;
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: "Spela IKEA 3:33 med mig",
+        text: "Öppna länken och gå med i mitt tvåspelarrum i IKEA 3:33!",
+        url: link
+      });
+      showToast("Inbjudan är redo — välj Meddelanden och din kompis.", 3);
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+  await copyOnlineInviteLink();
+}
+
+function serializeOnlinePlayer(item) {
+  return {
+    id: item.id, x: item.x, y: item.y, z: item.z, yaw: item.yaw, pitch: item.pitch,
+    hidden: Boolean(item.hidden), hiddenBy: item.hiddenBy || null,
+    flashlight: Boolean(item.flashlight), carryingObjectId: item.carryingObjectId || null,
+    moving: Boolean(item.moving), sprinting: Boolean(item.sprinting),
+    chapter: state.chapter, mode: state.mode
+  };
+}
+
+function makeOnlineWorldSnapshot() {
+  return {
+    chapter: state.chapter,
+    chapterEpoch: onlineChapterEpoch,
+    mode: state.mode,
+    tick: state.tick,
+    day: state.day,
+    clockMinutes: state.clockMinutes,
+    nightsSurvived: state.nightsSurvived,
+    exitFound: state.exitFound,
+    exitUnlocked: state.exitUnlocked,
+    weather: safeNetworkClone(state.weather),
+    monster: safeNetworkClone(state.monster),
+    journey: safeNetworkClone(state.journey),
+    actorTransforms: serializeOnlineActorTransforms(),
+    players: Object.values(state.playersById).map(serializeOnlinePlayer),
+    objectPatches: safeNetworkClone(objectPatches)
+  };
+}
+
+function serializeOnlineActorTransforms() {
+  if (!journeyWorld) return {};
+  const keys = [
+    "robot", "buttons", "follower", "shadowCreature", "clown", "nurse",
+    "train", "boat", "tsunami", "secret", "basementDoor", "gate",
+    "exitLight", "exit", "exitPortal", "exitDoor", "dolls", "corridorLayouts"
+  ];
+  const serialize = (object) => {
+    if (!object?.isObject3D) return null;
+    return {
+      x: object.position.x, y: object.position.y, z: object.position.z,
+      rx: object.rotation.x, ry: object.rotation.y, rz: object.rotation.z,
+      sx: object.scale.x, sy: object.scale.y, sz: object.scale.z,
+      visible: object.visible
+    };
+  };
+  return Object.fromEntries(keys.flatMap((key) => {
+    const value = journeyWorld.actors?.[key];
+    if (Array.isArray(value)) return [[key, value.map(serialize)]];
+    const transform = serialize(value);
+    return transform ? [[key, transform]] : [];
+  }));
+}
+
+function applyOnlineActorTransforms(transforms) {
+  if (!journeyWorld || !transforms || typeof transforms !== "object") return;
+  const apply = (object, transform) => {
+    if (!object?.isObject3D || !transform) return;
+    const values = [transform.x, transform.y, transform.z, transform.rx, transform.ry, transform.rz];
+    if (!values.every((value) => Number.isFinite(Number(value)))) return;
+    object.position.set(Number(transform.x), Number(transform.y), Number(transform.z));
+    object.rotation.set(Number(transform.rx), Number(transform.ry), Number(transform.rz));
+    if ([transform.sx, transform.sy, transform.sz].every((value) => Number.isFinite(Number(value)))) {
+      object.scale.set(Number(transform.sx), Number(transform.sy), Number(transform.sz));
+    }
+    object.visible = transform.visible !== false;
+  };
+  Object.entries(transforms).forEach(([key, transform]) => {
+    const target = journeyWorld.actors?.[key];
+    if (Array.isArray(target) && Array.isArray(transform)) target.forEach((object, index) => apply(object, transform[index]));
+    else apply(target, transform);
+  });
+  const flags = state.journey.flags || {};
+  if (flags.exitOpen || flags.gateOpen) showJourneyExitReady();
+  if (flags.gateOpen && journeyWorld.actors?.gate) journeyWorld.actors.gate.visible = true;
+  if (state.chapter === "lighthouse_city" && flags.wavePassed) {
+    if (journeyWorld.actors?.secret) journeyWorld.actors.secret.visible = true;
+    if (journeyWorld.actors?.basementDoor) journeyWorld.actors.basementDoor.userData.locked = false;
+  }
+  if (state.chapter === "four_floors_down") {
+    (journeyWorld.actors?.corridorLayouts || []).forEach((layout, index) => {
+      layout.visible = index === Number(flags.layoutIndex || 0);
+    });
+  }
+}
+
+function applyOnlineCollectedVisuals() {
+  if (!journeyWorld || inWarehouse()) return;
+  const ids = new Set(state.journey.collected || []);
+  const flags = state.journey.flags || {};
+  ["puzzleIds", "keyIds", "documentIds", "riddleIds", "switchIds", "clueIds", "recordIds", "doorIds"].forEach((name) => {
+    (flags[name] || []).forEach((id) => ids.add(id));
+  });
+  journeyWorld.interactables.forEach((item) => {
+    if (!ids.has(item.id)) return;
+    item.disabled = true;
+    if (["hotel_key", "hotel_document", "museum_clue", "hospital_record"].includes(item.kind) && item.mesh) item.mesh.visible = false;
+  });
+  if (flags.exitOpen || flags.gateOpen) showJourneyExitReady();
+}
+
+function findFurnitureDescriptor(id) {
+  if (!id) return null;
+  if (!inWarehouse()) return journeyFurniture.find((desc) => desc.id === id) || null;
+  for (const chunk of chunkStates.values()) {
+    const found = chunk.objects.find((desc) => desc.id === id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function applyOnlineFurniturePatch(patch) {
+  if (!patch || typeof patch.id !== "string" || patch.chapter !== state.chapter) return;
+  const current = objectPatches[patch.id];
+  if (current && Number(current.revision || 0) > Number(patch.revision || 0)) return;
+  const clean = {
+    revision: Math.max(0, Number(patch.revision) || 0),
+    x: Number(patch.x) || 0,
+    z: Number(patch.z) || 0,
+    rotation: Number(patch.rotation) || 0,
+    carriedBy: typeof patch.carriedBy === "string" ? patch.carriedBy : null,
+    type: furnitureTypes[patch.type] ? patch.type : undefined,
+    chapter: state.chapter
+  };
+  objectPatches[patch.id] = clean;
+  let desc = findFurnitureDescriptor(patch.id);
+  if (!desc && clean.type && !inWarehouse() && journeyWorld) {
+    desc = { id: patch.id, type: clean.type, x: clean.x, z: clean.z, rotation: clean.rotation, removed: false, group: null };
+    desc.group = createJourneyFurnitureVisual(desc);
+    journeyFurniture.push(desc);
+    journeyWorld.root.add(desc.group);
+  }
+  if (!desc) return;
+  if (clean.carriedBy) {
+    desc.group?.parent?.remove(desc.group);
+    const holder = state.playersById[clean.carriedBy];
+    if (holder) holder.carryingObjectId = desc.id;
+    return;
+  }
+  Object.values(state.playersById).forEach((item) => { if (item.carryingObjectId === desc.id) item.carryingObjectId = null; });
+  desc.group?.parent?.remove(desc.group);
+  if (inWarehouse()) removeFromChunk(desc);
+  desc.x = clean.x;
+  desc.z = clean.z;
+  desc.rotation = clean.rotation;
+  if (!desc.group) desc.group = inWarehouse() ? buildFurnitureModel(desc) : createJourneyFurnitureVisual(desc);
+  desc.group.position.set(desc.x, 0, desc.z);
+  desc.group.rotation.set(0, desc.rotation, 0);
+  if (inWarehouse()) {
+    const cx = chunkCoord(desc.x), cz = chunkCoord(desc.z);
+    addToChunk(desc, cx, cz);
+    loadChunk(cx, cz);
+    (loadedChunks.get(chunkKey(cx, cz))?.root || scene).add(desc.group);
+  } else journeyWorld?.root.add(desc.group);
+}
+
+function applyRemotePose(payload, sequence = 0) {
+  if (!payload || sequence <= onlineLastRemoteSequence || !isKnownChapter(payload.chapter)) return;
+  const numbers = [payload.x, payload.y, payload.z, payload.yaw, payload.pitch];
+  if (!numbers.every((value) => Number.isFinite(Number(value)))) return;
+  onlineLastRemoteSequence = sequence;
+  const id = onlineRemotePlayerId();
+  const remote = ensureOnlineRemotePlayer(id);
+  if (!remote) return;
+  const previousChapter = remote.chapter;
+  const previousX = remote.x;
+  const previousZ = remote.z;
+  const target = {
+    x: clamp(Number(payload.x), -500000, 500000),
+    y: clamp(Number(payload.y), -50, 200),
+    z: clamp(Number(payload.z), -500000, 500000),
+    yaw: Number(payload.yaw), pitch: clamp(Number(payload.pitch), -1.4, 1.4),
+    hidden: Boolean(payload.hidden), flashlight: Boolean(payload.flashlight),
+    moving: Boolean(payload.moving), sprinting: Boolean(payload.sprinting),
+    carryingObjectId: typeof payload.carryingObjectId === "string" ? payload.carryingObjectId.slice(0, 120) : null,
+    chapter: payload.chapter, connected: true, lastSeenAt: performance.now()
+  };
+  Object.assign(remote, target);
+  remotePoseTargets.set(id, target);
+  state.network.remotePlayerId = id;
+  state.network.remoteLastSeenAt = target.lastSeenAt;
+  const hostTeleported = state.network.role === "guest"
+    && previousChapter === target.chapter
+    && target.chapter === state.chapter
+    && distance2D(previousX, previousZ, target.x, target.z) > 8;
+  if (hostTeleported) {
+    onlineSpawnSeparationPending = true;
+    separateGuestFromHostAtSpawn();
+    showToast("Du följde med värden till nästa del av världen.", 2.5);
+  }
+  if (inWarehouse()) refreshChunks();
+}
+
+function applyOnlineTransition(payload, message = "Din kompis bytte värld.") {
+  const chapter = payload?.chapter;
+  if (!isKnownChapter(chapter)) return false;
+  const incomingEpoch = Math.max(0, Number(payload.chapterEpoch) || 0);
+  if (incomingEpoch < onlineChapterEpoch) return false;
+  const changedChapter = state.chapter !== chapter;
+  const restartCurrentChapter = !changedChapter && incomingEpoch > onlineChapterEpoch;
+  onlineApplyingWorld = true;
+  try {
+    onlineChapterEpoch = incomingEpoch;
+    if (chapter === "warehouse" && (state.chapter !== "warehouse" || restartCurrentChapter)) returnToWarehouse(message);
+    else if (chapter !== "warehouse" && (state.chapter !== chapter || restartCurrentChapter)) enterJourneyChapter(chapter, { quiet: true });
+    if (payload.mode === "playing" && state.mode === "title") startGame();
+    if (payload.mode === "playing") {
+      state.mode = "playing";
+      startOverlay.hidden = true;
+      gameHud.hidden = false;
+      touchControls.hidden = !touchDevice || !onlineOverlay?.hidden;
+    }
+    player().chapter = chapter;
+    if ((changedChapter || restartCurrentChapter) && state.network.role === "guest") {
+      onlineSpawnSeparationPending = true;
+      remotePlayerModels.forEach((model) => { model.userData.positionReady = false; });
+    }
+  } finally {
+    onlineApplyingWorld = false;
+  }
+  return true;
+}
+
+function applyOnlineWorldSnapshot(snapshot) {
+  if (!snapshot || state.network.role !== "guest" || !state.network.connected || !isKnownChapter(snapshot.chapter)) return;
+  if (!applyOnlineTransition(snapshot, "Världen synkades med värden.")) return;
+  onlineApplyingWorld = true;
+  try {
+    state.tick = Math.max(0, Number(snapshot.tick) || 0);
+    state.timeMs = state.tick * FIXED_MS;
+    state.day = Math.max(1, Number(snapshot.day) || 1);
+    state.clockMinutes = Number(snapshot.clockMinutes) || 0;
+    state.nightsSurvived = Math.max(0, Number(snapshot.nightsSurvived) || 0);
+    state.exitFound = Boolean(snapshot.exitFound);
+    state.exitUnlocked = Boolean(snapshot.exitUnlocked);
+    if (snapshot.weather && typeof snapshot.weather.type === "string") Object.assign(state.weather, safeNetworkClone(snapshot.weather));
+    if (snapshot.monster) Object.assign(state.monster, safeNetworkClone(snapshot.monster));
+    if (!inWarehouse() && snapshot.journey) {
+      const incomingJourney = safeNetworkClone(snapshot.journey);
+      Object.assign(state.journey, incomingJourney);
+      state.journey.flags = incomingJourney.flags || {};
+      state.journey.collected = incomingJourney.collected || [];
+      applyOnlineCollectedVisuals();
+    }
+    applyOnlineActorTransforms(snapshot.actorTransforms);
+    (snapshot.players || []).filter((item) => item.id === "p1").forEach((item) => applyRemotePose(item, onlineLastRemoteSequence + 1));
+    separateGuestFromHostAtSpawn();
+    Object.entries(snapshot.objectPatches || {}).forEach(([id, patch]) => applyOnlineFurniturePatch({ ...patch, id, chapter: patch.chapter || snapshot.chapter }));
+    if (snapshot.mode === "gameover") {
+      state.mode = "gameover";
+      touchControls.hidden = true;
+      showToast("Skramlaren tog en av er. Värden kan starta om kapitlet.", 8);
+    }
+    monsterModel.visible = state.monster.active;
+    updatePrompt();
+    render();
+  } finally {
+    onlineApplyingWorld = false;
+  }
+}
+
+function sendOnlineWelcome() {
+  onlineTransport?.send("welcome", { assignedPlayerId: "p2", world: makeOnlineWorldSnapshot() });
+}
+
+function handleOnlineMessage(envelope) {
+  const payload = envelope.payload || {};
+  if (envelope.type === "hello" && state.network.role === "host") sendOnlineWelcome();
+  else if (envelope.type === "welcome" && state.network.role === "guest") {
+    configureGuestPlayer();
+    applyOnlineWorldSnapshot(payload.world);
+    showToast("Du är inne! Din kompis syns som en blågul 3D-spelare.", 5);
+  } else if (envelope.type === "pose") applyRemotePose(payload, envelope.seq);
+  else if (envelope.type === "world" && state.network.role === "guest") applyOnlineWorldSnapshot(payload);
+  else if (envelope.type === "transition" && state.network.role === "guest") applyOnlineTransition(payload);
+  else if (envelope.type === "transition-request" && state.network.role === "host" && isKnownChapter(payload.chapter)) {
+    if (payload.chapter === "warehouse") returnToWarehouse("Din kompis bad att få återvända till IKEA.");
+    else enterJourneyChapter(payload.chapter);
+  } else if (envelope.type === "start-request" && state.network.role === "host") startGame();
+  else if (envelope.type === "reset-request" && state.network.role === "host") resetGame();
+  else if (envelope.type === "furniture") applyOnlineFurniturePatch(payload);
+  else if (envelope.type === "ping") onlineTransport?.send("pong", { sentAt: Number(payload.sentAt) || Date.now() });
+  else if (envelope.type === "pong") state.network.latencyMs = Math.max(0, Date.now() - (Number(payload.sentAt) || Date.now()));
+  refreshOnlineUi();
+}
+
+function handleOnlineTransportState(next) {
+  const wasConnected = state.network.connected;
+  const oldRole = state.network.role;
+  if (next.role !== oldRole) onlineChapterEpoch = 0;
+  Object.assign(state.network, next, { remotePlayerId: next.role === "host" ? "p2" : next.role === "guest" ? "p1" : "" });
+  if (next.role === "solo" && oldRole !== "solo") restoreSoloPlayer();
+  if (wasConnected && !next.connected) removeOnlineRemotePlayer();
+  refreshOnlineUi();
+}
+
+function handleOnlineOpen({ role }) {
+  onlineLastRemoteSequence = 0;
+  if (role === "guest") configureGuestPlayer();
+  else ensureOnlineRemotePlayer("p2");
+  if (role === "guest") onlineTransport?.send("hello", { role, chapter: state.chapter });
+  else sendOnlineWelcome();
+  showToast("Två spelare är anslutna!", 4);
+  refreshOnlineUi();
+}
+
+function handleOnlineClose({ intentional }) {
+  removeOnlineRemotePlayer();
+  if (!intentional) showToast(state.network.role === "host" ? "Kompisen lämnade. Rummet väntar på en ny anslutning." : "Anslutningen till värden bröts.", 5);
+  refreshOnlineUi();
+}
+
+function onlineNotifyTransition() {
+  if (onlineApplyingWorld || !state.network.connected) return;
+  if (state.network.role === "guest") {
+    onlineTransport?.send("transition-request", { chapter: state.chapter });
+    return;
+  }
+  onlineChapterEpoch += 1;
+  onlineTransport?.send("transition", { chapter: state.chapter, mode: state.mode, chapterEpoch: onlineChapterEpoch });
+  onlineTransport?.send("world", makeOnlineWorldSnapshot());
+}
+
+function sendFurniturePatch(desc, carriedBy = null) {
+  if (!desc) return null;
+  const previous = objectPatches[desc.id] || {};
+  const patch = {
+    id: desc.id, type: desc.type, chapter: state.chapter,
+    revision: Number(previous.revision || 0) + 1,
+    x: desc.x, z: desc.z, rotation: desc.rotation, carriedBy
+  };
+  objectPatches[desc.id] = { ...patch };
+  if (state.network.connected) onlineTransport?.send("furniture", patch);
+  return patch;
+}
+
+function maybeSendOnlineUpdates(now) {
+  if (!onlineTransport || !state.network.connected) return;
+  const local = player();
+  local.chapter = state.chapter;
+  if (now - onlineLastPoseSentAt >= 80) {
+    onlineLastPoseSentAt = now;
+    onlineTransport.send("pose", serializeOnlinePlayer(local));
+  }
+  if (state.network.role === "host" && now - onlineLastWorldSentAt >= 250) {
+    onlineLastWorldSentAt = now;
+    onlineTransport.send("world", makeOnlineWorldSnapshot());
+  }
+  if (now - onlineLastPingSentAt >= 2500) {
+    onlineLastPingSentAt = now;
+    onlineTransport.send("ping", { sentAt: Date.now() });
+  }
+}
+
+function initOnlineMultiplayer() {
+  onlineTransport = createMultiplayerTransport({
+    onState: handleOnlineTransportState,
+    onMessage: handleOnlineMessage,
+    onOpen: handleOnlineOpen,
+    onClose: handleOnlineClose
+  });
+  onlineMenuButton?.addEventListener("click", openOnlineMenu);
+  onlineStartButton?.addEventListener("click", openOnlineMenu);
+  onlineCloseButton?.addEventListener("click", closeOnlineMenu);
+  onlineOverlay?.addEventListener("click", (event) => { if (event.target === onlineOverlay) closeOnlineMenu(); });
+  onlineCreateButton?.addEventListener("click", () => onlineTransport.host());
+  onlineJoinButton?.addEventListener("click", () => onlineTransport.join(onlineRoomInput?.value || location.href));
+  onlineRoomInput?.addEventListener("input", refreshOnlineUi);
+  onlineRoomInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !onlineJoinButton?.disabled) onlineJoinButton.click();
+  });
+  onlineShareButton?.addEventListener("click", shareOnlineInvite);
+  onlineCopyButton?.addEventListener("click", copyOnlineInviteLink);
+  onlineLeaveButton?.addEventListener("click", () => {
+    onlineTransport.leave();
+    const url = new URL(location.href);
+    if (parseOnlineRoom(url.href)) {
+      url.hash = "";
+      history.replaceState(null, "", url);
+    }
+    showToast("Onlinerummet är stängt. Du kan fortsätta själv.", 4);
+  });
+  window.addEventListener("offline", () => {
+    if (state.network.role !== "solo") {
+      state.network.lastError = "Internetanslutningen försvann.";
+      refreshOnlineUi();
+    }
+  });
+  const invitedRoom = parseOnlineRoom(location.href);
+  if (invitedRoom && onlineRoomInput) {
+    onlineRoomInput.value = location.href;
+    requestAnimationFrame(openOnlineMenu);
+  }
+  refreshOnlineUi();
+}
+
 function ensureAudio() {
   if (audioContext) { if (audioContext.state === "suspended") audioContext.resume(); return; }
   const AudioCtor = window.AudioContext || window.webkitAudioContext;
@@ -837,34 +1661,40 @@ function spawnMonster() {
   monsterArrivalSound();
 }
 
-function caught() {
+function caught(targetPlayerId = state.localPlayerId) {
   state.mode = "gameover";
   state.monster.mode = "caught";
+  const victim = state.playersById[targetPlayerId] || player();
   const p = player();
-  p.hidden = false;
+  victim.hidden = false;
   // Iscensätt fångsten på läsbart avstånd. Annars stannar det fem meter höga
   // monstret precis i kameran och ficklampans hotspot täcker hela ansiktet.
-  let dx = state.monster.x - p.x;
-  let dz = state.monster.z - p.z;
+  let dx = state.monster.x - victim.x;
+  let dz = state.monster.z - victim.z;
   const distance = Math.hypot(dx, dz);
-  if (distance < .05) { dx = -Math.sin(p.yaw); dz = -Math.cos(p.yaw); }
+  if (distance < .05) { dx = -Math.sin(victim.yaw); dz = -Math.cos(victim.yaw); }
   else { dx /= distance; dz /= distance; }
-  state.monster.x = p.x + dx * 2.75;
-  state.monster.z = p.z + dz * 2.75;
-  p.yaw = Math.atan2(-dx, -dz);
-  p.pitch = .9;
+  state.monster.x = victim.x + dx * 2.75;
+  state.monster.z = victim.z + dz * 2.75;
+  if (victim.id === state.localPlayerId) {
+    p.yaw = Math.atan2(-dx, -dz);
+    p.pitch = .9;
+  }
   if (!inWarehouse()) state.journey.failedChapter = state.chapter;
   hideMask.hidden = true;
   touchControls.hidden = true;
   if (document.pointerLockElement) document.exitPointerLock();
-  showToast(`${inWarehouse() ? "Skramlaren hittade dig." : `Skramlaren följde efter till ${chapterTitle()}.`} Tryck R eller E för att försöka igen.`, 10);
+  const caughtText = victim.id === state.localPlayerId ? "Skramlaren hittade dig." : "Skramlaren tog din kompis.";
+  showToast(`${inWarehouse() ? caughtText : `Skramlaren slog till i ${chapterTitle()}.`} Tryck R eller E för att försöka igen.`, 10);
   tone(45, .9, "sawtooth", .04);
 }
 
 function updateMonster(dt) {
   const monster = state.monster;
   if (!monster.active || state.mode !== "playing") return;
-  const p = player();
+  const candidates = Object.values(state.playersById).filter((item) => item.connected && item.chapter === state.chapter);
+  const p = candidates.sort((a, b) => distance2D(monster.x, monster.z, a.x, a.z) - distance2D(monster.x, monster.z, b.x, b.z))[0] || player();
+  monster.targetPlayerId = p.id;
   const d = distance2D(monster.x, monster.z, p.x, p.z);
   const sees = !p.hidden && d < 17 && !lineBlocked(monster.x, monster.z, p.x, p.z);
   if (sees) {
@@ -872,7 +1702,7 @@ function updateMonster(dt) {
     monster.lastSeenX = p.x; monster.lastSeenZ = p.z;
   } else if (p.hidden) monster.mode = monster.sawHide ? "opening_hideout" : "searching";
   else monster.mode = "hunting";
-  if (p.hidden && monster.sawHide && state.tick >= monster.breakHideTick) { caught(); return; }
+  if (p.hidden && monster.sawHide && state.tick >= monster.breakHideTick) { caught(p.id); return; }
   let tx = sees ? p.x : monster.lastSeenX;
   let tz = sees ? p.z : monster.lastSeenZ;
   if (p.hidden && !monster.sawHide) {
@@ -894,7 +1724,7 @@ function updateMonster(dt) {
     const sz = dx / length * speed * dt;
     if (!collides(monster.x + sx, monster.z + sz, .52)) { monster.x += sx; monster.z += sz; }
   }
-  if (!p.hidden && distance2D(monster.x, monster.z, p.x, p.z) < 1.05) caught();
+  if (!p.hidden && distance2D(monster.x, monster.z, p.x, p.z) < 1.05) caught(p.id);
 }
 
 function tryHide() {
@@ -955,6 +1785,7 @@ function pickUp(desc) {
   camera.add(desc.group);
   desc.group.position.set(0, -.95, -3.3);
   desc.group.rotation.set(0, 0, 0);
+  sendFurniturePatch(desc, state.localPlayerId);
   showToast(`Du bär ${furnitureTypes[desc.type].name}. E placerar, R vrider.`, 3);
   tone(220, .09, "square", .018);
 }
@@ -993,7 +1824,7 @@ function placeHeld() {
   if (!inWarehouse()) {
     if (!journeyFurniture.includes(desc)) journeyFurniture.push(desc);
     journeyWorld.root.add(desc.group);
-    objectPatches[desc.id] = { revision: (objectPatches[desc.id]?.revision || 0) + 1, x: desc.x, z: desc.z, rotation: desc.rotation, carriedBy: null };
+    sendFurniturePatch(desc, null);
     state.held = null; player().carryingObjectId = null;
     showToast(hauntedFortScore() >= 5 ? "Barrikaden är stark nog. Gör dig redo!" : "Möbeln är placerad.", 2.8);
     return;
@@ -1003,7 +1834,7 @@ function placeHeld() {
   loadChunk(cx, cz);
   const root = loadedChunks.get(chunkKey(cx, cz))?.root;
   if (root) root.add(desc.group); else scene.add(desc.group);
-  objectPatches[desc.id] = { revision: (objectPatches[desc.id]?.revision || 0) + 1, x: desc.x, z: desc.z, rotation: desc.rotation, carriedBy: null };
+  sendFurniturePatch(desc, null);
   state.held = null; player().carryingObjectId = null;
   showToast(coverScore() >= 3 ? "Gömstället är klart. Tryck H bland möblerna." : "Möbeln är placerad.", 2.8);
 }
@@ -1012,6 +1843,7 @@ function rotateHeld() {
   if (!state.held) return;
   state.held.rotation = (state.held.rotation + Math.PI / 2) % (Math.PI * 2);
   state.held.group.rotation.y = state.held.rotation;
+  sendFurniturePatch(state.held, state.localPlayerId);
   showToast("Möbeln vrids.", 1.2);
 }
 
@@ -1153,6 +1985,16 @@ function closeChapterMenu() {
 function selectChapter(chapter) {
   const entry = chapterMenuEntries().find((item) => item.chapter === chapter);
   if (!entry) return;
+  if (onlineGuestConnected() && !onlineApplyingWorld) {
+    if (chapterOverlay) chapterOverlay.hidden = true;
+    state.paused = false;
+    onlineTransport?.send("transition-request", { chapter });
+    showToast(`Frågar värden om kapitel ${entry.number}: ${entry.title}…`, 3);
+    touchControls.hidden = !touchDevice;
+    canvas.focus();
+    render();
+    return;
+  }
   ensureAudio();
   if (chapterOverlay) chapterOverlay.hidden = true;
   startOverlay.hidden = true;
@@ -1187,6 +2029,7 @@ function dropHeldSafely() {
     const root = loadedChunks.get(desc.chunkKey)?.root;
     (root || scene).add(desc.group);
   } else if (journeyWorld) journeyWorld.root.add(desc.group);
+  sendFurniturePatch(desc, null);
   state.held = null;
   player().carryingObjectId = null;
 }
@@ -1303,6 +2146,11 @@ function configureJourneyStart(chapter) {
 
 function enterJourneyChapter(chapter, { quiet = false } = {}) {
   if (!JOURNEY_ORDER.includes(chapter)) throw new Error(`Okänt resekapitel: ${chapter}`);
+  if (onlineGuestConnected() && !onlineApplyingWorld) {
+    onlineTransport?.send("transition-request", { chapter });
+    showToast("Värden byter värld för båda spelarna…", 2.5);
+    return;
+  }
   closeChoice();
   dropHeldSafely();
   disposeCinematicRoot();
@@ -1337,6 +2185,7 @@ function enterJourneyChapter(chapter, { quiet = false } = {}) {
   });
   scene.add(journeyWorld.root);
   const p = player();
+  p.chapter = chapter;
   p.x = journeyWorld.spawn.x;
   p.y = chapter === "dragon_flight" ? 3 : chapter === "boat_ride" ? 1.05 : journeyWorld.spawn.y || 0;
   p.z = journeyWorld.spawn.z;
@@ -1359,6 +2208,7 @@ function enterJourneyChapter(chapter, { quiet = false } = {}) {
   updatePrompt();
   if (!quiet) showToast(`${chapterTitle(chapter)} — ${state.journey.objective}`, 5);
   render();
+  onlineNotifyTransition();
 }
 
 function enterNextJourneyChapter() {
@@ -1367,6 +2217,11 @@ function enterNextJourneyChapter() {
 }
 
 function returnToWarehouse(message = "Portalen för dig tillbaka till IKEA.") {
+  if (onlineGuestConnected() && !onlineApplyingWorld) {
+    onlineTransport?.send("transition-request", { chapter: "warehouse" });
+    showToast("Värden för er tillbaka till IKEA…", 2.5);
+    return;
+  }
   closeChoice();
   clearJourneyWorld();
   state.chapter = "warehouse";
@@ -1376,6 +2231,7 @@ function returnToWarehouse(message = "Portalen för dig tillbaka till IKEA.") {
   monsterModel.visible = false;
   hideWarehouseWorld(false);
   const p = player();
+  p.chapter = "warehouse";
   p.x = 24; p.y = 0; p.z = 24; p.yaw = -Math.PI / 2; p.pitch = 0;
   p.hidden = false; p.hiddenBy = null; p.flashlight = true;
   state.clockMinutes = 21 * 60;
@@ -1385,6 +2241,8 @@ function returnToWarehouse(message = "Portalen för dig tillbaka till IKEA.") {
   updateWeather(0);
   updatePrompt();
   showToast(message, 5);
+  onlineNotifyTransition();
+  render();
 }
 
 function failJourney(message, retryChapter = state.chapter) {
@@ -1987,6 +2845,15 @@ function interactJourney() {
 function interact() {
   if (state.mode === "gameover" || state.mode === "ending") { resetGame(); return; }
   if (state.mode !== "playing" || state.paused || player().hidden) return;
+  if (onlineGuestConnected()) {
+    if (state.held) { placeHeld(); return; }
+    if (inWarehouse() || state.chapter === "haunted_house") {
+      const movable = nearestObject((item) => furnitureTypes[item.type]?.movable, 2.8);
+      if (movable) { pickUp(movable); return; }
+    }
+    showToast("Värden styr pussel, dörrar och kapitel. Du kan gå, gömma dig och bygga med möbler.", 4);
+    return;
+  }
   if (!inWarehouse()) { interactJourney(); return; }
   const exit = nearestObject((desc) => desc.type === "exit", 3.1);
   if (exit) {
@@ -2669,6 +3536,20 @@ function updatePlayer(dt) {
   p.moving = false;
   p.sprinting = false;
   if (state.mode !== "playing" || state.paused || p.hidden) return;
+  if (onlineGuestConnected() && ["dragon_flight", "boat_ride"].includes(state.chapter)) {
+    const host = state.playersById.p1;
+    if (host) {
+      const rightX = Math.cos(host.yaw || 0);
+      const rightZ = -Math.sin(host.yaw || 0);
+      p.x = THREE.MathUtils.lerp(p.x, host.x + rightX * 1.25, .16);
+      p.y = THREE.MathUtils.lerp(p.y, host.y || 0, .16);
+      p.z = THREE.MathUtils.lerp(p.z, host.z + rightZ * 1.25, .16);
+      p.yaw = host.yaw;
+      p.moving = host.moving;
+      p.sprinting = host.sprinting;
+    }
+    return;
+  }
   let forward = 0;
   let strafe = 0;
   if (keys.has("KeyW") || keys.has("ArrowUp")) forward += 1;
@@ -2784,7 +3665,7 @@ function updateMonsterModel() {
   if (!state.monster.active) { monsterModel.visible = false; return; }
   monsterModel.visible = true;
   monsterModel.position.set(state.monster.x, 0, state.monster.z);
-  const p = player();
+  const p = state.playersById[state.monster.targetPlayerId] || player();
   // Modellens ansikte pekar längs lokal -Z, så rotationen ska vända ögonen
   // mot spelaren (inte ryggen, vilket den tidigare gjorde).
   monsterModel.rotation.y = Math.atan2(state.monster.x - p.x, state.monster.z - p.z);
@@ -2920,6 +3801,12 @@ function updateSimulation(dt) {
   state.tick += 1;
   state.timeMs = state.tick * FIXED_MS;
   if (state.mode === "cinematic") { updateCinematic(dt); return; }
+  if (onlineGuestConnected()) {
+    if (journeyWorld) updateJourneyActors(dt);
+    updatePlayer(dt);
+    updatePrompt();
+    return;
+  }
   updateClock(dt);
   updateWeather(dt);
   updateJourney(dt);
@@ -2933,6 +3820,7 @@ function updateVisuals() {
   updateLighting();
   updateCamera();
   updateMonsterModel();
+  updateRemotePlayerModels();
   updateHud();
 }
 
@@ -2956,6 +3844,11 @@ function pauseGame(force = null) {
 }
 
 function startGame() {
+  if (onlineGuestConnected() && !onlineApplyingWorld && state.mode === "title") {
+    onlineTransport?.send("start-request", {});
+    showToast("Väntar på att värden startar spelet…", 3);
+    return;
+  }
   ensureAudio();
   state.mode = "playing";
   state.paused = false;
@@ -2965,9 +3858,15 @@ function startGame() {
   canvas.focus();
   showToast("Utforska varuhuset. Monstret kommer exakt 03:33.", 4);
   render();
+  onlineNotifyTransition();
 }
 
 function resetGame() {
+  if (onlineGuestConnected() && !onlineApplyingWorld) {
+    onlineTransport?.send("reset-request", {});
+    showToast("Värden startar om kapitlet för er båda…", 3);
+    return;
+  }
   if (!inWarehouse()) {
     const retryChapter = state.journey.failedChapter || state.chapter;
     enterJourneyChapter(retryChapter, { quiet: true });
@@ -3001,6 +3900,8 @@ function resetGame() {
   updateWeather(0);
   updatePrompt();
   showToast("Nytt försök från 02:30. Dina byggda möbler finns kvar.", 4);
+  render();
+  onlineNotifyTransition();
 }
 
 function toggleFullscreen() {
@@ -3044,10 +3945,16 @@ function bindInputs() {
   window.addEventListener("keydown", (event) => {
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Escape"].includes(event.code)) event.preventDefault();
     if (event.repeat && event.code === "KeyK") return;
+    if (onlineOverlay && !onlineOverlay.hidden) {
+      if (event.code === "Escape") closeOnlineMenu();
+      else trapFocusInOnlineMenu(event);
+      return;
+    }
     if (chapterOverlay && !chapterOverlay.hidden) {
       if (event.code === "Escape" || event.code === "KeyK") closeChapterMenu();
       return;
     }
+    if (event.code === "KeyO") { openOnlineMenu(); return; }
     if (event.code === "KeyK") { openChapterMenu(); return; }
     if (state.mode === "title" && ["Enter", "Space"].includes(event.code)) { startGame(); return; }
     if (event.repeat && ["KeyE", "KeyR", "KeyH", "KeyM", "KeyK", "KeyL", "KeyF", "KeyP"].includes(event.code)) return;
@@ -3141,6 +4048,7 @@ function frame(now) {
       safety += 1;
     }
   }
+  maybeSendOnlineUpdates(now);
   render();
 }
 
@@ -3402,12 +4310,28 @@ function renderGameToText() {
       choiceOpen: Boolean(choiceHandlers),
       loop: state.journey.loop
     } : null,
-    network: state.network,
+    network: {
+      ...state.network,
+      menuOpen: Boolean(onlineOverlay && !onlineOverlay.hidden),
+      roomCode: shortOnlineRoomCode(state.network.roomId) || null,
+      remote: (() => {
+        const id = onlineRemotePlayerId();
+        const remote = id ? state.playersById[id] : null;
+        return remote ? {
+          id, connected: Boolean(remote.connected), chapter: remote.chapter,
+          x: Math.round(remote.x * 10) / 10, z: Math.round(remote.z * 10) / 10,
+          yaw: Math.round(remote.yaw * 100) / 100,
+          ageMs: Math.max(0, Math.round(performance.now() - (state.network.remoteLastSeenAt || performance.now()))),
+          visible: Boolean(remotePlayerModels.get(id)?.visible)
+        } : null;
+      })()
+    },
     localPlayerId: state.localPlayerId,
     players: Object.values(state.playersById).map((item) => ({
       id: item.id, x: Math.round(item.x * 10) / 10, y: item.y, z: Math.round(item.z * 10) / 10,
       yaw: Math.round(item.yaw * 100) / 100, hidden: item.hidden, hiddenBy: item.hiddenBy,
-      carryingObjectId: item.carryingObjectId, flashlight: item.flashlight
+      carryingObjectId: item.carryingObjectId, flashlight: item.flashlight,
+      local: item.id === state.localPlayerId, connected: item.connected !== false, chapter: item.chapter || state.chapter
     })),
     clock: { day: state.day, time: formatClock(), minutes: Math.round(state.clockMinutes * 10) / 10, nightsSurvived: state.nightsSurvived },
     weather: { type: state.weather.type, remainingTicks: Math.max(0, state.weather.endsTick - state.tick) },
@@ -3429,7 +4353,7 @@ function renderGameToText() {
     nearbyFurniture: nearbyFurnitureState(),
     cinematic: state.mode === "cinematic" || state.mode === "ending" ? { phase: state.cinematic.phase, time: Math.round(state.cinematic.time * 10) / 10 } : null,
     renderer: renderer ? { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures } : null,
-    controls: "WASD/pilar gå; mus/drag titta; Shift spring; E bär/placera/använd; R vrid; H göm; M vägpil; K välj kapitel; L ficklampa; F helskärm; Esc/P paus."
+    controls: "WASD/pilar gå; mus/drag titta; Shift spring; E bär/placera/använd; R vrid; H göm; M vägpil; K välj kapitel; O online; L ficklampa; F helskärm; Esc/P paus."
   });
 }
 
@@ -3557,6 +4481,14 @@ window.__ikea333Test = {
   openChapterMenu: () => { openChapterMenu(); return JSON.parse(renderGameToText()); },
   closeChapterMenu: () => { closeChapterMenu(); return JSON.parse(renderGameToText()); },
   selectChapter: (chapter) => { selectChapter(chapter); return JSON.parse(renderGameToText()); },
+  openOnlineMenu: () => { openOnlineMenu(); return JSON.parse(renderGameToText()); },
+  closeOnlineMenu: () => { closeOnlineMenu(); return JSON.parse(renderGameToText()); },
+  hostOnline: async () => { await onlineTransport?.host(); return JSON.parse(renderGameToText()); },
+  joinOnline: async (value) => { await onlineTransport?.join(value); return JSON.parse(renderGameToText()); },
+  leaveOnline: () => { onlineTransport?.leave(); return JSON.parse(renderGameToText()); },
+  onlineState: () => safeNetworkClone(state.network),
+  onlineWorldSnapshot: () => safeNetworkClone(makeOnlineWorldSnapshot()),
+  dropOnlineConnection: () => Boolean(onlineTransport?.debugDropConnection?.()),
   awaitChunksIdle: () => Promise.resolve(JSON.parse(renderGameToText())),
   reset: () => { resetGame(); render(); return JSON.parse(renderGameToText()); },
   snapshot: () => JSON.parse(renderGameToText())
@@ -3567,6 +4499,7 @@ function init() {
     initRenderer();
     initScene();
     buildChapterMenu();
+    initOnlineMultiplayer();
     bindInputs();
     startButton.addEventListener("click", startGame);
     fullscreenButton.addEventListener("click", toggleFullscreen);

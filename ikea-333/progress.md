@@ -18,7 +18,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1, `style.css?v=3` och `game.js?v=10` som ES-modul.
+- `index.html` laddar Three.js 0.185.1, `style.css?v=4`, `game.js?v=11` och onlinetransporten `multiplayer.js?v=1` som ES-moduler.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
@@ -40,7 +40,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Kvar att bygga vidare på
 
-- Bygga riktig tvåspelar-online med server och synk. Koden har redan separata spelar-id:n, monstermål och en transportgräns, men denna version är solo.
+- Utöka tvåspelarläget med egen PeerServer/TURN-reserv och fler samtidiga spelare. Nuvarande inbjudningsrum är avsedda för exakt två spelare.
 - Ersätta fler procedurmodeller och syntetiska toner med specialbyggda 3D-modeller, animationer och inspelade miljöljud.
 - Utöka tsunami/tornado, uppdrag, inventarie, sparfil och mysterierna i byn.
 
@@ -81,6 +81,18 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 - Ett val startar det valda kapitlet direkt i högupplöst 3D från första person. Det går även att hoppa tillbaka till det oändliga IKEA från vilket senare kapitel som helst.
 - Mobilvyn använder två kolumner och en intern skrollista så att även kapitel 23 går att nå utan sidscroll eller klippning.
 - Samtliga 23 riktiga kapitelhopp passerar automatisk Chromium-QA. En separat kontroll med 155 tester verifierar svenska titlar, tangentbord, pausläge, berättelseval, dator- och mobilvy samt noll console- eller page-fel.
+
+## 2026-07-17 – två spelare online via Meddelanden
+
+- Startskärmen och spelmenyn har fått `SPELA ONLINE`/`2P`. Värden skapar ett privat rum för två och delar den hemliga inbjudningslänken via iPadens/iPhonens delningsruta eller kopierar den till Meddelanden.
+- Kompisen öppnar länken, trycker `GÅ MED` och ansluts till samma pågående 3D-värld. Länken innehåller en slumpad 128-bitars rumskod och en tredje spelare avvisas med `Rummet är fullt (2/2)`.
+- Båda ser varandra som en blågul 3D-spelare med namnet `KOMPIS`. Rörelse, riktning, ficklampa, gömmande, burna möbler och byggda möbler synkas åt båda håll.
+- Värden styr världens klocka, monster, faror, pussel, dörrar och kapitel. Gästen kan gå, springa, titta, gömma sig och bygga, och följer automatiskt med genom hissar, portaler och andra stora förflyttningar.
+- Kapitelbyte, omstart av samma kapitel, väder, Skramlaren, aktörer, möbler och alla viktiga kapitelvärden synkas. Gästen får värdens aktuella 60-sekunderstimer i fyrstaden.
+- Om själva spelkanalen bryts försöker gästen återansluta automatiskt upp till fyra gånger. Värden kan hålla rummet öppet och vänta på att kompisen kommer tillbaka.
+- Onlinepanelen är anpassad för porträtt och landskap på iPad: ingen sidoscroll, panelen ryms och alla tryckmål är minst 44 px. Fokus stannar i dialogen för tangentbordsanvändare.
+- Riktig QA med tre separata webbläsare verifierar 2/2-anslutning, rörelse åt båda håll, synlig kompisfigur, kapitelbyte, samma-kapitel-omstart, partiteleport, automatisk återanslutning, fullt rum och noll console-/page-fel.
+- Regressionstester verifierar dessutom samtliga 23 kapitelhopp och att tsunamin fortfarande träffar exakt efter 60,000 sekunder.
 
 ## Nya idéer från Agust och kusinen
 
