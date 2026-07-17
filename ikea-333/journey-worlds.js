@@ -63,7 +63,7 @@ export const CHAPTER_INFO = Object.freeze({
   },
   ghost_station: {
     title: "Spökstationen",
-    objective: "Undersök tåget, men tänk efter innan du går ombord.",
+    objective: "Spöktåget avgår exakt 03:33. Tänk efter innan du går ombord.",
     next: "ghost_train"
   },
   ghost_train: {
@@ -1457,12 +1457,12 @@ function buildGhostStation() {
     cylinder(context, .18, .25, 8, 12, postMat, x, 4, z);
   }
   const stationLights = addPathLights(context, [[-18, 56], [-10, 42], [-18, 25], [-10, 8], [-18, -10], [-10, -27], [-18, -47]], 0x9eeaff);
-  const stationSign = textPanel(context, "SPÖKSTATIONEN\nSISTA TÅGET: ALDRIG", {
-    x: -14, y: 5.4, z: -39, width: 11, height: 3.2, background: "#10161d",
+  const stationSign = textPanel(context, "SPÖKSTATIONEN\nAVGÅNG: 03:33", {
+    x: -14, y: 5.4, z: 38, width: 11, height: 3.2, background: "#10161d",
     border: "#8fdcf0", color: "#c9f6ff", font: "Arial, sans-serif", fontSize: 102,
     emissive: 0x12455d, emissiveIntensity: 1.4
   });
-  interactable(context, "station-sign", "sign", -14, -39, 5.5, "Läs stationens tidtabell", stationSign);
+  interactable(context, "station-sign", "sign", -14, 38, 5.5, "Tidtabell: Spöktåget avgår 03:33", stationSign);
 
   const trainModel = addGhostTrainModel(context, 7.4, 3, 0, 4);
   trainModel.group.position.z = 18;
@@ -1484,8 +1484,16 @@ function buildGhostStation() {
   const clockFace = material(context, "station-clock", { color: 0xe7e6dc, emissive: 0x4c5861, emissiveIntensity: .65, roughness: .58 });
   const clockHand = material(context, "station-clock-hand", { color: 0x111319, roughness: .4 });
   cylinder(context, 1.6, 1.6, .18, 32, clockFace, 0, 0, 0, stationClock).rotation.z = Math.PI / 2;
-  const hour = box(context, .12, .9, .08, clockHand, 0, .35, -.12, -.55, stationClock);
-  const minute = box(context, .1, 1.25, .08, clockHand, .35, .4, -.14, 1.0, stationClock);
+  const hourPivot = new THREE.Group();
+  const minutePivot = new THREE.Group();
+  hourPivot.position.x = .14;
+  minutePivot.position.x = .16;
+  hourPivot.rotation.x = -(3 + 32 / 60) / 12 * Math.PI * 2;
+  minutePivot.rotation.x = -(32 / 60) * Math.PI * 2;
+  stationClock.add(hourPivot, minutePivot);
+  box(context, .12, .9, .08, clockHand, 0, .45, 0, 0, hourPivot);
+  box(context, .1, 1.25, .08, clockHand, 0, .625, 0, 0, minutePivot);
+  sphere(context, .14, 12, 8, clockHand, .19, 0, 0, stationClock);
 
   context.actors.train = trainModel.group;
   context.actors.trainCars = trainModel.cars;
@@ -1494,7 +1502,7 @@ function buildGhostStation() {
   context.actors.stationLights = stationLights;
   context.actors.stationSign = stationSign;
   context.actors.clock = stationClock;
-  context.actors.clockHands = [hour, minute];
+  context.actors.clockHands = [hourPivot, minutePivot];
   context.actors.waitBench = bench;
   return finishWorld(context);
 }

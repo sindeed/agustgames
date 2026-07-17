@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=2";
+import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=3";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -1008,8 +1008,8 @@ const journeyObjectives = {
   electric_hollow: "Följ de elektriskt blå larverna och nå draken före monstret",
   robot_shop: "Undersök gubben och titta på hans högra sida",
   haunted_house: "Hämta möbler ur förrådet och bygg en stark barrikad",
-  ghost_station: "Undersök spöktåget och välj om du verkligen vågar gå ombord",
-  ghost_train: "Tåget stannar aldrig och det finns ingen mat...",
+  ghost_station: "Spöktåget avgår exakt 03:33 — välj om du verkligen vågar gå ombord",
+  ghost_train: "Vänta på avgången 03:33. Sedan stannar tåget aldrig...",
   desert: "Använd kartmärket: välj IKEA-grottan eller hitta vägen till vulkanön",
   volcano_island: "Lyssna på vulkanen och nå flyktbåten innan utbrottet",
   mystery_village: "Hitta tre gamla ledtrådar och lös mysteriet 1910 / 1920"
@@ -1018,10 +1018,13 @@ const journeyObjectives = {
 const journeyClock = {
   forest_houses: 14 * 60, dragon_caves: 18 * 60, dragon_flight: 16 * 60, shark_island: 17 * 60,
   boat_ride: 19 * 60, electric_hollow: 23 * 60, robot_shop: 20 * 60,
-  haunted_house: 2 * 60 + 25, ghost_station: 23 * 60 + 10,
-  ghost_train: 23 * 60 + 30, desert: 19 * 60 + 20,
+  haunted_house: 2 * 60 + 25, ghost_station: 3 * 60 + 32,
+  ghost_train: 3 * 60 + 32, desert: 19 * 60 + 20,
   volcano_island: 17 * 60 + 30, mystery_village: 21 * 60
 };
+
+const GHOST_DEPARTURE_SECONDS = 20;
+const GHOST_TRAIN_TRAP_SECONDS = 20;
 
 function chapterTitle(chapter = state.chapter) {
   return CHAPTER_INFO[chapter]?.title || chapter.replaceAll("_", " ").toUpperCase();
@@ -1105,7 +1108,12 @@ function configureJourneyStart(chapter) {
   if (chapter === "boat_ride") Object.assign(flags, { helmUsed: false });
   if (chapter === "robot_shop") Object.assign(flags, { robotStage: 0, buttonsRevealed: false, exitOpen: false });
   if (chapter === "haunted_house") Object.assign(flags, { furnitureTaken: 0, attackStarted: false, attackTime: 0, defended: false });
-  if (chapter === "ghost_station") Object.assign(flags, { trainDeparting: false });
+  if (chapter === "ghost_station") Object.assign(flags, {
+    trainDeparting: false, departureStartedAt: null, waitingOnPlatform: false
+  });
+  if (chapter === "ghost_train") Object.assign(flags, {
+    departed: false, departureCountdown: GHOST_DEPARTURE_SECONDS, travelTime: 0
+  });
   if (chapter === "desert") Object.assign(flags, { monsterRisen: false, caveSeen: false });
   if (chapter === "volcano_island") Object.assign(flags, { eruptionIn: 28, escaped: false });
   if (chapter === "mystery_village") Object.assign(flags, { gateOpen: false });
@@ -1356,19 +1364,30 @@ function interactJourney() {
     case "train_door":
     case "board_train":
       openChoice({
-        title: "SPÖKTÅGET ÄR TOMT",
-        text: "Om ni går ombord kan ni inte gå av igen — och där finns ingen mat.",
+        title: "AVGÅNG EXAKT 03:33",
+        text: "Spöktåget är tomt. Om ni går ombord kan ni inte gå av igen — och där finns ingen mat.",
         primary: "GÅ OMBORD ÄNDÅ",
         secondary: "STANNA PÅ PERRONGEN",
-        onPrimary: () => enterJourneyChapter("ghost_train"),
-        onSecondary: () => { state.journey.flags.trainDeparting = true; state.journey.elapsed = 0; setJourneyObjective("Bra val. Tåget lämnar stationen — nästa stopp är öknen."); }
+        onPrimary: () => {
+          const secondsUntilDeparture = Math.max(0, GHOST_DEPARTURE_SECONDS - state.journey.elapsed);
+          enterJourneyChapter("ghost_train");
+          state.journey.flags.departureCountdown = secondsUntilDeparture;
+          state.clockMinutes = 3 * 60 + 33 - secondsUntilDeparture / GHOST_DEPARTURE_SECONDS;
+          setJourneyObjective("Ni är ombord. Dörrarna stängs och tåget avgår exakt 03:33.");
+        },
+        onSecondary: () => {
+          state.journey.flags.waitingOnPlatform = true;
+          const p = player();
+          p.x = -7; p.y = 0; p.yaw = -Math.PI / 2;
+          setJourneyObjective("Bra val. Stanna på perrongen — spöktåget avgår 03:33.");
+          showToast("Ni stannar kvar. Håll ögonen på klockan: 03:33.", 4);
+        }
       });
       break;
     case "refuse_train":
-      state.journey.flags.trainDeparting = true;
-      state.journey.elapsed = 0;
-      setJourneyObjective("Ni stannar på perrongen. Tåget lämnar er — öknen blir nästa värld.");
-      showToast("Dörrarna stängs. Bra val: ni fastnade inte för alltid.", 4);
+      state.journey.flags.waitingOnPlatform = true;
+      setJourneyObjective("Ni stannar på perrongen. Spöktåget avgår exakt 03:33.");
+      showToast("Bra val. Vänta på perrongen tills klockan blir 03:33.", 4);
       break;
     case "desert_cave":
     case "cave_portal":
@@ -1597,6 +1616,12 @@ function updateJourneyActors(dt) {
   if (robotArm) robotArm.rotation.z = -.35 + Math.sin(t * 5) * .5;
   const train = actors.train;
   if (train && state.chapter === "ghost_station" && state.journey.flags.trainDeparting) train.position.z -= dt * 8;
+  if (state.chapter === "ghost_station" && actors.clockHands?.length === 2) {
+    const minute = ((state.clockMinutes % 60) + 60) % 60;
+    const hour = ((state.clockMinutes / 60) % 12 + 12) % 12;
+    actors.clockHands[0].rotation.x = -hour / 12 * Math.PI * 2;
+    actors.clockHands[1].rotation.x = -minute / 60 * Math.PI * 2;
+  }
   const lava = actors.lava;
   if (lava && state.chapter === "volcano_island") {
     const danger = clamp(1 - state.journey.flags.eruptionIn / 28, 0, 1);
@@ -1695,15 +1720,44 @@ function updateJourney(dt) {
       }
       break;
     }
-    case "ghost_station":
-      if (flags.trainDeparting && state.journey.elapsed > 4) {
+    case "ghost_station": {
+      const secondsUntilDeparture = Math.max(0, GHOST_DEPARTURE_SECONDS - state.journey.elapsed);
+      state.clockMinutes = 3 * 60 + 33 - secondsUntilDeparture / GHOST_DEPARTURE_SECONDS;
+      if (!flags.trainDeparting && secondsUntilDeparture <= 0) {
+        flags.trainDeparting = true;
+        flags.departureStartedAt = state.journey.elapsed;
+        const p = player();
+        if (p.x > -3) { p.x = -7; p.y = 0; p.yaw = -Math.PI / 2; }
+        const trainDoor = journeyWorld.interactables.find((entry) => entry.kind === "board_train");
+        if (trainDoor) trainDoor.disabled = true;
+        setJourneyObjective("03:33 — spöktåget avgår! Nästa värld är öknen.");
+        showToast("03:33 — SPÖKTÅGET AVGÅR!", 4);
+        tone(82, .8, "sawtooth", .035); tone(41, 1.2, "square", .025, .35);
+      }
+      if (flags.trainDeparting && state.journey.elapsed - flags.departureStartedAt > 4) {
         enterJourneyChapter("desert");
         return;
       }
       break;
+    }
     case "ghost_train":
-      if (actors.train) actors.train.position.x = Math.sin(state.journey.elapsed * 5) * .08;
-      if (state.journey.elapsed > 20) {
+      if (!flags.departed) {
+        flags.departureCountdown = Math.max(0, flags.departureCountdown - dt);
+        state.clockMinutes = 3 * 60 + 33 - flags.departureCountdown / GHOST_DEPARTURE_SECONDS;
+        if (flags.departureCountdown <= 0) {
+          flags.departed = true;
+          flags.travelTime = 0;
+          state.clockMinutes = 3 * 60 + 33;
+          setJourneyObjective("03:33 — tåget rusar iväg och dörrarna går inte att öppna!");
+          showToast("03:33 — SPÖKTÅGET AVGÅR!", 4);
+          tone(82, .8, "sawtooth", .035); tone(41, 1.2, "square", .025, .35);
+        }
+      } else {
+        state.clockMinutes = 3 * 60 + 33;
+        flags.travelTime += dt;
+        if (actors.train) actors.train.position.x = Math.sin(flags.travelTime * 5) * .08;
+      }
+      if (flags.departed && flags.travelTime > GHOST_TRAIN_TRAP_SECONDS) {
         failJourney("Tåget fortsatte för alltid och maten tog slut.", "ghost_station");
         return;
       }
@@ -1975,7 +2029,12 @@ function updateHud() {
       ? `Båten åker om ${Math.max(0, Math.ceil(state.journey.flags.boatWindow))} s`
       : `Båten kommer om ${Math.max(0, Math.ceil(10 - state.journey.elapsed))} s`;
   } else if (state.chapter === "boat_ride") hudDay.textContent = `Styr A/D · ${Math.max(0, Math.ceil(10 - state.journey.elapsed))} s kvar`;
-  else if (state.chapter === "ghost_train") hudDay.textContent = `Instängd ${Math.min(20, Math.floor(state.journey.elapsed))} / 20 s`;
+  else if (state.chapter === "ghost_station") hudDay.textContent = state.journey.flags.trainDeparting
+    ? "03:33 · Tåget avgår!"
+    : `Avgång 03:33 · ${Math.max(0, Math.ceil(GHOST_DEPARTURE_SECONDS - state.journey.elapsed))} s`;
+  else if (state.chapter === "ghost_train") hudDay.textContent = state.journey.flags.departed
+    ? `Instängd ${Math.min(GHOST_TRAIN_TRAP_SECONDS, Math.floor(state.journey.flags.travelTime))} / ${GHOST_TRAIN_TRAP_SECONDS} s`
+    : `Avgång 03:33 · ${Math.max(0, Math.ceil(state.journey.flags.departureCountdown))} s`;
   else if (state.chapter === "volcano_island") hudDay.textContent = `Utbrott om ${Math.max(0, Math.ceil(state.journey.flags.eruptionIn))} s`;
   else if (state.chapter === "haunted_house") hudDay.textContent = state.journey.flags.attackStarted
     ? `Belägring ${Math.min(10, Math.floor(state.journey.flags.attackTime))} / 10 s`

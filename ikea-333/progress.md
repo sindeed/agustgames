@@ -18,7 +18,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1 och `game.js?v=5` som ES-modul.
+- `index.html` laddar Three.js 0.185.1 och `game.js?v=6` som ES-modul.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
@@ -43,6 +43,13 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 - Bygga riktig tvåspelar-online med server och synk. Koden har redan separata spelar-id:n, monstermål och en transportgräns, men denna version är solo.
 - Ersätta fler procedurmodeller och syntetiska toner med specialbyggda 3D-modeller, animationer och inspelade miljöljud.
 - Utöka tsunami/tornado, uppdrag, inventarie, sparfil och mysterierna i byn.
+
+## 2026-07-17 – spöktågets avgång 03:33
+
+- Spökstationen börjar 03:32 och både HUD och tidtabell visar att spöktåget avgår exakt 03:33.
+- Efter tjugo sekunder slår klockan 03:33, dörren låses och tåget kör iväg. Den som stannar på perrongen fortsätter till öknen.
+- Den som går ombord väntar inne i tåget till 03:33; därefter börjar den tjugo sekunder långa tågfällan.
+- Deterministiska webbläsartester verifierar ombordstigning, perrongval, missat tåg, pausad nedräkning och tågfällans omstart utan console- eller page-fel. Hela kedjan genom alla 14 kapitel passerar fortfarande.
 
 ## Nya idéer från Agust och kusinen
 
