@@ -235,7 +235,7 @@ Flödet visar den bekräftade huvudidén. Exakt hur öknen, vulkanön, den gömd
 Efter att mysteriet i byn är löst fortsätter resan i den här ordningen:
 
 1. **Den gamla skolan:** ljus blinkar, dörrar låser sig, fotsteg hörs och Skramlaren kommer exakt 03:33. Tre pussel öppnar nödutgången.
-2. **Fyren vid havet:** en tsunami sveper över en hel stormstad. Spelarna måste hinna upp till fyrens slutna skyddsrum och sedan avslöja hemligheten i källaren.
+2. **Fyren vid havet:** efter exakt 60 sekunder sveper en tsunami över en hel stormstad. Spelarna måste hinna upp till fyrens slutna skyddsrum och sedan avslöja hemligheten i källaren.
 3. **Det förbjudna hotellet:** tre nycklar och tre dokument ska hittas medan en korridorskugga följer efter.
 4. **Kyrkogårdens hemlighet:** tre gravgåtor och ett altare bryter förbannelsen. Om gryningen hinner komma vaknar samma monster som i IKEA.
 5. **Det försvunna tivolit:** övergivna attraktioner startar av sig själva och en mystisk clown följer spelarna.

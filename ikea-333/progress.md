@@ -18,7 +18,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1 och `game.js?v=8` som ES-modul.
+- `index.html` laddar Three.js 0.185.1 och `game.js?v=9` som ES-modul.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
@@ -67,6 +67,12 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 - Fyrstaden har ett slutet skyddsrum under fyren; tsunamin sveper bort spelaren som inte hinner in. Museets nödutgång aktiveras först när klockan verkligen slår 00:00.
 - Automatisk Chromium-genomspelning verifierar 187 kontroller genom alla nio nya kapitel, 16 visuella kontrollbilder, rätt omstarter och noll console- eller page-fel.
 - En separat slutkörning passerar hela kedjan från IKEA genom samtliga 23 kapitel och tillbaka till den nya skogsloopen. Mobilvyer i 390 × 844 för sju av de nya miljöerna ryms utan scroll, klippning eller webbläsarfel.
+
+## 2026-07-17 – tsunamin kommer efter en minut
+
+- Fyrstadens tsunaminedräkning börjar nu på exakt 60 sekunder.
+- Vågförlopp, varning, skyddsrum, förlust och omstart använder samma enminutstimer.
+- Chromium-QA verifierar start på 60 sekunder, fortsatt spel vid 59,999 sekunder, oskyddad förlust vid 60,000 sekunder, omstart till 60 och överlevnad i fyrens skyddsrum utan console- eller page-fel.
 
 ## Nya idéer från Agust och kusinen
 
