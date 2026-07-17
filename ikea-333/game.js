@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=4";
+import { JOURNEY_ORDER, CHAPTER_INFO, buildJourneyWorld, disposeJourneyWorld } from "./journey-worlds.js?v=5";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -94,7 +94,16 @@ const chapters = {
   desert: { portal: "warehouse", enemy: "rattleman" },
   desert_onward: { next: "volcano_island" },
   volcano_island: { next: "mystery_village", fail: "warehouse" },
-  mystery_village: { sign: "VILLAGE FROM 1920", language: "old-artifacts-English" }
+  mystery_village: { next: "haunted_school", sign: "VILLAGE FROM 1920", language: "old-artifacts-English" },
+  haunted_school: { next: "lighthouse_city", enemy: "rattleman", event: "03:33" },
+  lighthouse_city: { next: "forbidden_hotel", hazard: "tsunami" },
+  forbidden_hotel: { next: "graveyard_secret", enemy: "corridor-shadow" },
+  graveyard_secret: { next: "lost_carnival", enemy: "rattleman", event: "dawn" },
+  lost_carnival: { next: "dollmaker_house", enemy: "mysterious-clown" },
+  dollmaker_house: { next: "midnight_museum", enemy: "moving-dolls" },
+  midnight_museum: { next: "forgotten_hospital", enemy: "rattleman", event: "midnight" },
+  forgotten_hospital: { next: "four_floors_down", enemy: "blood-stained-nurse" },
+  four_floors_down: { next: "forest_houses", generator: "shifting-basement" }
 };
 
 const furnitureTypes = {
@@ -708,6 +717,17 @@ function collides(x, z, radius = PLAYER_RADIUS, ignoreId = null) {
     const b = journeyWorld.bounds;
     if (b && (x < b.minX + radius || x > b.maxX - radius || z < b.minZ + radius || z > b.maxZ - radius)) return true;
     if (journeyWorld.colliders.some((collider) => pointColliderDistance(x, z, collider) < radius)) return true;
+    if (state.chapter === "haunted_school" && state.journey.flags.doorsLocked) {
+      const blockedBySchoolDoor = (journeyWorld.actors.doors || [])
+        .filter((door) => door.userData.closedYaw != null)
+        .some((door) => pointColliderDistance(x, z, {
+          x: door.position.x,
+          z: door.position.z + 1.8,
+          w: .5,
+          d: 3.6
+        }) < radius);
+      if (blockedBySchoolDoor) return true;
+    }
   }
   return allLoadedDescriptors().some((desc) => desc.id !== ignoreId && pointAabbDistance(x, z, desc) < radius);
 }
@@ -874,7 +894,7 @@ function updateMonster(dt) {
 function tryHide() {
   const p = player();
   if (state.mode !== "playing") return;
-  if (!inWarehouse() && state.chapter !== "haunted_house") {
+  if (!inWarehouse() && !["haunted_house", "haunted_school"].includes(state.chapter)) {
     showToast("Här finns inget möbelgömställe. Fortsätt mot målet!", 2.5);
     return;
   }
@@ -886,12 +906,15 @@ function tryHide() {
   }
   if (state.held) { showToast("Placera möbeln först.", 2); return; }
   const hideable = nearestObject((desc) => furnitureTypes[desc.type].hideable, 2.1);
-  if (!hideable && coverScore() < 3) {
+  const schoolHideout = state.chapter === "haunted_school"
+    ? journeyWorld?.interactables.find((item) => item.kind === "hideout" && distance2D(p.x, p.z, item.x, item.z) <= (item.radius || 3.2))
+    : null;
+  if (!hideable && !schoolHideout && coverScore() < 3) {
     showToast("Bygg med minst tre möbler eller hitta en garderob, säng eller soffa.", 3.4);
     return;
   }
   p.hidden = true;
-  p.hiddenBy = hideable?.id || "built-fort";
+  p.hiddenBy = hideable?.id || schoolHideout?.id || "built-fort";
   const d = state.monster.active ? distance2D(p.x, p.z, state.monster.x, state.monster.z) : Infinity;
   state.monster.sawHide = state.monster.active && d < 13 && !lineBlocked(state.monster.x, state.monster.z, p.x, p.z);
   state.monster.breakHideTick = state.tick + 150;
@@ -1012,7 +1035,16 @@ const journeyObjectives = {
   ghost_train: "Vänta på avgången 03:33. Sedan stannar tåget aldrig...",
   desert: "Använd kartmärket: välj IKEA-grottan eller hitta vägen till vulkanön",
   volcano_island: "Vulkanen exploderar om 30 sekunder — nå flyktbåten i tid",
-  mystery_village: "Hitta tre gamla ledtrådar och lös mysteriet 1910 / 1920"
+  mystery_village: "Hitta tre gamla ledtrådar och lös mysteriet 1910 / 1920",
+  haunted_school: "Lös skolans tre pussel och överlev när IKEA-monstret kommer 03:33",
+  lighthouse_city: "Spring genom stormstaden till fyren innan tsunamin når land",
+  forbidden_hotel: "Utforska hotellrummen och hitta tre nycklar och tre gamla dokument",
+  graveyard_secret: "Lös gravstenarnas tre gåtor och bryt förbannelsen före gryningen",
+  lost_carnival: "Stäng av tre hemsökta åkattraktioner medan clownen följer efter",
+  dollmaker_house: "Hitta tre ledtrådar i dockmakarens hus — dockorna flyttar sig när du vänder dig",
+  midnight_museum: "Hitta nödutgångens tre koddelar före midnatt och fly från IKEA-monstret",
+  forgotten_hospital: "Ta hissen till våningarna som saknas på kartan och hitta tre patientjournaler",
+  four_floors_down: "Åk fyra våningar ner och hitta ut genom korridorerna som ändras vid varje dörr"
 };
 
 const journeyClock = {
@@ -1020,13 +1052,24 @@ const journeyClock = {
   boat_ride: 19 * 60, electric_hollow: 23 * 60, robot_shop: 20 * 60,
   haunted_house: 2 * 60 + 25, ghost_station: 3 * 60 + 32,
   ghost_train: 3 * 60 + 32, desert: 19 * 60 + 20,
-  volcano_island: 17 * 60 + 30, mystery_village: 21 * 60
+  volcano_island: 17 * 60 + 30, mystery_village: 21 * 60,
+  haunted_school: 3 * 60 + 32, lighthouse_city: 23 * 60 + 40,
+  forbidden_hotel: 40, graveyard_secret: 5 * 60 + 55,
+  lost_carnival: 23 * 60 + 33, dollmaker_house: 2 * 60 + 22,
+  midnight_museum: 23 * 60 + 59, forgotten_hospital: 1 * 60 + 13,
+  four_floors_down: 2 * 60 + 44
 };
 
 const GHOST_DEPARTURE_SECONDS = 20;
 const GHOST_TRAIN_TRAP_SECONDS = 20;
 const VOLCANO_ERUPTION_SECONDS = 30;
 const VOLCANO_TIMER_EPSILON = .001;
+const SCHOOL_MONSTER_SECONDS = 30;
+const LIGHTHOUSE_TSUNAMI_SECONDS = 45;
+const LIGHTHOUSE_WAVE_SECONDS = 6;
+const GRAVEYARD_DAWN_SECONDS = 45;
+const MUSEUM_MIDNIGHT_SECONDS = 30;
+const JOURNEY_TIMER_EPSILON = .001;
 
 function chapterTitle(chapter = state.chapter) {
   return CHAPTER_INFO[chapter]?.title || chapter.replaceAll("_", " ").toUpperCase();
@@ -1119,6 +1162,45 @@ function configureJourneyStart(chapter) {
   if (chapter === "desert") Object.assign(flags, { monsterRisen: false, caveSeen: false });
   if (chapter === "volcano_island") Object.assign(flags, { eruptionIn: VOLCANO_ERUPTION_SECONDS, escaped: false });
   if (chapter === "mystery_village") Object.assign(flags, { gateOpen: false });
+  if (chapter === "haunted_school") Object.assign(flags, {
+    puzzlesSolved: 0, puzzleIds: [], monsterIn: SCHOOL_MONSTER_SECONDS,
+    monsterArrived: false, doorsLocked: false, doorLockDone: false, exitOpen: false,
+    nextFootstepAt: 4, footstepsHeard: 0, mistakes: 0
+  });
+  if (chapter === "lighthouse_city") Object.assign(flags, {
+    tsunamiIn: LIGHTHOUSE_TSUNAMI_SECONDS, warned: false, sheltered: false,
+    waveActive: false, waveElapsed: 0, wavePassed: false,
+    secretFound: false, exitOpen: false
+  });
+  if (chapter === "forbidden_hotel") Object.assign(flags, {
+    keysFound: 0, documentsFound: 0, shadowAwake: false,
+    shadowDistance: null, exitOpen: false, nextWhisperAt: 5
+  });
+  if (chapter === "graveyard_secret") Object.assign(flags, {
+    dawnIn: GRAVEYARD_DAWN_SECONDS, riddlesSolved: 0, riddleIds: [],
+    curseBroken: false, monsterArrived: false, exitOpen: false, nextWhisperAt: 6
+  });
+  if (chapter === "lost_carnival") Object.assign(flags, {
+    switchesOff: 0, switchIds: [], clownAwake: false,
+    clownDistance: null, exitOpen: false, nextLaughAt: 4
+  });
+  if (chapter === "dollmaker_house") Object.assign(flags, {
+    cluesFound: 0, clueIds: [], dollMoves: 0,
+    lastDollYaw: null, lastDollMoveAt: -5, exitOpen: false
+  });
+  if (chapter === "midnight_museum") Object.assign(flags, {
+    midnightIn: MUSEUM_MIDNIGHT_SECONDS, cluesFound: 0, clueIds: [],
+    exhibitsAwake: false, monsterArrived: false, exitOpen: false
+  });
+  if (chapter === "forgotten_hospital") Object.assign(flags, {
+    elevatorStops: 0, currentFloor: 1, visitedFloors: [1],
+    recordsFound: 0, recordIds: [], nurseAwake: false,
+    nurseDistance: null, exitOpen: false, nextAlarmAt: 5
+  });
+  if (chapter === "four_floors_down") Object.assign(flags, {
+    elevatorUsed: false, doorsOpened: 0, doorIds: [],
+    layoutIndex: 0, exitOpen: false
+  });
   return flags;
 }
 
@@ -1134,6 +1216,8 @@ function enterJourneyChapter(chapter, { quiet = false } = {}) {
   state.paused = false;
   state.monster.active = false;
   state.monster.mode = "sleeping";
+  state.monster.sawHide = false;
+  state.monster.breakHideTick = 0;
   monsterModel.visible = false;
   hideMask.hidden = true;
   cinematicCaption.hidden = true;
@@ -1163,9 +1247,17 @@ function enterJourneyChapter(chapter, { quiet = false } = {}) {
   p.pitch = 0;
   p.hidden = false;
   p.hiddenBy = null;
-  p.flashlight = ["dragon_caves", "electric_hollow", "robot_shop", "haunted_house", "ghost_station", "ghost_train", "mystery_village"].includes(chapter);
+  p.flashlight = [
+    "dragon_caves", "electric_hollow", "robot_shop", "haunted_house",
+    "ghost_station", "ghost_train", "mystery_village", "haunted_school",
+    "lighthouse_city", "forbidden_hotel", "graveyard_secret", "lost_carnival",
+    "dollmaker_house", "midnight_museum", "forgotten_hospital", "four_floors_down"
+  ].includes(chapter);
   state.clockMinutes = journeyClock[chapter] ?? state.clockMinutes;
-  setWeather(["shark_island", "boat_ride"].includes(chapter) ? "clear" : chapter === "volcano_island" ? "cloudy" : "cloudy", 40);
+  const chapterWeather = ["shark_island", "boat_ride", "lost_carnival"].includes(chapter)
+    ? "clear"
+    : chapter === "lighthouse_city" ? "rain" : "cloudy";
+  setWeather(chapterWeather, JOURNEY_ORDER.slice(-9).includes(chapter) ? 180 : 40);
   updateWeather(0);
   updatePrompt();
   if (!quiet) showToast(`${chapterTitle(chapter)} — ${state.journey.objective}`, 5);
@@ -1211,13 +1303,20 @@ function failJourney(message, retryChapter = state.chapter) {
   tone(48, .8, "sawtooth", .035);
 }
 
+function visibleInHierarchy(object) {
+  for (let node = object; node; node = node.parent) {
+    if (node.visible === false) return false;
+  }
+  return true;
+}
+
 function nearestJourneyInteractable(maxExtra = 0) {
   if (!journeyWorld) return null;
   const p = player();
   let best = null;
   let bestDistance = Infinity;
   journeyWorld.interactables.forEach((item) => {
-    if (item.disabled || item.mesh?.visible === false) return;
+    if (item.disabled || !visibleInHierarchy(item.mesh)) return;
     const d = distance2D(p.x, p.z, item.x, item.z);
     if (d <= (item.radius || 3.2) + maxExtra && d < bestDistance) { best = item; bestDistance = d; }
   });
@@ -1289,6 +1388,151 @@ function collectVillageClue(item) {
     setJourneyObjective("Mysteriets port har öppnats — välj nästa nya obby");
     tone(523, .3); tone(659, .4, "sine", .025, .22);
   } else setJourneyObjective(`Hitta gamla ledtrådar: ${state.journey.collected.length} / 3`);
+}
+
+function markJourneyItem(item, { hide = false, color = 0x39d98a } = {}) {
+  if (!item) return;
+  item.disabled = true;
+  if (hide && item.mesh) item.mesh.visible = false;
+  item.mesh?.traverse?.((object) => {
+    if (object.material?.emissive) {
+      object.material.emissive.setHex(color);
+      object.material.emissiveIntensity = Math.max(2.4, object.material.emissiveIntensity || 0);
+    }
+  });
+}
+
+function showJourneyExitReady() {
+  const actors = journeyWorld?.actors || {};
+  if (actors.exitLight) actors.exitLight.visible = true;
+  if (actors.exit) actors.exit.visible = true;
+  if (actors.exitPortal) actors.exitPortal.visible = true;
+  pulseMaterial(actors.exitLight, 4.5);
+  pulseMaterial(actors.exitDoor, 1.8);
+}
+
+function solveSchoolPuzzle(item) {
+  const flags = state.journey.flags;
+  if (flags.puzzleIds.includes(item.id)) { showToast("Det pusslet är redan löst.", 2); return; }
+  if (item.id.includes("bell") && !flags.monsterArrived) {
+    showToast("Skolklockan sitter fast. Den börjar fungera först exakt 03:33...", 3.5);
+    return;
+  }
+  flags.puzzleIds.push(item.id);
+  flags.puzzlesSolved = flags.puzzleIds.length;
+  state.journey.collected.push(item.id);
+  markJourneyItem(item);
+  const solvedText = item.id.includes("clock")
+    ? "Klockans visare klickar fast på 03:33."
+    : item.id.includes("fuse")
+      ? "Säkringarna kopplas rätt. Korridorens lampor vaknar."
+      : "Skolklockan ringer tre gånger. En nödutgång låses upp!";
+  showToast(solvedText, 4);
+  tone(392 + flags.puzzlesSolved * 90, .25, "sine", .025);
+  if (flags.puzzlesSolved >= 3) {
+    flags.exitOpen = true;
+    state.journey.stage = "escape";
+    showJourneyExitReady();
+    setJourneyObjective("Alla tre pussel är lösta — spring till skolans nödutgång!");
+  } else setJourneyObjective(`Lös skolans pussel: ${flags.puzzlesSolved} / 3 · monstret kommer 03:33`);
+}
+
+function collectHotelItem(item) {
+  if (state.journey.collected.includes(item.id)) { showToast("Det här fyndet har ni redan tagit.", 2); return; }
+  const flags = state.journey.flags;
+  state.journey.collected.push(item.id);
+  markJourneyItem(item, { hide: true });
+  if (item.kind === "hotel_key") flags.keysFound += 1;
+  else flags.documentsFound += 1;
+  if (!flags.shadowAwake) {
+    flags.shadowAwake = true;
+    const follower = journeyWorld.actors.follower || journeyWorld.actors.shadowCreature;
+    if (follower) follower.visible = true;
+    showToast("Något rör sig längre bort i korridoren...", 4);
+    tone(74, .5, "sawtooth", .024);
+  } else showToast(item.kind === "hotel_key" ? "En rostig hotellnyckel." : "Ett dokument om gäster som aldrig checkade ut.", 3);
+  flags.exitOpen = flags.keysFound >= 3 && flags.documentsFound >= 3;
+  if (flags.exitOpen) {
+    showJourneyExitReady();
+    state.journey.stage = "escape";
+    setJourneyObjective("Alla nycklar och dokument är hittade — fly genom hotellets entré!");
+  } else setJourneyObjective(`Hotellnycklar ${flags.keysFound} / 3 · dokument ${flags.documentsFound} / 3`);
+}
+
+function resolveGraveRiddle(item, correct) {
+  if (!correct) {
+    state.journey.flags.mistakes = (state.journey.flags.mistakes || 0) + 1;
+    showToast("Fel svar. Marken mullrar under gravstenen...", 3);
+    tone(58, .45, "square", .025);
+    return;
+  }
+  const flags = state.journey.flags;
+  if (flags.riddleIds.includes(item.id)) return;
+  flags.riddleIds.push(item.id);
+  flags.riddlesSolved = flags.riddleIds.length;
+  state.journey.collected.push(item.id);
+  markJourneyItem(item);
+  showToast(`Gravstenens gåta är löst: ${flags.riddlesSolved} / 3.`, 3);
+  if (flags.riddlesSolved >= 3) setJourneyObjective("Alla gåtor är lösta — bryt förbannelsen vid kapellets altare!");
+  else setJourneyObjective(`Lös gravstenarnas gåtor före gryningen: ${flags.riddlesSolved} / 3`);
+}
+
+function openGraveRiddle(item) {
+  if (state.journey.flags.riddleIds.includes(item.id)) { showToast("Den här gravstenen lyser redan.", 2); return; }
+  const riddles = item.id.endsWith("1") ? {
+    text: "Jag vaknar när natten dör. Vilken tid är jag?", primary: "GRYNINGEN", secondary: "MIDNATT", correct: "primary"
+  } : item.id.endsWith("2") ? {
+    text: "Räkna korparna som aldrig flyger.", primary: "SJU", secondary: "TRE", correct: "secondary"
+  } : {
+    text: "Vänd namnet som saknar en skugga. Vem står inte kvar?", primary: "INGEN", secondary: "SKRAMLAREN", correct: "primary"
+  };
+  openChoice({
+    title: "GRAVSTENENS GÅTA",
+    text: riddles.text,
+    primary: riddles.primary,
+    secondary: riddles.secondary,
+    onPrimary: () => resolveGraveRiddle(item, riddles.correct === "primary"),
+    onSecondary: () => resolveGraveRiddle(item, riddles.correct === "secondary")
+  });
+}
+
+function collectCarnivalSwitch(item) {
+  const flags = state.journey.flags;
+  if (flags.switchIds.includes(item.id)) { showToast("Den attraktionen är redan avstängd.", 2); return; }
+  flags.switchIds.push(item.id);
+  flags.switchesOff = flags.switchIds.length;
+  state.journey.collected.push(item.id);
+  markJourneyItem(item);
+  showToast(`Attraktionen stannar med ett gnissel: ${flags.switchesOff} / 3.`, 3);
+  tone(92, .4, "sawtooth", .022);
+  if (flags.switchesOff >= 3) {
+    flags.exitOpen = true;
+    state.journey.stage = "escape";
+    showJourneyExitReady();
+    setJourneyObjective("Tivolits grind har öppnats — spring ifrån clownen!");
+  } else setJourneyObjective(`Stäng av de hemsökta attraktionerna: ${flags.switchesOff} / 3`);
+}
+
+function collectSimpleChapterItem(item, flagName, idsName, target, completeText, progressText, unlockWhen = () => true) {
+  const flags = state.journey.flags;
+  if (flags[idsName].includes(item.id)) { showToast("Den ledtråden är redan hittad.", 2); return false; }
+  flags[idsName].push(item.id);
+  flags[flagName] = flags[idsName].length;
+  state.journey.collected.push(item.id);
+  markJourneyItem(item, { hide: true });
+  showToast(progressText(flags[flagName]), 3);
+  if (flags[flagName] >= target) {
+    if (unlockWhen()) {
+      flags.exitOpen = true;
+      state.journey.stage = "escape";
+      showJourneyExitReady();
+      setJourneyObjective(completeText);
+    } else {
+      state.journey.stage = "ready";
+      setJourneyObjective("Nödutgångens kod är klar — vänta tills museiklockan slår tolv");
+    }
+  }
+  return true;
 }
 
 function interactJourney() {
@@ -1443,13 +1687,200 @@ function interactJourney() {
     case "village_gate":
       if (!state.journey.flags.gateOpen) showToast("Porten behöver tre ledtrådar.", 2.5);
       else openChoice({
-        title: "MYSTERIET FORTSÄTTER",
-        text: "Bakom porten skapas en ny obby. Resan kan börja om med nya hemligheter.",
-        primary: "BÖRJA NÄSTA OBBY",
+        title: "DEN GAMLA SKOLAN",
+        text: "Bakom porten står en övergiven skola. Ett ensamt ljus blinkar i korridoren.",
+        primary: "GÅ IN I SKOLAN",
         secondary: "STANNA I BYN",
-        onPrimary: () => { state.journey.loop += 1; enterJourneyChapter("forest_houses"); },
+        onPrimary: () => enterNextJourneyChapter(),
         onSecondary: () => showToast("Ni stannar och letar efter ännu fler mysterier.", 3)
       });
+      break;
+    case "school_puzzle":
+      solveSchoolPuzzle(item);
+      break;
+    case "hideout":
+      tryHide();
+      break;
+    case "school_exit":
+      if (!state.journey.flags.exitOpen) showToast("Nödutgången har tre lås. Lös alla skolpussel först.", 3);
+      else {
+        state.monster.active = false;
+        monsterModel.visible = false;
+        player().hidden = false;
+        hideMask.hidden = true;
+        enterNextJourneyChapter();
+      }
+      break;
+    case "lighthouse_shelter":
+      state.journey.flags.sheltered = true;
+      state.journey.stage = "shelter";
+      item.disabled = true;
+      if (journeyWorld.actors.shelterSpawn) {
+        player().x = journeyWorld.actors.shelterSpawn.x;
+        player().z = journeyWorld.actors.shelterSpawn.z;
+        player().yaw = 0;
+      }
+      setJourneyObjective("Ni är inne i fyren — håll ut när tsunamin träffar och lyssna mot källaren");
+      showToast("Fyrens järndörr slår igen. Stormvågen närmar sig!", 4);
+      break;
+    case "lighthouse_secret":
+      if (!state.journey.flags.sheltered) showToast("Ni måste först hinna in i fyren.", 2.5);
+      else if (!state.journey.flags.wavePassed) showToast("Vågen dånar utanför. Vänta tills fyren slutar skaka!", 3);
+      else if (!state.journey.flags.secretFound) {
+        state.journey.flags.secretFound = true;
+        state.journey.flags.exitOpen = true;
+        state.journey.collected.push(item.id);
+        markJourneyItem(item);
+        showJourneyExitReady();
+        setJourneyObjective("Källarens loggbok avslöjar fyrens hemlighet — hitta tunneln ut");
+        showToast("Loggboken berättar om ett hotell där ingen gäst checkade ut...", 5);
+      }
+      break;
+    case "lighthouse_exit":
+      if (!state.journey.flags.wavePassed) showToast("Tunneln är blockerad tills tsunamin passerat.", 2.5);
+      else if (!state.journey.flags.secretFound) showToast("Undersök de konstiga ljuden i fyrens källare först.", 3);
+      else enterNextJourneyChapter();
+      break;
+    case "hotel_key":
+    case "hotel_document":
+      collectHotelItem(item);
+      break;
+    case "hotel_exit":
+      if (!state.journey.flags.exitOpen) showToast(`Entrén är låst · nycklar ${state.journey.flags.keysFound}/3 · dokument ${state.journey.flags.documentsFound}/3`, 3);
+      else enterNextJourneyChapter();
+      break;
+    case "grave_riddle":
+      openGraveRiddle(item);
+      break;
+    case "grave_altar":
+      if (state.journey.flags.riddlesSolved < 3) showToast("Altaret behöver svaren från alla tre gravstenar.", 3);
+      else if (!state.journey.flags.curseBroken) {
+        state.journey.flags.curseBroken = true;
+        state.journey.flags.exitOpen = true;
+        state.monster.active = false;
+        monsterModel.visible = false;
+        markJourneyItem(item);
+        showJourneyExitReady();
+        setJourneyObjective("Förbannelsen är bruten — porten till det försvunna tivolit har öppnats");
+        showToast("Ett blått ljus sveper över gravarna. Skramlaren försvinner!", 4);
+      }
+      break;
+    case "graveyard_exit":
+      if (!state.journey.flags.curseBroken) showToast("Kyrkogårdsporten öppnas först när förbannelsen är bruten.", 3);
+      else enterNextJourneyChapter();
+      break;
+    case "carnival_switch":
+      collectCarnivalSwitch(item);
+      break;
+    case "carnival_exit":
+      if (!state.journey.flags.exitOpen) showToast(`Grinden saknar ström · attraktioner ${state.journey.flags.switchesOff}/3`, 3);
+      else enterNextJourneyChapter();
+      break;
+    case "doll_clue":
+      collectSimpleChapterItem(
+        item, "cluesFound", "clueIds", 3,
+        "Dockmakarens lås har öppnats — lämna huset innan dockorna kommer närmare",
+        (count) => `En lapp från dockmakaren: ${count} / 3. Något flyttade sig bakom er...`
+      );
+      break;
+    case "doll_exit":
+      if (!state.journey.flags.exitOpen) showToast(`Dörren behöver dockmakarens tre ledtrådar · ${state.journey.flags.cluesFound}/3`, 3);
+      else enterNextJourneyChapter();
+      break;
+    case "museum_clue":
+      collectSimpleChapterItem(
+        item, "cluesFound", "clueIds", 3,
+        "Nödutgångens kod är komplett — spring medan utställningen jagar er",
+        (count) => `Koddel ${count} / 3 hittad bakom ett gammalt konstverk.`,
+        () => state.journey.flags.exhibitsAwake
+      );
+      break;
+    case "museum_exit":
+      if (!state.journey.flags.exhibitsAwake) showToast("Museiklockan har ännu inte slagit tolv. Något väntar i mörkret...", 3);
+      else if (!state.journey.flags.exitOpen) showToast(`Nödutgången behöver tre koddelar · ${state.journey.flags.cluesFound}/3`, 3);
+      else {
+        state.monster.active = false;
+        monsterModel.visible = false;
+        enterNextJourneyChapter();
+      }
+      break;
+    case "hospital_elevator": {
+      const flags = state.journey.flags;
+      const floors = [4, 7, 13];
+      const floorIndex = Math.min(flags.elevatorStops, floors.length - 1);
+      const floor = floors[floorIndex];
+      flags.elevatorStops = Math.min(floors.length, flags.elevatorStops + 1);
+      flags.currentFloor = floor;
+      if (!flags.visitedFloors.includes(floor)) flags.visitedFloors.push(floor);
+      const destination = journeyWorld.actors.floorSpawns?.[floorIndex];
+      if (destination) {
+        player().x = destination.x;
+        player().z = destination.z;
+        player().yaw = destination.yaw ?? 0;
+      }
+      if (floor >= 7 && !flags.nurseAwake) {
+        flags.nurseAwake = true;
+        const nurse = journeyWorld.actors.nurse;
+        if (nurse) nurse.visible = true;
+      }
+      setJourneyObjective(`VÅNING ${floor} finns inte på kartan — hitta patientjournalen och återvänd till hissen`);
+      showToast(`Hissen stannar på VÅNING ${floor}. Den knappen fanns inte nyss...`, 4);
+      break;
+    }
+    case "hospital_record": {
+      const found = collectSimpleChapterItem(
+        item, "recordsFound", "recordIds", 3,
+        "Tre journaler avslöjar den hemliga källaren — ta sjukhusets nödutgång",
+        (count) => `Patientjournal ${count} / 3: "Hissen fortsätter fyra våningar ner."`
+      );
+      if (found) {
+        const elevator = journeyWorld.actors.elevator;
+        if (elevator?.position) {
+          player().x = elevator.position.x;
+          player().z = elevator.position.z + 3;
+          state.journey.flags.currentFloor = 1;
+        }
+      }
+      break;
+    }
+    case "hospital_exit":
+      if (!state.journey.flags.exitOpen) showToast(`Nödutgången kräver tre patientjournaler · ${state.journey.flags.recordsFound}/3`, 3);
+      else enterNextJourneyChapter();
+      break;
+    case "basement_elevator": {
+      const flags = state.journey.flags;
+      flags.elevatorUsed = true;
+      state.journey.stage = "shifting_maze";
+      const destination = journeyWorld.actors.basementSpawn || journeyWorld.actors.corridorLayouts?.[0]?.userData?.spawn;
+      if (destination) { player().x = destination.x; player().z = destination.z; player().yaw = destination.yaw ?? 0; }
+      setJourneyObjective("FYRA VÅNINGAR NER — öppna fyra dörrar och följ korridoren som byggs om");
+      showToast("Hissen passerar -1, -2, -3... och stannar på -4.", 4);
+      break;
+    }
+    case "shifting_door": {
+      const flags = state.journey.flags;
+      if (!flags.elevatorUsed) { showToast("Ta kontrollhusets hiss ner till källaren först.", 3); break; }
+      if (flags.doorIds.includes(item.id)) { showToast("Den dörren leder nu tillbaka till samma korridor.", 2); break; }
+      flags.doorIds.push(item.id);
+      flags.doorsOpened = flags.doorIds.length;
+      flags.layoutIndex = flags.doorsOpened % Math.max(1, journeyWorld.actors.corridorLayouts?.length || 1);
+      (journeyWorld.actors.corridorLayouts || []).forEach((layout, index) => { layout.visible = index === flags.layoutIndex; });
+      markJourneyItem(item);
+      tone(64, .45, "sawtooth", .022);
+      if (flags.doorsOpened >= 4) {
+        flags.exitOpen = true;
+        showJourneyExitReady();
+        setJourneyObjective("Den fjärde dörren visar den riktiga utgången — lämna källaren!");
+      } else setJourneyObjective(`Korridoren förändrades igen · dörrar ${flags.doorsOpened} / 4`);
+      showToast("Väggarna glider. Korridoren bakom dörren är inte samma längre!", 3);
+      break;
+    }
+    case "basement_exit":
+      if (!state.journey.flags.exitOpen) showToast(`Utgången finns inte i den här korridoren än · ${state.journey.flags.doorsOpened}/4 dörrar`, 3);
+      else {
+        state.journey.loop += 1;
+        enterJourneyChapter("forest_houses");
+      }
       break;
     default:
       showToast(item.label || "Ni undersöker föremålet.", 2.5);
@@ -1478,7 +1909,10 @@ function crossedClock(oldValue, newValue, target) {
 function updateClock(dt) {
   const old = state.clockMinutes;
   state.clockMinutes += dt * CLOCK_SPEED;
-  if (state.clockMinutes >= 1440) { state.clockMinutes -= 1440; state.day += 1; }
+  if (state.clockMinutes >= 1440) {
+    state.clockMinutes -= 1440;
+    if (inWarehouse()) state.day += 1;
+  }
   if (!inWarehouse()) return;
   const monsterMinute = 3 * 60 + 33;
   if (!state.monsterDays[state.day] && crossedClock(old, state.clockMinutes, monsterMinute)) spawnMonster();
@@ -1560,13 +1994,27 @@ function updateWeather(dt) {
   }
 }
 
-function spawnJourneyMonster(distance = 22, speedScale = .8) {
+function spawnJourneyMonster(distance = 22, speedScale = .8, options = {}) {
   if (state.monster.active) return;
   const p = player();
+  const source = options.source || journeyWorld?.actors?.monsterSpawn || null;
   const behindX = Math.sin(p.yaw);
   const behindZ = Math.cos(p.yaw);
-  state.monster.x = p.x + behindX * distance;
-  state.monster.z = p.z + behindZ * distance;
+  const preferredX = Number.isFinite(source?.position?.x) ? source.position.x : p.x + behindX * distance;
+  const preferredZ = Number.isFinite(source?.position?.z) ? source.position.z : p.z + behindZ * distance;
+  let spawnX = preferredX;
+  let spawnZ = preferredZ;
+  if (collides(spawnX, spawnZ, .7)) {
+    for (let i = 0; i < 16; i += 1) {
+      const angle = i * Math.PI / 4;
+      const radius = 3 + Math.floor(i / 8) * 3;
+      const candidateX = preferredX + Math.cos(angle) * radius;
+      const candidateZ = preferredZ + Math.sin(angle) * radius;
+      if (!collides(candidateX, candidateZ, .7)) { spawnX = candidateX; spawnZ = candidateZ; break; }
+    }
+  }
+  state.monster.x = spawnX;
+  state.monster.z = spawnZ;
   state.monster.active = true;
   state.monster.mode = "hunting";
   state.monster.targetPlayerId = state.localPlayerId;
@@ -1575,7 +2023,8 @@ function spawnJourneyMonster(distance = 22, speedScale = .8) {
   state.monster.sawHide = false;
   state.monster.speedScale = speedScale;
   monsterModel.visible = true;
-  showToast("Skramlaren har följt efter er till den här världen!", 4);
+  if (source?.visible != null) source.visible = false;
+  showToast(options.message || "Skramlaren har följt efter er till den här världen!", 4);
   monsterArrivalSound();
 }
 
@@ -1634,6 +2083,120 @@ function updateJourneyActors(dt) {
       pulseMaterial(object, 2 + danger * 5);
     });
   }
+  if (state.chapter === "haunted_school") {
+    (actors.lights || []).forEach((light, index) => {
+      const blackout = Math.floor(t * 9 + index * 3) % 17 === 0 || (state.journey.flags.monsterArrived && Math.floor(t * 13 + index) % 23 < 2);
+      light.visible = !blackout;
+      if (!blackout) pulseMaterial(light, 1.5 + Math.sin(t * 7 + index) * .7);
+    });
+    (actors.doors || []).forEach((door, index) => {
+      if (door.userData.schoolBaseYaw == null) door.userData.schoolBaseYaw = door.rotation.y;
+      const slam = state.journey.flags.doorsLocked ? Math.sin(Math.min(1, Math.max(0, t - 6)) * Math.PI / 2) : 0;
+      const closedYaw = door.userData.closedYaw ?? door.userData.schoolBaseYaw;
+      door.rotation.y = THREE.MathUtils.lerp(door.userData.schoolBaseYaw, closedYaw, slam)
+        + Math.sin(t * 3 + index) * .018 * (1 - slam);
+    });
+    (actors.footsteps || []).forEach((step, index) => {
+      step.visible = state.journey.flags.footstepsHeard > index;
+      if (step.visible) pulseMaterial(step, 1.5 + Math.sin(t * 4 + index) * .8);
+    });
+  }
+  if (state.chapter === "lighthouse_city") {
+    if (actors.lighthouseBeam) actors.lighthouseBeam.rotation.y += dt * .55;
+    (actors.stormClouds || []).forEach((cloud, index) => {
+      if (cloud.userData.baseX == null) cloud.userData.baseX = cloud.position.x;
+      cloud.position.x = cloud.userData.baseX + Math.sin(t * .18 + index) * 5;
+    });
+    if (actors.tsunami) {
+      const startZ = actors.tsunami.userData.startZ ?? 153;
+      const safeZ = actors.tsunami.userData.safeZ ?? -78;
+      const approach = clamp(1 - state.journey.flags.tsunamiIn / LIGHTHOUSE_TSUNAMI_SECONDS, 0, 1);
+      actors.tsunami.position.z = startZ + (safeZ - startZ) * approach - (state.journey.flags.waveElapsed || 0) * 11;
+      actors.tsunami.scale.y = 1 + approach * .7;
+      pulseMaterial(actors.tsunami, .8 + approach * 2.4);
+    }
+  }
+  if (state.chapter === "lost_carnival") {
+    (actors.rides || []).forEach((ride, index) => {
+      const switchId = `carnival-switch-${index + 1}`;
+      if (state.journey.flags.switchIds.includes(switchId)) return;
+      const rotor = ride.userData.rotor || ride;
+      const speed = ride.userData.speed || (.2 + index * .08);
+      if (index === 1) rotor.rotation.z += dt * speed;
+      else rotor.rotation.y += dt * speed;
+    });
+    (actors.lights || []).forEach((light, index) => pulseMaterial(light, 2.2 + Math.sin(t * 5 + index) * 1.5));
+  }
+  if (state.chapter === "midnight_museum" && state.journey.flags.exhibitsAwake) {
+    (actors.statues || []).forEach((statue, index) => {
+      statue.rotation.y += dt * (.08 + index * .012);
+      statue.position.y = Math.sin(t * 2 + index) * .05;
+    });
+    (actors.paintings || []).forEach((painting, index) => {
+      if (painting.userData.baseY == null) painting.userData.baseY = painting.position.y;
+      painting.rotation.z = Math.sin(t * 1.8 + index) * .12;
+      painting.position.y = painting.userData.baseY + Math.sin(t * 3 + index) * .06;
+    });
+  }
+  if (state.chapter === "midnight_museum" && actors.clockHands?.length === 2) {
+    const minute = ((state.clockMinutes % 60) + 60) % 60;
+    const hour = ((state.clockMinutes / 60) % 12 + 12) % 12;
+    actors.clockHands[0].rotation.z = -hour / 12 * Math.PI * 2;
+    actors.clockHands[1].rotation.z = -minute / 60 * Math.PI * 2;
+  }
+  if (state.chapter === "graveyard_secret") {
+    const dawn = clamp(1 - state.journey.flags.dawnIn / GRAVEYARD_DAWN_SECONDS, 0, 1);
+    (actors.dawnLights || []).forEach((light) => { light.intensity = (light.userData.baseIntensity || 1) * (.4 + dawn * 2.2); });
+    if (actors.dawnSun) actors.dawnSun.visible = dawn > .45;
+  }
+}
+
+function angleDistance(a, b) {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
+}
+
+function updateChapterFollower(actor, awake, distanceFlag, dt, speed, failMessage, retryChapter) {
+  if (!actor) return false;
+  actor.visible = Boolean(awake);
+  if (!awake) return false;
+  const p = player();
+  if (!actor.userData.followStarted) {
+    const points = journeyWorld.actors.followPoints || journeyWorld.actors.clownSpawn || [];
+    const candidates = Array.isArray(points) ? points : [points];
+    const farthest = candidates.filter(Boolean).sort((a, b) =>
+      distance2D(p.x, p.z, b.x, b.z) - distance2D(p.x, p.z, a.x, a.z)
+    )[0];
+    if (farthest) actor.position.set(farthest.x, farthest.y || 0, farthest.z);
+    actor.userData.followStarted = true;
+  }
+  const dx = p.x - actor.position.x;
+  const dz = p.z - actor.position.z;
+  const distance = Math.max(.001, Math.hypot(dx, dz));
+  state.journey.flags[distanceFlag] = Math.round(distance * 10) / 10;
+  const mx = dx / distance * speed * dt;
+  const mz = dz / distance * speed * dt;
+  if (!collides(actor.position.x + mx, actor.position.z + mz, .52)) {
+    actor.position.x += mx;
+    actor.position.z += mz;
+  } else if (!collides(actor.position.x + mx, actor.position.z, .52)) actor.position.x += mx;
+  else if (!collides(actor.position.x, actor.position.z + mz, .52)) actor.position.z += mz;
+  else {
+    const sx = -dz / distance * speed * dt;
+    const sz = dx / distance * speed * dt;
+    if (!collides(actor.position.x + sx, actor.position.z + sz, .52)) {
+      actor.position.x += sx;
+      actor.position.z += sz;
+    }
+  }
+  actor.rotation.y = Math.atan2(dx, dz);
+  actor.position.y = Math.abs(Math.sin(state.journey.elapsed * 3.2)) * .04;
+  const captureDistance = distance2D(actor.position.x, actor.position.z, p.x, p.z);
+  state.journey.flags[distanceFlag] = Math.round(captureDistance * 10) / 10;
+  if (captureDistance < 1.15 && !lineBlocked(actor.position.x, actor.position.z, p.x, p.z)) {
+    failJourney(failMessage, retryChapter);
+    return true;
+  }
+  return false;
 }
 
 function updateJourney(dt) {
@@ -1784,6 +2347,181 @@ function updateJourney(dt) {
         return;
       }
       break;
+    case "haunted_school": {
+      flags.monsterIn = Math.max(0, SCHOOL_MONSTER_SECONDS - state.journey.elapsed);
+      state.clockMinutes = 3 * 60 + 33 - flags.monsterIn / SCHOOL_MONSTER_SECONDS;
+      if (!flags.doorLockDone && state.journey.elapsed >= 6) {
+        flags.doorsLocked = true;
+        flags.doorLockDone = true;
+        showToast("KLICK... skolans dörrar låser sig själva.", 3);
+        tone(66, .3, "square", .024); tone(54, .45, "square", .02, .2);
+      }
+      if (flags.doorsLocked && state.journey.elapsed >= 9) {
+        flags.doorsLocked = false;
+        showToast("KLICK... efter några kusliga sekunder släpper dörrarnas lås igen.", 3);
+      }
+      if (state.journey.elapsed >= flags.nextFootstepAt && !flags.monsterArrived) {
+        flags.footstepsHeard += 1;
+        flags.nextFootstepAt += 6;
+        showToast(flags.footstepsHeard === 1 ? "Fotsteg hörs i korridoren — men ni är ensamma..." : "Fotstegen är närmare nu.", 2.8);
+        tone(92, .12, "sine", .018); tone(76, .15, "sine", .016, .22);
+      }
+      if (!flags.monsterArrived && flags.monsterIn <= JOURNEY_TIMER_EPSILON) {
+        flags.monsterIn = 0;
+        flags.monsterArrived = true;
+        state.journey.stage = "hunt";
+        spawnJourneyMonster(25, .78, {
+          source: actors.monster,
+          message: "03:33 — IKEA-MONSTRET SKRAMLAREN ÄR I SKOLAN!"
+        });
+        setJourneyObjective(`Skramlaren jagar er — lös pusslen ${flags.puzzlesSolved} / 3 och fly`);
+      }
+      break;
+    }
+    case "lighthouse_city": {
+      if (!flags.waveActive && !flags.wavePassed) flags.tsunamiIn = Math.max(0, flags.tsunamiIn - dt);
+      if (flags.tsunamiIn <= 10 && !flags.warned) {
+        flags.warned = true;
+        showToast("TSUNAMIVARNING — SPRING UPPFÖR BERGET TILL FYREN!", 5);
+        tone(58, .8, "sawtooth", .035); tone(46, 1, "square", .025, .5);
+      }
+      if (!flags.waveActive && !flags.wavePassed && flags.tsunamiIn <= JOURNEY_TIMER_EPSILON) {
+        flags.tsunamiIn = 0;
+        const shelter = actors.shelterSpawn;
+        const insideShelter = flags.sheltered && shelter
+          && distance2D(player().x, player().z, shelter.x, shelter.z) <= 15;
+        if (!insideShelter) {
+          failJourney("Tsunamin svepte över hela staden innan ni hann till fyren.", "lighthouse_city");
+          return;
+        }
+        flags.waveActive = true;
+        flags.waveElapsed = 0;
+        state.journey.stage = "wave";
+        showToast("VÅGEN TRÄFFAR FYREN — håll er inne!", 5);
+      }
+      if (flags.waveActive) {
+        const shelter = actors.shelterSpawn;
+        if (!shelter || distance2D(player().x, player().z, shelter.x, shelter.z) > 15) {
+          failJourney("Ni lämnade fyrens skydd medan tsunamin slog över staden.", "lighthouse_city");
+          return;
+        }
+        flags.waveElapsed += dt;
+        if (flags.waveElapsed >= LIGHTHOUSE_WAVE_SECONDS) {
+          flags.waveActive = false;
+          flags.wavePassed = true;
+          state.journey.stage = "basement";
+          if (actors.secret) actors.secret.visible = true;
+          if (actors.basementDoor) actors.basementDoor.userData.locked = false;
+          player().x = 58;
+          player().z = -106;
+          player().yaw = 0;
+          setJourneyObjective("Tsunamin har passerat — undersök ljudet från fyrens källare");
+          showToast("Skyddsrummets innerdörr öppnas. Något elektriskt surrar i källaren...", 4);
+        }
+      }
+      break;
+    }
+    case "forbidden_hotel": {
+      if (!flags.shadowAwake && state.journey.elapsed > 8) {
+        flags.shadowAwake = true;
+        showToast("En lång skugga passerar tvärs över korridoren.", 3.5);
+      }
+      const follower = actors.follower || actors.shadowCreature;
+      if (updateChapterFollower(follower, flags.shadowAwake, "shadowDistance", dt, 1.18,
+        "Skuggan hann ikapp er i hotellets korridor.", "forbidden_hotel")) return;
+      if (flags.shadowAwake && state.journey.elapsed >= flags.nextWhisperAt) {
+        flags.nextWhisperAt += 7;
+        tone(71, .3, "sine", .014); tone(64, .35, "sine", .012, .24);
+      }
+      break;
+    }
+    case "graveyard_secret": {
+      flags.dawnIn = Math.max(0, GRAVEYARD_DAWN_SECONDS - state.journey.elapsed);
+      state.clockMinutes = 6 * 60 - flags.dawnIn * (5 / GRAVEYARD_DAWN_SECONDS);
+      if (state.journey.elapsed >= flags.nextWhisperAt && !flags.curseBroken) {
+        flags.nextWhisperAt += 8;
+        tone(82, .22, "sine", .013); tone(55, .5, "sawtooth", .012, .25);
+      }
+      if (!flags.monsterArrived && !flags.curseBroken && flags.dawnIn <= JOURNEY_TIMER_EPSILON) {
+        flags.dawnIn = 0;
+        flags.monsterArrived = true;
+        state.journey.stage = "dawn_hunt";
+        spawnJourneyMonster(27, .76, {
+          source: actors.monster,
+          message: "06:00 — GRYNINGEN VÄCKER IKEA-MONSTRET PÅ KYRKOGÅRDEN!"
+        });
+        setJourneyObjective(`Skramlaren är här — lös gåtorna ${flags.riddlesSolved} / 3 och bryt förbannelsen`);
+      }
+      break;
+    }
+    case "lost_carnival": {
+      if (!flags.clownAwake && state.journey.elapsed >= 3) {
+        flags.clownAwake = true;
+        showToast("Karusellerna startar av sig själva. En clown står vid grinden...", 4);
+        tone(196, .22, "square", .018); tone(233, .22, "square", .016, .24);
+      }
+      if (flags.clownAwake && state.journey.elapsed >= flags.nextLaughAt) {
+        flags.nextLaughAt += 7;
+        tone(330, .1, "square", .012); tone(392, .12, "square", .011, .13); tone(294, .18, "square", .01, .28);
+      }
+      if (updateChapterFollower(actors.clown, flags.clownAwake, "clownDistance", dt, 1.28,
+        "Den mystiska clownen fångade er mellan åkattraktionerna.", "lost_carnival")) return;
+      break;
+    }
+    case "dollmaker_house": {
+      if (flags.lastDollYaw == null) flags.lastDollYaw = player().yaw;
+      const turned = Math.abs(angleDistance(player().yaw, flags.lastDollYaw));
+      if (turned >= 1.25 && state.journey.elapsed - flags.lastDollMoveAt >= .8) {
+        flags.lastDollYaw = player().yaw;
+        flags.lastDollMoveAt = state.journey.elapsed;
+        flags.dollMoves += 1;
+        const dolls = actors.dolls || [];
+        const positions = actors.dollPositions || [];
+        dolls.forEach((doll, index) => {
+          const position = positions.length ? positions[(index + flags.dollMoves) % positions.length] : null;
+          if (position) doll.position.set(position.x, position.y || 0, position.z);
+          doll.rotation.y = Math.atan2(player().x - doll.position.x, player().z - doll.position.z);
+        });
+        showToast("När ni vänder er om står dockorna på nya platser...", 3);
+        tone(118, .16, "triangle", .018); tone(96, .22, "triangle", .014, .18);
+      }
+      break;
+    }
+    case "midnight_museum": {
+      flags.midnightIn = Math.max(0, MUSEUM_MIDNIGHT_SECONDS - state.journey.elapsed);
+      state.clockMinutes = flags.midnightIn <= JOURNEY_TIMER_EPSILON
+        ? 0 : 24 * 60 - flags.midnightIn / MUSEUM_MIDNIGHT_SECONDS;
+      if (!flags.exhibitsAwake && flags.midnightIn <= JOURNEY_TIMER_EPSILON) {
+        flags.midnightIn = 0;
+        flags.exhibitsAwake = true;
+        flags.monsterArrived = true;
+        state.journey.stage = "midnight_hunt";
+        spawnJourneyMonster(24, .82, {
+          source: actors.monster,
+          message: "00:00 — STATYERNA RÖR SIG OCH IKEA-MONSTRET ÄR I MUSEET!"
+        });
+        if (flags.cluesFound >= 3) {
+          flags.exitOpen = true;
+          state.journey.stage = "escape";
+          showJourneyExitReady();
+          setJourneyObjective("00:00 — koden fungerar! Spring ut från museet medan allt jagar er");
+        } else setJourneyObjective(`Midnatt! Spring till nödutgången · koddelar ${flags.cluesFound} / 3`);
+      }
+      break;
+    }
+    case "forgotten_hospital": {
+      if (!flags.nurseAwake && state.journey.elapsed > 10) {
+        flags.nurseAwake = true;
+        showToast("En blodfläckig sjuksköterska kliver ut ur en sal som inte finns på kartan.", 4);
+      }
+      if (state.journey.elapsed >= flags.nextAlarmAt) {
+        flags.nextAlarmAt += 9;
+        tone(520, .08, "square", .01); tone(390, .12, "square", .009, .14);
+      }
+      if (updateChapterFollower(actors.nurse, flags.nurseAwake, "nurseDistance", dt, 1.24,
+        "Den gamla sjuksköterskan fångade er på den förbjudna våningen.", "forgotten_hospital")) return;
+      break;
+    }
     default:
       break;
   }
@@ -1928,7 +2666,11 @@ function updateLighting() {
   scene.background.copy(top);
   scene.fog.color.copy(bottom);
   if (!inWarehouse() && journeyWorld) {
-    const dimChapter = ["dragon_caves", "electric_hollow", "ghost_train"].includes(state.chapter);
+    const dimChapter = [
+      "dragon_caves", "electric_hollow", "ghost_train", "haunted_school",
+      "forbidden_hotel", "graveyard_secret", "lost_carnival", "dollmaker_house",
+      "midnight_museum", "forgotten_hospital", "four_floors_down"
+    ].includes(state.chapter);
     const electricHollow = state.chapter === "electric_hollow";
     hemisphere.intensity = Math.max(hemisphere.intensity, electricHollow ? 1.08 : dimChapter ? .72 : 1.02);
     sun.intensity = Math.max(sun.intensity, electricHollow ? .92 : dimChapter ? .68 : 1.08);
@@ -1967,6 +2709,10 @@ function updatePrompt() {
     if (state.chapter === "haunted_house") {
       const desc = nearestObject((item) => furnitureTypes[item.type]?.movable, 2.8);
       if (desc) { state.prompt = `E · Bär ${furnitureTypes[desc.type].name}`; return; }
+    }
+    if (state.chapter === "haunted_school") {
+      const hideout = journeyWorld?.interactables.find((item) => item.kind === "hideout" && distance2D(p.x, p.z, item.x, item.z) <= (item.radius || 3.2) + .45);
+      if (hideout) { state.prompt = "H eller E · Göm dig i elevskåpet"; return; }
     }
     const item = nearestJourneyInteractable(.45);
     state.prompt = item ? (item.label || "E · Undersök") : "";
@@ -2039,6 +2785,27 @@ function updateHud() {
     ? `Instängd ${Math.min(GHOST_TRAIN_TRAP_SECONDS, Math.floor(state.journey.flags.travelTime))} / ${GHOST_TRAIN_TRAP_SECONDS} s`
     : `Avgång 03:33 · ${Math.max(0, Math.ceil(state.journey.flags.departureCountdown))} s`;
   else if (state.chapter === "volcano_island") hudDay.textContent = `Utbrott om ${Math.max(0, Math.ceil(state.journey.flags.eruptionIn - VOLCANO_TIMER_EPSILON))} s`;
+  else if (state.chapter === "haunted_school") hudDay.textContent = state.journey.flags.monsterArrived
+    ? `03:33 · Pussel ${state.journey.flags.puzzlesSolved} / 3`
+    : `03:33 om ${Math.max(0, Math.ceil(state.journey.flags.monsterIn - JOURNEY_TIMER_EPSILON))} s · Pussel ${state.journey.flags.puzzlesSolved}/3`;
+  else if (state.chapter === "lighthouse_city") hudDay.textContent = state.journey.flags.wavePassed
+    ? "Tsunamin har passerat"
+    : state.journey.flags.waveActive
+      ? `Vågen träffar · ${Math.min(LIGHTHOUSE_WAVE_SECONDS, Math.floor(state.journey.flags.waveElapsed))}/${LIGHTHOUSE_WAVE_SECONDS} s`
+      : `Tsunami om ${Math.max(0, Math.ceil(state.journey.flags.tsunamiIn - JOURNEY_TIMER_EPSILON))} s`;
+  else if (state.chapter === "forbidden_hotel") hudDay.textContent = `Nycklar ${state.journey.flags.keysFound}/3 · Dokument ${state.journey.flags.documentsFound}/3`;
+  else if (state.chapter === "graveyard_secret") hudDay.textContent = state.journey.flags.monsterArrived
+    ? `06:00 · Gåtor ${state.journey.flags.riddlesSolved}/3`
+    : `Gryning om ${Math.max(0, Math.ceil(state.journey.flags.dawnIn - JOURNEY_TIMER_EPSILON))} s · Gåtor ${state.journey.flags.riddlesSolved}/3`;
+  else if (state.chapter === "lost_carnival") hudDay.textContent = `Attraktioner ${state.journey.flags.switchesOff}/3 · Clown ${state.journey.flags.clownDistance ?? "?"} m`;
+  else if (state.chapter === "dollmaker_house") hudDay.textContent = `Ledtrådar ${state.journey.flags.cluesFound}/3 · Dockflyttar ${state.journey.flags.dollMoves}`;
+  else if (state.chapter === "midnight_museum") hudDay.textContent = state.journey.flags.exhibitsAwake
+    ? `00:00 · Kod ${state.journey.flags.cluesFound}/3`
+    : `Midnatt om ${Math.max(0, Math.ceil(state.journey.flags.midnightIn - JOURNEY_TIMER_EPSILON))} s · Kod ${state.journey.flags.cluesFound}/3`;
+  else if (state.chapter === "forgotten_hospital") hudDay.textContent = `Våning ${state.journey.flags.currentFloor} · Journaler ${state.journey.flags.recordsFound}/3`;
+  else if (state.chapter === "four_floors_down") hudDay.textContent = state.journey.flags.elevatorUsed
+    ? `Källare −4 · Dörrar ${state.journey.flags.doorsOpened}/4`
+    : "Kontrollhuset · Hissen väntar";
   else if (state.chapter === "haunted_house") hudDay.textContent = state.journey.flags.attackStarted
     ? `Belägring ${Math.min(10, Math.floor(state.journey.flags.attackTime))} / 10 s`
     : `Barrikad ${hauntedFortScore()} / 5`;
@@ -2514,7 +3281,7 @@ function renderGameToText() {
       objective: state.journey.objective,
       flags: { ...state.journey.flags },
       collected: [...state.journey.collected],
-      interactables: (journeyWorld?.interactables || []).filter((item) => !item.disabled && item.mesh?.visible !== false).map((item) => ({
+      interactables: (journeyWorld?.interactables || []).filter((item) => !item.disabled && visibleInHierarchy(item.mesh)).map((item) => ({
         id: item.id, kind: item.kind, x: Math.round(item.x * 10) / 10, z: Math.round(item.z * 10) / 10,
         distance: Math.round(distance2D(p.x, p.z, item.x, item.z) * 10) / 10,
         label: item.label
@@ -2636,6 +3403,38 @@ window.__ikea333Test = {
   nearJourney: (kindOrId) => teleportNearJourney(kindOrId),
   setJourneyElapsed: (seconds) => { state.journey.elapsed = Number(seconds); render(); return JSON.parse(renderGameToText()); },
   setVolcanoTimer: (seconds) => { state.journey.flags.eruptionIn = Number(seconds); render(); return JSON.parse(renderGameToText()); },
+  setSchoolTimer: (seconds) => {
+    state.journey.elapsed = Math.max(0, SCHOOL_MONSTER_SECONDS - Number(seconds));
+    state.journey.flags.monsterIn = Math.max(0, Number(seconds));
+    render(); return JSON.parse(renderGameToText());
+  },
+  setLighthouseTimer: (seconds) => {
+    state.journey.flags.tsunamiIn = Math.max(0, Number(seconds));
+    state.journey.elapsed = Math.max(0, LIGHTHOUSE_TSUNAMI_SECONDS - Number(seconds));
+    render(); return JSON.parse(renderGameToText());
+  },
+  setGraveyardTimer: (seconds) => {
+    state.journey.flags.dawnIn = Math.max(0, Number(seconds));
+    state.journey.elapsed = Math.max(0, GRAVEYARD_DAWN_SECONDS - Number(seconds));
+    render(); return JSON.parse(renderGameToText());
+  },
+  setMuseumTimer: (seconds) => {
+    state.journey.flags.midnightIn = Math.max(0, Number(seconds));
+    state.journey.elapsed = Math.max(0, MUSEUM_MIDNIGHT_SECONDS - Number(seconds));
+    render(); return JSON.parse(renderGameToText());
+  },
+  setPlayerYaw: (yaw) => { player().yaw = Number(yaw); updatePrompt(); render(); return JSON.parse(renderGameToText()); },
+  setFollowerDistance: (actorName, metres) => {
+    const actor = journeyWorld?.actors?.[actorName];
+    if (!actor) return null;
+    const p = player();
+    actor.position.set(p.x, 0, p.z + Number(metres));
+    actor.userData.followStarted = true;
+    if (actorName === "follower") state.journey.flags.shadowAwake = true;
+    if (actorName === "clown") state.journey.flags.clownAwake = true;
+    if (actorName === "nurse") state.journey.flags.nurseAwake = true;
+    render(); return JSON.parse(renderGameToText());
+  },
   choose: (which) => { closeChoice(which === "secondary" ? "secondary" : "primary"); render(); return JSON.parse(renderGameToText()); },
   placeHauntedFort: () => {
     const door = hauntedDoorPosition();

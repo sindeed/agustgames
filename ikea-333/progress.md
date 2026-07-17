@@ -18,7 +18,7 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 
 ## Integration och testning
 
-- `index.html` laddar Three.js 0.185.1 och `game.js?v=7` som ES-modul.
+- `index.html` laddar Three.js 0.185.1 och `game.js?v=8` som ES-modul.
 - `window.render_game_to_text()` beskriver spelläget för testning och `window.advanceTime(ms)` ger deterministisk tid.
 - Rootmenyn och README länkar till `ikea-333/`.
 - Playwright-provspelning verifierade rörelse, 03:33-spawn, fångst/omstart, gömställe till 06:00, upplåst utgång, hela filmresan, möbelpersistens, begränsad chunk-memory och mobilrendering.
@@ -57,6 +57,16 @@ Original prompt: mib Jag och min kusin vill göra ett spel där man ska, spelet 
 - Vid noll exploderar vulkanen och lavan skickar spelaren tillbaka till IKEA; flyktbåten leder fortfarande vidare till mysteriebyn.
 - Lavaanimationens styrka följer hela 30-sekunderstimern och de sista tio sekunderna har den starka varningen kvar.
 - Deterministisk Chromium-QA verifierar att spelaren är kvar vid 29,999 sekunder och skickas till IKEA vid exakt 30,000 sekunder, utan console- eller page-fel.
+
+## 2026-07-17 – nio nya förstapersonskapitel
+
+- Ny berättelseordning efter mysteriebyn: gamla skolan → fyrstaden → förbjudna hotellet → kyrkogården → det försvunna tivolit → dockmakarens hus → museet efter stängning → det glömda sjukhuset → Fyra våningar ner.
+- Alla kapitel använder samma högupplösta Three.js-värld, förstapersonskamera, ljus, skuggor, dimma och ficklampa som resten av spelet.
+- Spelmotorn har fått regler för skolpussel och Skramlaren exakt 03:33, tsunami/fyrskydd, hotellfynd och korridorskugga, gravgåtor och gryningsmonster, clownjakt, flyttande dockor, levande museikonst vid midnatt, hemliga sjukhusvåningar och föränderliga källarkorridorer.
+- Alla nio världar är färdigmodellerade och sammankopplade. Spelet har nu totalt 23 spelbara kapitel och fortsätter därefter i den nya obby-loopen.
+- Fyrstaden har ett slutet skyddsrum under fyren; tsunamin sveper bort spelaren som inte hinner in. Museets nödutgång aktiveras först när klockan verkligen slår 00:00.
+- Automatisk Chromium-genomspelning verifierar 187 kontroller genom alla nio nya kapitel, 16 visuella kontrollbilder, rätt omstarter och noll console- eller page-fel.
+- En separat slutkörning passerar hela kedjan från IKEA genom samtliga 23 kapitel och tillbaka till den nya skogsloopen. Mobilvyer i 390 × 844 för sju av de nya miljöerna ryms utan scroll, klippning eller webbläsarfel.
 
 ## Nya idéer från Agust och kusinen
 

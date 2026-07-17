@@ -17,7 +17,16 @@ export const JOURNEY_ORDER = Object.freeze([
   "ghost_train",
   "desert",
   "volcano_island",
-  "mystery_village"
+  "mystery_village",
+  "haunted_school",
+  "lighthouse_city",
+  "forbidden_hotel",
+  "graveyard_secret",
+  "lost_carnival",
+  "dollmaker_house",
+  "midnight_museum",
+  "forgotten_hospital",
+  "four_floors_down"
 ]);
 
 export const CHAPTER_INFO = Object.freeze({
@@ -86,6 +95,51 @@ export const CHAPTER_INFO = Object.freeze({
   mystery_village: {
     title: "Byn som inte borde finnas",
     objective: "Hitta tre engelska ledtrådar och öppna den gamla porten.",
+    next: "haunted_school"
+  },
+  haunted_school: {
+    title: "Skolan klockan 03:33",
+    objective: "Lös skolans tre pussel innan IKEA-monstret hittar dig och öppna nödutgången.",
+    next: "lighthouse_city"
+  },
+  lighthouse_city: {
+    title: "Fyren vid havet",
+    objective: "Fly den enorma tsunamin, nå fyren på berget och avslöja hemligheten i källaren.",
+    next: "forbidden_hotel"
+  },
+  forbidden_hotel: {
+    title: "Det förbjudna hotellet",
+    objective: "Hitta tre nycklar och tre dokument medan skuggvarelsen följer efter dig.",
+    next: "graveyard_secret"
+  },
+  graveyard_secret: {
+    title: "Kyrkogårdens hemlighet",
+    objective: "Lös gravarnas tre gåtor och öppna altarets hemliga passage före gryningen.",
+    next: "lost_carnival"
+  },
+  lost_carnival: {
+    title: "Det försvunna tivolit",
+    objective: "Stäng av tre övergivna åkattraktioner och håll ögonen på clownen.",
+    next: "dollmaker_house"
+  },
+  dollmaker_house: {
+    title: "Dockmakarens hus",
+    objective: "Hitta tre ledtrådar bland dockorna och öppna husets låsta bakdörr.",
+    next: "midnight_museum"
+  },
+  midnight_museum: {
+    title: "Museet efter stängning",
+    objective: "Lös tre utställningsledtrådar innan klockan slår midnatt och monstret vaknar.",
+    next: "forgotten_hospital"
+  },
+  forgotten_hospital: {
+    title: "Det glömda sjukhuset",
+    objective: "Använd hissen, undersök våning 4, 7 och 13 och undvik sjuksköterskan.",
+    next: "four_floors_down"
+  },
+  four_floors_down: {
+    title: "Fyra våningar ner",
+    objective: "Ta hissen till den hemliga källaren och hitta rätt väg genom korridorerna som skiftar.",
     next: "forest_houses"
   }
 });
@@ -103,7 +157,16 @@ const WORLD_BUILDERS = {
   ghost_train: buildGhostTrain,
   desert: buildDesert,
   volcano_island: buildVolcanoIsland,
-  mystery_village: buildMysteryVillage
+  mystery_village: buildMysteryVillage,
+  haunted_school: buildHauntedSchool,
+  lighthouse_city: buildLighthouseCity,
+  forbidden_hotel: buildForbiddenHotel,
+  graveyard_secret: buildGraveyardSecret,
+  lost_carnival: buildLostCarnival,
+  dollmaker_house: buildDollmakerHouse,
+  midnight_museum: buildMidnightMuseum,
+  forgotten_hospital: buildForgottenHospital,
+  four_floors_down: buildFourFloorsDown
 };
 
 export function buildJourneyWorld(chapter) {
@@ -1913,5 +1976,2098 @@ function buildMysteryVillage() {
   context.actors.gate = gate;
   context.actors.gateDoors = gateDoors;
   context.actors.mist = mist;
+  return finishWorld(context);
+}
+
+function buildHauntedSchool() {
+  const context = createWorld(
+    "haunted_school",
+    { minX: -33, maxX: 33, minZ: -93, maxZ: 93 },
+    { x: 0, y: 0, z: 84, yaw: 0 },
+    {
+      sky: 0x050812,
+      ground: 0x010203,
+      hemisphere: .48,
+      sun: 0x7183a8,
+      sunIntensity: .32,
+      sunX: -28,
+      sunY: 24,
+      sunZ: 18
+    }
+  );
+  context.root.userData.backgroundColor = 0x050812;
+  context.root.userData.isInterior = true;
+
+  const floorMat = material(context, "school-floor", { color: 0x374046, roughness: .76, metalness: .08 });
+  const classroomFloorMat = material(context, "school-classroom-floor", { color: 0x493e35, roughness: .93 });
+  const wallMat = material(context, "school-wall", { color: 0x77786f, roughness: .98 });
+  const lowerWallMat = material(context, "school-lower-wall", { color: 0x314244, roughness: .92 });
+  const ceilingMat = material(context, "school-ceiling", { color: 0x30343a, roughness: .96 });
+  const trimMat = material(context, "school-trim", { color: 0x202a2c, roughness: .82 });
+  const oldWood = material(context, "school-old-wood", { color: 0x5a3f2c, roughness: .95 });
+  const darkWood = material(context, "school-dark-wood", { color: 0x281e1a, roughness: .96 });
+  const metalMat = material(context, "school-metal", { color: 0x465159, roughness: .43, metalness: .72 });
+  const glassMat = material(context, "school-night-window", {
+    physical: true,
+    color: 0x193a58,
+    emissive: 0x0b1d39,
+    emissiveIntensity: 1.2,
+    roughness: .12,
+    transparent: true,
+    opacity: .5
+  });
+  const blackboardMat = material(context, "school-blackboard", {
+    color: 0x172a24,
+    emissive: 0x07100d,
+    emissiveIntensity: .22,
+    roughness: .97
+  });
+
+  plane(context, 16, 188, floorMat, 0, 0, 0);
+  plane(context, 25, 188, classroomFloorMat, -20.5, -.01, 0);
+  plane(context, 25, 188, classroomFloorMat, 20.5, -.01, 0);
+  box(context, 68, .45, 190, ceilingMat, 0, 9.05, 0);
+
+  // Ytterväggarna och bakväggen lämnar en riktig öppning framför nödutgången.
+  for (const x of [-34, 34]) {
+    box(context, 1, 9, 190, wallMat, x, 4.5, 0);
+    box(context, .12, 3.1, 188, lowerWallMat, x + (x < 0 ? .56 : -.56), 1.55, 0);
+    collider(context, x, 0, 1, 190);
+  }
+  box(context, 68, 9, 1, wallMat, 0, 4.5, 94);
+  collider(context, 0, 94, 68, 1);
+  for (const x of [-19, 19]) {
+    box(context, 30, 9, 1, wallMat, x, 4.5, -94);
+    collider(context, x, -94, 30, 1);
+  }
+
+  // Korridorväggarna har öppna dörrpassager till två spelbara klassrum.
+  const addCorridorWall = (x, z, length) => {
+    box(context, .5, 8.7, length, wallMat, x, 4.35, z);
+    box(context, .16, 3.1, length, lowerWallMat, x + (x < 0 ? .32 : -.32), 1.55, z);
+    box(context, .75, .24, length, trimMat, x + (x < 0 ? .42 : -.42), 3.12, z);
+    collider(context, x, z, .55, length);
+  };
+  addCorridorWall(-8, 59, 70);
+  addCorridorWall(-8, -12, 64);
+  addCorridorWall(-8, -70, 48);
+  addCorridorWall(8, 36, 116);
+  addCorridorWall(8, -60, 68);
+
+  // Klassrumsavdelare skapar en riktig gammal skola utan att stänga huvudgången.
+  for (const z of [45, 0, -46]) {
+    for (const x of [-21, 21]) {
+      box(context, 25, 8.7, .5, wallMat, x, 4.35, z);
+      collider(context, x, z, 25, .55);
+    }
+  }
+
+  const windows = [];
+  for (const side of [-1, 1]) {
+    for (const z of [68, 54, 32, 15, -16, -32, -61, -76]) {
+      const window = box(context, .1, 2.6, 5.8, glassMat, side * 33.42, 5.65, z);
+      windows.push(window);
+      for (const dz of [-2.95, 2.95]) box(context, .18, 3.05, .18, trimMat, side * 33.31, 5.65, z + dz);
+    }
+  }
+
+  const entrySign = textPanel(context, "NATTSKOLAN\nINGEN LEKTION EFTER 03:33", {
+    x: 0,
+    y: 5.5,
+    z: 93.42,
+    width: 13.5,
+    height: 3.1,
+    background: "#20272b",
+    border: "#879698",
+    color: "#d8ded6",
+    font: "Arial, sans-serif",
+    fontSize: 94,
+    emissive: 0x18262b,
+    emissiveIntensity: .72
+  });
+  interactable(context, "school-warning-sign", "sign", 0, 89, 5.8, "Läs skolans varning", entrySign);
+
+  const lights = [];
+  const lightMat = material(context, "school-flicker-light", {
+    color: 0xd5f6f2,
+    emissive: 0x8be1d5,
+    emissiveIntensity: 3.8,
+    roughness: .22
+  });
+  const deadLightMat = material(context, "school-dead-light", {
+    color: 0x464b49,
+    emissive: 0x111716,
+    emissiveIntensity: .15,
+    roughness: .74
+  });
+  [79, 62, 45, 28, 11, -6, -23, -40, -57, -74, -87].forEach((z, index) => {
+    const fixture = new THREE.Group();
+    fixture.position.set(index % 3 === 0 ? -.7 : .7, 0, z);
+    fixture.name = `school-ceiling-light-${index + 1}`;
+    fixture.userData.flickerOffset = index * .71;
+    fixture.userData.baseIntensity = index % 4 === 2 ? 18 : 28;
+    context.root.add(fixture);
+    box(context, 4.6, .13, .72, index % 5 === 3 ? deadLightMat : lightMat, 0, 8.72, 0, 0, fixture);
+    const glow = pointLight(
+      context,
+      index % 4 === 0 ? 0xa8cfff : 0xc8fff0,
+      fixture.userData.baseIntensity,
+      20,
+      0,
+      7.8,
+      0,
+      fixture
+    );
+    glow.userData.baseIntensity = fixture.userData.baseIntensity;
+    fixture.userData.light = glow;
+    lights.push(fixture);
+  });
+
+  // Dörrar på gångjärn. Motorn kan låsa och slå igen grupperna vid 03:33.
+  const doors = [];
+  const doorMat = material(context, "school-door", { color: 0x4c3528, roughness: .87, metalness: .03 });
+  const doorWindowMat = material(context, "school-door-window", {
+    physical: true,
+    color: 0x4e7684,
+    emissive: 0x142f3c,
+    emissiveIntensity: .8,
+    roughness: .15,
+    transparent: true,
+    opacity: .5
+  });
+  const makeClassroomDoor = (name, x, z, yaw) => {
+    const hinge = new THREE.Group();
+    hinge.position.set(x, 0, z);
+    hinge.rotation.y = yaw;
+    hinge.name = name;
+    hinge.userData.openYaw = yaw;
+    hinge.userData.closedYaw = 0;
+    context.root.add(hinge);
+    box(context, .24, 4.9, 3.6, doorMat, 0, 2.45, 1.8, 0, hinge);
+    box(context, .26, 1.35, 1.65, doorWindowMat, 0, 3.38, 1.8, 0, hinge);
+    cylinder(context, .09, .09, .15, 12, metalMat, -.2, 2.3, 3.25, hinge).rotation.z = Math.PI / 2;
+    doors.push(hinge);
+    return hinge;
+  };
+  makeClassroomDoor("school-door-fuse-room", -8, 20.1, -.82);
+  makeClassroomDoor("school-door-bell-room", 8, -26.1, .82);
+
+  const lockers = [];
+  const lockerMat = material(context, "school-locker", { color: 0x45575a, roughness: .59, metalness: .48 });
+  const lockerDark = material(context, "school-locker-dark", { color: 0x1d292b, roughness: .52, metalness: .62 });
+  for (const side of [-1, 1]) {
+    for (const z of [73, 64, 43, 34, 8, -3, -42, -54, -68]) {
+      if ((side < 0 && Math.abs(z - 22) < 7) || (side > 0 && Math.abs(z + 24) < 7)) continue;
+      const bank = new THREE.Group();
+      bank.position.set(side * 6.92, 0, z);
+      bank.name = `school-lockers-${side < 0 ? "left" : "right"}-${z}`;
+      context.root.add(bank);
+      box(context, 1.2, 3.8, 7.1, lockerMat, 0, 1.9, 0, 0, bank);
+      for (let i = -2; i <= 2; i += 1) {
+        box(context, .05, 3.35, .08, lockerDark, -side * .63, 1.9, i * 1.37, 0, bank);
+        box(context, .08, .12, .52, metalMat, -side * .67, 2.05, i * 1.37, 0, bank);
+      }
+      lockers.push(bank);
+    }
+  }
+
+  const addSchoolDesk = (x, z, yaw = 0) => {
+    const desk = new THREE.Group();
+    desk.position.set(x, 0, z);
+    desk.rotation.y = yaw;
+    context.root.add(desk);
+    box(context, 3.2, .18, 1.55, oldWood, 0, 1.75, 0, 0, desk);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      box(context, .14, 1.7, .14, darkWood, sx * 1.25, .85, sz * .52, 0, desk);
+    }
+    box(context, 1.15, .14, 1.05, oldWood, 0, 1.03, 2.0, 0, desk);
+    box(context, 1.15, 1.5, .12, darkWood, 0, 1.72, 2.46, 0, desk);
+    return desk;
+  };
+  const desks = [];
+  for (const [x, z, yaw] of [
+    [-25, 35, .08], [-17, 35, -.08], [-25, 7, -.04], [-17, 7, .06],
+    [17, -9, -.05], [25, -9, .07], [17, -37, .06], [25, -37, -.08],
+    [-25, -62, .12], [-17, -62, -.1], [17, 62, -.08], [25, 62, .1]
+  ]) desks.push(addSchoolDesk(x, z, yaw));
+
+  for (const [x, z, yaw] of [[-33.3, 14, Math.PI / 2], [33.3, -34, -Math.PI / 2], [-20, 45.3, 0], [20, .3, Math.PI]]) {
+    const board = box(context, .18, 3.2, 11, blackboardMat, x, 4.4, z, yaw);
+    board.name = "old-school-blackboard";
+  }
+
+  // Pussel 1: den stannade klockan i korridoren.
+  const clock = new THREE.Group();
+  clock.position.set(7.54, 5.35, 55);
+  clock.rotation.z = Math.PI / 2;
+  clock.name = "school-clock-0333";
+  context.root.add(clock);
+  const clockFaceMat = material(context, "school-clock-face", {
+    color: 0xe6dfcb,
+    emissive: 0x51483b,
+    emissiveIntensity: .7,
+    roughness: .62
+  });
+  const clockHandMat = material(context, "school-clock-hands", { color: 0x161313, roughness: .5 });
+  cylinder(context, 1.55, 1.55, .22, 32, clockFaceMat, 0, 0, 0, clock);
+  box(context, .11, .12, 1.05, clockHandMat, 0, .15, .4, .54, clock);
+  box(context, .09, .13, 1.32, clockHandMat, 0, .17, -.5, -1.02, clock);
+  sphere(context, .14, 12, 8, clockHandMat, 0, .18, 0, clock);
+  const clockLabel = textPanel(context, "03:33", {
+    x: 7.48,
+    y: 2.15,
+    z: 55,
+    yaw: -Math.PI / 2,
+    width: 3.2,
+    height: 1.15,
+    background: "#29191b",
+    border: "#a64a4a",
+    color: "#ffaaa2",
+    font: "Arial, sans-serif",
+    fontSize: 150,
+    emissive: 0x5f1515,
+    emissiveIntensity: 1.4
+  });
+  interactable(context, "school-puzzle-clock", "school_puzzle", 4.8, 55, 3.8, "Ställ den stannade skolklockan på 03:33", clock);
+
+  // Pussel 2: säkringarna i det västra klassrummet.
+  const fuseBox = new THREE.Group();
+  fuseBox.position.set(-32.95, 0, 17);
+  fuseBox.name = "school-fuse-box";
+  context.root.add(fuseBox);
+  box(context, .45, 4.2, 4.5, metalMat, 0, 3.05, 0, 0, fuseBox);
+  const fuseGlowColors = [0xff3c34, 0xffbe35, 0x62d8ff];
+  const fuses = [];
+  fuseGlowColors.forEach((color, index) => {
+    const fuseMat = material(context, `school-fuse-${index}`, { color, emissive: color, emissiveIntensity: 2.6, roughness: .22 });
+    const fuse = sphere(context, .22, 14, 10, fuseMat, -.28, 3.95 - index * .9, -1.2 + index * 1.2, fuseBox);
+    fuses.push(fuse);
+  });
+  pointLight(context, 0x4d9dff, 22, 11, -31.6, 4.3, 17);
+  interactable(context, "school-puzzle-fuses", "school_puzzle", -29.3, 17, 4.8, "Koppla säkringarna i rätt ordning", fuseBox);
+
+  // Pussel 3: den rostiga skolklockan i det östra klassrummet.
+  const bell = new THREE.Group();
+  bell.position.set(24, 0, -25);
+  bell.name = "school-brass-bell";
+  context.root.add(bell);
+  const brassMat = material(context, "school-bell-brass", { color: 0x9f7335, emissive: 0x39240c, emissiveIntensity: .55, roughness: .35, metalness: .76 });
+  cylinder(context, .55, 1.35, 2.0, 22, brassMat, 0, 3.9, 0, bell);
+  torus(context, 1.3, .14, brassMat, 0, 2.88, 0, { x: Math.PI / 2 }, bell);
+  sphere(context, .28, 14, 10, darkWood, 0, 2.55, 0, bell);
+  box(context, 3.5, 3.8, .28, oldWood, 0, 3.4, 1.0, 0, bell);
+  pointLight(context, 0xffb54d, 18, 10, 24, 4.1, -25);
+  interactable(context, "school-puzzle-bell", "school_puzzle", 24, -25, 4.8, "Ring klockan med den hemliga rytmen", bell);
+
+  // En öppen städgarderob ger spelaren ett tydligt gömställe i korridoren.
+  const hideout = new THREE.Group();
+  hideout.position.set(-5.55, 0, -55);
+  hideout.rotation.y = .12;
+  hideout.name = "school-cleaning-hideout";
+  context.root.add(hideout);
+  box(context, 3.1, 5.4, 2.15, darkWood, 0, 2.7, 0, 0, hideout);
+  const hideDoor = box(context, .16, 5.05, 1.45, doorMat, 1.5, 2.62, 1.22, -.8, hideout);
+  hideDoor.name = "school-hideout-door";
+  interactable(context, "school-hideout", "hideout", -5.2, -52.8, 3.5, "Göm dig i den gamla städgarderoben", hideout);
+
+  const footstepMat = material(context, "school-footsteps", {
+    color: 0x7ec6df,
+    emissive: 0x207c9c,
+    emissiveIntensity: 2,
+    transparent: true,
+    opacity: .34,
+    depthWrite: false,
+    roughness: .5
+  });
+  const footsteps = [];
+  for (let i = 0; i < 12; i += 1) {
+    const step = plane(context, .36, .78, footstepMat, i % 2 ? .8 : -.8, .025, -8 - i * 4.1);
+    step.rotation.z = (i % 2 ? -.13 : .13) + Math.sin(i) * .05;
+    step.name = `mysterious-footstep-${i + 1}`;
+    step.userData.phase = i * .42;
+    footsteps.push(step);
+  }
+
+  // Samma gestalt som jagar spelaren i IKEA, osynlig tills klockan slår 03:33.
+  const monster = addMonster(context, 0, -67, 1.08);
+  monster.name = "ikea-monster-at-school";
+  monster.visible = false;
+  monster.userData.appearsAt = "03:33";
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -93.35);
+  exitDoor.name = "locked-school-exit-door";
+  exitDoor.userData.locked = true;
+  exitDoor.userData.closedY = 0;
+  context.root.add(exitDoor);
+  const exitDoorMat = material(context, "school-exit-door", { color: 0x26373a, roughness: .5, metalness: .64 });
+  const exitBarMat = material(context, "school-exit-bar", { color: 0xa8b6b8, roughness: .28, metalness: .86 });
+  const leftExit = box(context, 3.75, 7.2, .42, exitDoorMat, -1.9, 3.6, 0, 0, exitDoor);
+  const rightExit = box(context, 3.75, 7.2, .42, exitDoorMat, 1.9, 3.6, 0, 0, exitDoor);
+  box(context, 6.2, .22, .28, exitBarMat, 0, 3.25, .28, 0, exitDoor);
+  for (const x of [-1.9, 1.9]) box(context, 2.5, 1.65, .08, glassMat, x, 5.45, .25, 0, exitDoor);
+  doors.push(leftExit, rightExit);
+
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -91.9);
+  exitLight.name = "school-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  const exitGlowMat = material(context, "school-exit-glow", { color: 0xff4538, emissive: 0xff160d, emissiveIntensity: 4.2, roughness: .17 });
+  box(context, 4.8, 1.15, .22, exitGlowMat, 0, 8.05, 0, 0, exitLight);
+  const exitLamp = pointLight(context, 0xff2d22, 42, 20, 0, 7.5, 1.0, exitLight);
+  exitLamp.userData.lockedColor = 0xff2d22;
+  exitLamp.userData.openColor = 0x45ff91;
+  interactable(context, "school-exit", "school_exit", 0, -88.5, 6.2, "Öppna nödutgången när alla tre pussel är lösta", exitDoor);
+
+  context.actors.school = context.root;
+  context.actors.windows = windows;
+  context.actors.entrySign = entrySign;
+  context.actors.lights = lights;
+  context.actors.doors = doors;
+  context.actors.lockers = lockers;
+  context.actors.desks = desks;
+  context.actors.clock = clock;
+  context.actors.clockLabel = clockLabel;
+  context.actors.fuseBox = fuseBox;
+  context.actors.fuses = fuses;
+  context.actors.bell = bell;
+  context.actors.hideout = hideout;
+  context.actors.footsteps = footsteps;
+  context.actors.monster = monster;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  return finishWorld(context);
+}
+
+function buildLighthouseCity() {
+  const context = createWorld(
+    "lighthouse_city",
+    { minX: -128, maxX: 128, minZ: -142, maxZ: 148 },
+    { x: 0, y: 0, z: 124, yaw: 0 },
+    {
+      sky: 0x111927,
+      ground: 0x02070b,
+      hemisphere: .72,
+      sun: 0x9ab9d1,
+      sunIntensity: .7,
+      sunX: -70,
+      sunY: 54,
+      sunZ: -30
+    }
+  );
+  context.root.userData.backgroundColor = 0x111927;
+  context.root.userData.storm = true;
+
+  const wetGround = material(context, "lighthouse-city-ground", {
+    physical: true,
+    color: 0x252f36,
+    emissive: 0x071018,
+    emissiveIntensity: .25,
+    roughness: .38,
+    metalness: .18,
+    clearcoat: .62,
+    clearcoatRoughness: .22
+  });
+  const roadMat = material(context, "lighthouse-city-road", {
+    physical: true,
+    color: 0x20272b,
+    roughness: .3,
+    metalness: .16,
+    clearcoat: .72,
+    clearcoatRoughness: .18
+  });
+  const sidewalkMat = material(context, "lighthouse-city-sidewalk", { color: 0x5d676a, roughness: .82 });
+  const mountainMat = material(context, "lighthouse-mountain", { color: 0x333a39, roughness: 1, flatShading: true });
+  plane(context, 270, 310, wetGround, 0, -.08, 3);
+  plane(context, 23, 190, roadMat, 0, .01, 42);
+  for (const x of [-14, 14]) box(context, 5, .22, 190, sidewalkMat, x, .1, 42);
+
+  const roadMarkMat = material(context, "lighthouse-road-marks", { color: 0xd9c46e, emissive: 0x3f3512, emissiveIntensity: .5, roughness: .64 });
+  for (let z = 128; z >= -43; z -= 12) box(context, .32, .05, 5.5, roadMarkMat, 0, .08, z);
+
+  const buildings = [];
+  const windows = [];
+  const buildingColors = [0x46515a, 0x39464c, 0x51505b, 0x3e4854];
+  const windowColors = [0x74c5e2, 0xffd48b, 0x9be1ff];
+  const buildingSpecs = [
+    [-34, 95, 25, 16, 34], [36, 94, 28, 17, 45], [-68, 82, 28, 22, 58], [70, 76, 30, 23, 39],
+    [-36, 52, 28, 18, 48], [38, 48, 30, 19, 31], [-72, 30, 27, 24, 43], [72, 23, 31, 22, 54],
+    [-36, 7, 27, 20, 38], [37, 2, 29, 18, 50], [-68, -25, 30, 23, 34], [70, -29, 31, 21, 44]
+  ];
+  buildingSpecs.forEach(([x, z, w, d, h], index) => {
+    const building = new THREE.Group();
+    building.position.set(x, 0, z);
+    building.name = `storm-city-building-${index + 1}`;
+    context.root.add(building);
+    const facade = material(context, `lighthouse-building-${index}`, { color: buildingColors[index % buildingColors.length], roughness: .84, metalness: .08 });
+    box(context, w, h, d, facade, 0, h / 2, 0, 0, building);
+    const windowMat = material(context, `lighthouse-window-${index}`, {
+      color: windowColors[index % windowColors.length],
+      emissive: windowColors[index % windowColors.length],
+      emissiveIntensity: index % 3 === 1 ? 1.4 : .54,
+      roughness: .2
+    });
+    const frontZ = -d / 2 - .04;
+    for (let floor = 0; floor < Math.min(8, Math.floor(h / 5)); floor += 1) {
+      for (const dx of [-w * .28, 0, w * .28]) {
+        const window = box(context, 2.5, 1.7, .08, windowMat, dx, 4 + floor * 4.5, frontZ, 0, building);
+        windows.push(window);
+      }
+    }
+    collider(context, x, z, w, d);
+    buildings.push(building);
+  });
+
+  const streetLights = addPathLights(context, [
+    [-11, 116], [11, 101], [-11, 83], [11, 65], [-11, 47], [11, 29], [-11, 11], [11, -8], [-11, -27], [11, -43]
+  ], 0x9dcfff);
+
+  const hillPath = [];
+  const hillPoints = [[8, -51], [17, -59], [25, -68], [31, -78], [37, -88], [43, -97]];
+  hillPoints.forEach(([x, z], index) => {
+    const slab = plane(context, 14, 14, index % 2 ? sidewalkMat : roadMat, x, .06 + index * .005, z);
+    slab.rotation.z = -.15 - index * .012;
+    hillPath.push(slab);
+  });
+  for (let i = 0; i < 38; i += 1) {
+    const angle = i / 38 * Math.PI * 2;
+    const radius = 24 + (i % 5) * 4.5;
+    const x = 45 + Math.cos(angle) * radius;
+    const z = -105 + Math.sin(angle) * radius;
+    if (x > 4 && x < 53 && z > -101 && z < -44) continue;
+    const rock = sphere(context, 7 + i % 4 * 2, 12, 8, mountainMat, x, -2.2 + i % 3, z);
+    rock.scale.set(1.45, .8 + i % 2 * .22, 1.1);
+    rock.rotation.y = i * .48;
+  }
+
+  const stormClouds = [];
+  for (const [x, y, z, scale] of [
+    [-75, 48, 92, 3.3], [-20, 54, 34, 4.2], [58, 46, 66, 3.7], [91, 52, -12, 3.4],
+    [-84, 45, -51, 3.9], [20, 58, -91, 4.6], [88, 49, -112, 3.1]
+  ]) {
+    const cloud = addCloud(context, x, y, z, scale, 0x252d3d);
+    cloud.name = "lighthouse-storm-cloud";
+    cloud.userData.drift = .4 + scale * .08;
+    stormClouds.push(cloud);
+  }
+
+  const rainGeometry = new THREE.BufferGeometry();
+  const rainPositions = [];
+  for (let i = 0; i < 260; i += 1) {
+    const x = -122 + ((i * 47) % 244);
+    const y = 3 + ((i * 29) % 40);
+    const z = -138 + ((i * 71) % 280);
+    rainPositions.push(x, y, z, x + .45, y - 3.8, z + .35);
+  }
+  rainGeometry.setAttribute("position", new THREE.Float32BufferAttribute(rainPositions, 3));
+  const rainMaterial = new THREE.LineBasicMaterial({ color: 0x9bcbe2, transparent: true, opacity: .34 });
+  const rain = new THREE.LineSegments(rainGeometry, rainMaterial);
+  rain.name = "lighthouse-storm-rain";
+  context.root.add(rain);
+
+  // En enorm rörlig våg bakom staden; motorn för den in över gatorna.
+  const tsunami = new THREE.Group();
+  tsunami.position.set(0, 0, 153);
+  tsunami.name = "enormous-city-tsunami";
+  tsunami.userData.startZ = 153;
+  tsunami.userData.safeZ = -78;
+  context.root.add(tsunami);
+  const waveMat = material(context, "lighthouse-tsunami-water", {
+    physical: true,
+    color: 0x176995,
+    emissive: 0x082c4b,
+    emissiveIntensity: .8,
+    roughness: .08,
+    metalness: .2,
+    transparent: true,
+    opacity: .9,
+    clearcoat: 1,
+    clearcoatRoughness: .06
+  });
+  const foamMat = material(context, "lighthouse-tsunami-foam", {
+    color: 0xd2f4ff,
+    emissive: 0x86ddff,
+    emissiveIntensity: 1.45,
+    roughness: .5
+  });
+  box(context, 272, 31, 15, waveMat, 0, 14.5, 0, 0, tsunami);
+  for (let x = -126; x <= 126; x += 12) {
+    const crest = sphere(context, 7.8, 16, 10, foamMat, x, 31 + Math.sin(x * .09) * 2, -3.8, tsunami);
+    crest.scale.set(1.15, .45, .8);
+  }
+  pointLight(context, 0x75d6ff, 75, 80, 0, 25, -8, tsunami);
+
+  const lighthouse = new THREE.Group();
+  lighthouse.position.set(45, 0, -106);
+  lighthouse.name = "lonely-lighthouse";
+  context.root.add(lighthouse);
+  const towerMat = material(context, "lighthouse-tower", { color: 0xd7d2c3, roughness: .8 });
+  const towerBandMat = material(context, "lighthouse-bands", { color: 0x9d3430, roughness: .69 });
+  const lighthouseMetal = material(context, "lighthouse-metal", { color: 0x2f3940, roughness: .36, metalness: .78 });
+  cylinder(context, 5.2, 8.3, 29, 32, towerMat, 0, 14.5, 0, lighthouse);
+  for (const y of [6, 15.5, 25]) cylinder(context, 5.4 + (25 - y) * .08, 5.6 + (25 - y) * .08, 2.2, 32, towerBandMat, 0, y, 0, lighthouse);
+  cylinder(context, 7.1, 7.1, .7, 32, lighthouseMetal, 0, 29.4, 0, lighthouse);
+  const lanternGlass = material(context, "lighthouse-lantern-glass", {
+    physical: true,
+    color: 0xc8f3ff,
+    emissive: 0x79d7ff,
+    emissiveIntensity: 2.5,
+    roughness: .06,
+    transparent: true,
+    opacity: .55
+  });
+  cylinder(context, 4.8, 4.8, 5.7, 24, lanternGlass, 0, 32.5, 0, lighthouse);
+  cone(context, 6.1, 4.1, 24, towerBandMat, 0, 37.4, 0, 0, lighthouse);
+  collider(context, 45, -106, 13.5, 13.5);
+
+  const lighthouseBeam = new THREE.Group();
+  lighthouseBeam.position.set(45, 32.7, -106);
+  lighthouseBeam.name = "rotating-lighthouse-beam";
+  context.root.add(lighthouseBeam);
+  const beamMat = material(context, "lighthouse-beam", {
+    color: 0xe4fbff,
+    emissive: 0xa9ecff,
+    emissiveIntensity: 3.4,
+    transparent: true,
+    opacity: .2,
+    depthWrite: false,
+    roughness: .1
+  });
+  const beam = cone(context, 10, 82, 24, beamMat, 0, 0, -38, 0, lighthouseBeam);
+  beam.rotation.x = Math.PI / 2;
+  beam.scale.x = .35;
+  const beacon = pointLight(context, 0xd8f7ff, 150, 95, 0, 0, 0, lighthouseBeam);
+  beacon.castShadow = true;
+
+  const shelterDoor = new THREE.Group();
+  shelterDoor.position.set(45, 0, -98.55);
+  shelterDoor.name = "lighthouse-storm-shelter-door";
+  context.root.add(shelterDoor);
+  const shelterDoorMat = material(context, "lighthouse-shelter-door", { color: 0x5e2726, roughness: .58, metalness: .4 });
+  box(context, 4, 6.4, .45, shelterDoorMat, 0, 3.2, 0, 0, shelterDoor);
+  box(context, 2.6, .2, .2, lighthouseMetal, 0, 3.1, -.28, 0, shelterDoor);
+  interactable(context, "lighthouse-shelter", "lighthouse_shelter", 45, -96.5, 6.8, "Ta skydd inne i fyren innan vågen når berget", shelterDoor);
+
+  // Ett riktigt, slutet skyddsrum inne under fyren. Spelaren teleporteras hit
+  // när järndörren stängs och kan därför inte promenera ut genom tsunamin.
+  const shelterInterior = new THREE.Group();
+  shelterInterior.position.set(104, 0, -112);
+  shelterInterior.name = "lighthouse-sealed-storm-room";
+  context.root.add(shelterInterior);
+  const shelterWallMat = material(context, "lighthouse-shelter-wall", { color: 0x4b5658, roughness: .92, metalness: .08 });
+  const shelterFloorMat = material(context, "lighthouse-shelter-floor", { color: 0x242c2f, roughness: .52, metalness: .22 });
+  box(context, 18, .25, 22, shelterFloorMat, 0, .02, 0, 0, shelterInterior);
+  box(context, 18, 8, .55, shelterWallMat, 0, 4, -11, 0, shelterInterior);
+  box(context, 18, 8, .55, shelterWallMat, 0, 4, 11, 0, shelterInterior);
+  box(context, .55, 8, 22, shelterWallMat, -9, 4, 0, 0, shelterInterior);
+  box(context, .55, 8, 22, shelterWallMat, 9, 4, 0, 0, shelterInterior);
+  box(context, 18, .35, 22, lighthouseMetal, 0, 8, 0, 0, shelterInterior);
+  box(context, 11, 1.1, 2.2, towerMat, 0, .75, 4.4, 0, shelterInterior);
+  const shelterLampMat = material(context, "lighthouse-shelter-lamp", { color: 0xbceaff, emissive: 0x75d9ff, emissiveIntensity: 3.2, roughness: .16 });
+  box(context, 7, .18, 1, shelterLampMat, 0, 7.72, -2.5, 0, shelterInterior);
+  pointLight(context, 0xa9e8ff, 52, 24, 0, 6.8, -2.5, shelterInterior);
+  textPanel(context, "FYRENS SÄKRA RUM\nSTANNA TILLS VÅGEN PASSERAT", {
+    x: 104,
+    y: 4.6,
+    z: -122.32,
+    width: 11,
+    height: 2.4,
+    background: "#17252a",
+    border: "#8dc7d8",
+    color: "#d9f5ff",
+    font: "Arial, sans-serif",
+    fontSize: 64,
+    emissive: 0x163b49,
+    emissiveIntensity: 1.1
+  });
+  collider(context, 104, -123, 18, .55);
+  collider(context, 104, -101, 18, .55);
+  collider(context, 95, -112, .55, 22);
+  collider(context, 113, -112, .55, 22);
+  const shelterSpawn = new THREE.Vector3(104, 0, -112);
+
+  const basementDoor = new THREE.Group();
+  basementDoor.position.set(58, 0, -112);
+  basementDoor.rotation.y = -.55;
+  basementDoor.name = "lighthouse-basement-door";
+  basementDoor.userData.locked = true;
+  context.root.add(basementDoor);
+  box(context, 5.2, 5.4, .5, lighthouseMetal, 0, 2.7, 0, 0, basementDoor);
+  for (const x of [-1.8, -.9, 0, .9, 1.8]) box(context, .1, 4.8, .65, towerBandMat, x, 2.7, 0, 0, basementDoor);
+  const basementSign = textPanel(context, "KÄLLARE\nOBEHÖRIGA ÄGA EJ TILLTRÄDE", {
+    x: 57,
+    y: 6.6,
+    z: -110.3,
+    yaw: -.55,
+    width: 7.2,
+    height: 2.0,
+    background: "#231f1d",
+    border: "#a27b52",
+    color: "#d9c09a",
+    font: "Georgia, serif",
+    fontSize: 82,
+    emissive: 0x28180d,
+    emissiveIntensity: .5
+  });
+
+  const secret = new THREE.Group();
+  secret.position.set(65, 0, -119);
+  secret.name = "lighthouse-secret-machine";
+  secret.visible = false;
+  context.root.add(secret);
+  const secretMat = material(context, "lighthouse-secret", { color: 0x83fbff, emissive: 0x1fcfff, emissiveIntensity: 4.3, roughness: .14, metalness: .48 });
+  const secretCore = sphere(context, 1.45, 24, 16, secretMat, 0, 2.3, 0, secret);
+  torus(context, 2.3, .16, secretMat, 0, 2.3, 0, { x: Math.PI / 2 }, secret);
+  torus(context, 2.8, .12, secretMat, 0, 2.3, 0, { y: Math.PI / 2 }, secret);
+  pointLight(context, 0x40efff, 70, 25, 0, 2.3, 0, secret);
+  interactable(context, "lighthouse-secret", "lighthouse_secret", 64, -118, 5.8, "Avslöja fyrens hemlighet i källaren", secretCore);
+
+  const exitMat = material(context, "lighthouse-city-exit", { color: 0x9773ff, emissive: 0x6135ff, emissiveIntensity: 4, roughness: .15 });
+  const cityExit = torus(context, 4.6, .44, exitMat, 78, 4.7, -126, { y: -.6 });
+  cityExit.visible = false;
+  pointLight(context, 0x8f69ff, 58, 28, 78, 4.5, -126);
+  interactable(context, "lighthouse-exit", "lighthouse_exit", 76, -124, 7, "Följ den hemliga tunneln under fyren", cityExit);
+
+  context.actors.buildings = buildings;
+  context.actors.windows = windows;
+  context.actors.streetLights = streetLights;
+  context.actors.hillPath = hillPath;
+  context.actors.stormClouds = stormClouds;
+  context.actors.rain = rain;
+  context.actors.tsunami = tsunami;
+  context.actors.lighthouse = lighthouse;
+  context.actors.lighthouseBeam = lighthouseBeam;
+  context.actors.shelterDoor = shelterDoor;
+  context.actors.shelterInterior = shelterInterior;
+  context.actors.shelterSpawn = shelterSpawn;
+  context.actors.basementDoor = basementDoor;
+  context.actors.basementSign = basementSign;
+  context.actors.secret = secret;
+  context.actors.exit = cityExit;
+  return finishWorld(context);
+}
+
+function buildForbiddenHotel() {
+  const context = createWorld(
+    "forbidden_hotel",
+    { minX: -41, maxX: 41, minZ: -105, maxZ: 105 },
+    { x: 0, y: 0, z: 94, yaw: 0 },
+    {
+      sky: 0x08070d,
+      ground: 0x010102,
+      hemisphere: .42,
+      sun: 0x756b8d,
+      sunIntensity: .38,
+      sunX: 26,
+      sunY: 28,
+      sunZ: 18
+    }
+  );
+  context.root.userData.backgroundColor = 0x08070d;
+  context.root.userData.isInterior = true;
+
+  const lobbyFloor = material(context, "hotel-lobby-floor", {
+    physical: true,
+    color: 0x302b2b,
+    roughness: .36,
+    metalness: .12,
+    clearcoat: .58,
+    clearcoatRoughness: .22
+  });
+  const corridorCarpet = material(context, "hotel-corridor-carpet", { color: 0x4a151d, roughness: .98 });
+  const roomFloor = material(context, "hotel-room-floor", { color: 0x4b382d, roughness: .92 });
+  const hotelWall = material(context, "hotel-wall", { color: 0x81786d, roughness: .96 });
+  const hotelLowerWall = material(context, "hotel-lower-wall", { color: 0x352d2d, roughness: .91 });
+  const hotelCeiling = material(context, "hotel-ceiling", { color: 0x28242a, roughness: .93 });
+  const hotelTrim = material(context, "hotel-trim", { color: 0x2b1c1c, roughness: .86 });
+  const brass = material(context, "hotel-brass", { color: 0xa98143, emissive: 0x231708, emissiveIntensity: .32, roughness: .28, metalness: .82 });
+  const oldWood = material(context, "hotel-old-wood", { color: 0x4b3025, roughness: .91 });
+  const glass = material(context, "hotel-night-glass", {
+    physical: true,
+    color: 0x263e57,
+    emissive: 0x0d1b31,
+    emissiveIntensity: 1,
+    roughness: .09,
+    transparent: true,
+    opacity: .48
+  });
+
+  plane(context, 78, 52, lobbyFloor, 0, 0, 78);
+  plane(context, 15.5, 160, corridorCarpet, 0, .012, -25);
+  plane(context, 62, 160, roomFloor, 0, -.01, -25);
+  box(context, 82, .45, 214, hotelCeiling, 0, 9.4, 0);
+
+  for (const x of [-41, 41]) {
+    box(context, 1, 9.4, 214, hotelWall, x, 4.7, 0);
+    box(context, .12, 3.3, 212, hotelLowerWall, x + (x < 0 ? .56 : -.56), 1.65, 0);
+    collider(context, x, 0, 1, 214);
+  }
+  box(context, 82, 9.4, 1, hotelWall, 0, 4.7, 106);
+  collider(context, 0, 106, 82, 1);
+  for (const x of [-24.5, 24.5]) {
+    box(context, 33, 9.4, 1, hotelWall, x, 4.7, -106);
+    collider(context, x, -106, 33, 1);
+  }
+
+  // Lobbyn mynnar ut i en lång korridor med fem dörröppningar per sida.
+  for (const x of [-24.5, 24.5]) {
+    box(context, 33, 8.9, .5, hotelWall, x, 4.45, 53);
+    collider(context, x, 53, 33, .55);
+  }
+  const corridorSegments = [
+    [46, 14], [20, 22], [-8, 22], [-36, 22], [-64, 22], [-93.5, 25]
+  ];
+  for (const side of [-1, 1]) {
+    for (const [z, length] of corridorSegments) {
+      box(context, .55, 8.9, length, hotelWall, side * 8, 4.45, z);
+      box(context, .14, 3.2, length, hotelLowerWall, side * 7.66, 1.6, z);
+      box(context, .76, .2, length, hotelTrim, side * 7.55, 3.15, z);
+      collider(context, side * 8, z, .6, length);
+    }
+  }
+  for (const z of [20, -8, -36, -64]) {
+    for (const x of [-24.5, 24.5]) {
+      box(context, 33, 8.9, .5, hotelWall, x, 4.45, z);
+      collider(context, x, z, 33, .55);
+    }
+  }
+
+  const lobbySign = textPanel(context, "HOTELLET ÄR STÄNGT\nINGA GÄSTER FINNS KVAR", {
+    x: 0,
+    y: 5.8,
+    z: 105.42,
+    width: 14,
+    height: 3.2,
+    background: "#271b1d",
+    border: "#967044",
+    color: "#d8c199",
+    font: "Georgia, serif",
+    fontSize: 88,
+    emissive: 0x2b1512,
+    emissiveIntensity: .72
+  });
+  interactable(context, "hotel-warning-sign", "sign", 0, 101, 6, "Läs hotellets stängda skylt", lobbySign);
+
+  const reception = new THREE.Group();
+  reception.position.set(0, 0, 67);
+  reception.name = "abandoned-hotel-reception";
+  context.root.add(reception);
+  box(context, 20, 2.6, 3.5, oldWood, 0, 1.3, 0, 0, reception);
+  box(context, 20.8, .25, 4.1, brass, 0, 2.68, 0, 0, reception);
+  box(context, 7.2, 4.8, .32, oldWood, 0, 5.25, 2.15, 0, reception);
+  const receptionPanel = textPanel(context, "DET FÖRBJUDNA HOTELLET", {
+    x: 0,
+    y: 5.35,
+    z: 69.85,
+    width: 6.6,
+    height: 1.45,
+    background: "#34221b",
+    border: "#b28b4e",
+    color: "#ead5a1",
+    font: "Georgia, serif",
+    fontSize: 108,
+    emissive: 0x3b2512,
+    emissiveIntensity: .8
+  });
+  collider(context, 0, 67, 20, 3.5);
+
+  const chandeliers = [];
+  const chandelierGlow = material(context, "hotel-chandelier-glow", { color: 0xffd997, emissive: 0xffa13d, emissiveIntensity: 3.2, roughness: .2 });
+  for (const [x, z, scale] of [[-18, 83, 1], [18, 83, 1], [0, 55, .72]]) {
+    const chandelier = new THREE.Group();
+    chandelier.position.set(x, 0, z);
+    chandelier.scale.setScalar(scale);
+    chandelier.name = "hotel-chandelier";
+    context.root.add(chandelier);
+    cylinder(context, .08, .08, 3.4, 10, brass, 0, 7.55, 0, chandelier);
+    torus(context, 2.1, .12, brass, 0, 6.1, 0, { x: Math.PI / 2 }, chandelier);
+    for (let i = 0; i < 6; i += 1) {
+      const angle = i / 6 * Math.PI * 2;
+      sphere(context, .22, 14, 10, chandelierGlow, Math.cos(angle) * 1.85, 5.95, Math.sin(angle) * 1.85, chandelier);
+    }
+    const light = pointLight(context, 0xffc77a, 42, 24, 0, 5.8, 0, chandelier);
+    chandelier.userData.light = light;
+    chandeliers.push(chandelier);
+  }
+
+  const corridorLights = [];
+  const corridorLightMat = material(context, "hotel-corridor-light", { color: 0xffd6a3, emissive: 0xffa95e, emissiveIntensity: 2.45, roughness: .27 });
+  for (let z = 45; z >= -96; z -= 14) {
+    const fixture = new THREE.Group();
+    fixture.position.set(0, 0, z);
+    fixture.name = "hotel-corridor-light";
+    fixture.userData.flickerOffset = Math.abs(z) * .13;
+    context.root.add(fixture);
+    box(context, 3.1, .12, .75, corridorLightMat, 0, 9.05, 0, 0, fixture);
+    const light = pointLight(context, 0xffbf77, z % 28 === 3 ? 9 : 20, 15, 0, 8.1, 0, fixture);
+    fixture.userData.light = light;
+    corridorLights.push(fixture);
+  }
+
+  const doors = [];
+  const doorMat = material(context, "hotel-room-door", { color: 0x4a2c24, roughness: .88 });
+  const doorNumberMat = material(context, "hotel-door-number", { color: 0xc9a15c, emissive: 0x463015, emissiveIntensity: .65, roughness: .3, metalness: .65 });
+  const makeHotelDoor = (side, z, number, index) => {
+    const door = new THREE.Group();
+    door.position.set(side * 8, 0, z - 3);
+    door.rotation.y = side * (index % 2 ? .78 : .62);
+    door.name = `hotel-room-door-${number}`;
+    door.userData.roomNumber = number;
+    door.userData.closedYaw = 0;
+    context.root.add(door);
+    box(context, .28, 5.5, 5.1, doorMat, 0, 2.75, 2.55, 0, door);
+    const plate = box(context, .08, .8, 1.5, doorNumberMat, -side * .18, 3.8, 2.55, 0, door);
+    plate.name = `room-number-${number}`;
+    cylinder(context, .1, .1, .16, 12, brass, -side * .22, 2.5, 4.35, door).rotation.z = Math.PI / 2;
+    doors.push(door);
+    return door;
+  };
+  const doorZs = [34, 6, -22, -50, -78];
+  doorZs.forEach((z, index) => {
+    makeHotelDoor(-1, z, 201 + index * 2, index);
+    makeHotelDoor(1, z, 202 + index * 2, index + 1);
+  });
+
+  const roomWindows = [];
+  for (const side of [-1, 1]) {
+    for (const z of [35, 7, -21, -49, -78]) {
+      const window = box(context, .1, 2.6, 7.5, glass, side * 40.42, 5.25, z);
+      roomWindows.push(window);
+      box(context, .15, 3, .18, hotelTrim, side * 40.3, 5.25, z - 3.85);
+      box(context, .15, 3, .18, hotelTrim, side * 40.3, 5.25, z + 3.85);
+    }
+  }
+
+  const beds = [];
+  const mattressMat = material(context, "hotel-mattress", { color: 0x716a63, roughness: 1 });
+  const blanketMat = material(context, "hotel-blanket", { color: 0x3d2630, roughness: 1 });
+  for (const [x, z, yaw] of [
+    [-27, 35, Math.PI / 2], [27, 35, -Math.PI / 2], [-27, 7, Math.PI / 2], [27, 7, -Math.PI / 2],
+    [-27, -21, Math.PI / 2], [27, -21, -Math.PI / 2], [-27, -49, Math.PI / 2], [27, -49, -Math.PI / 2],
+    [-27, -78, Math.PI / 2], [27, -78, -Math.PI / 2]
+  ]) {
+    const bed = new THREE.Group();
+    bed.position.set(x, 0, z);
+    bed.rotation.y = yaw;
+    bed.name = "dusty-hotel-bed";
+    context.root.add(bed);
+    box(context, 4.2, .7, 7.2, oldWood, 0, .55, 0, 0, bed);
+    box(context, 3.8, .6, 6.6, mattressMat, 0, 1.18, 0, 0, bed);
+    box(context, 3.85, .18, 3.6, blanketMat, 0, 1.53, 1.15, 0, bed);
+    box(context, 4.4, 3.2, .35, oldWood, 0, 2.05, -3.5, 0, bed);
+    beds.push(bed);
+  }
+
+  const keyMat = material(context, "hotel-key-brass", { color: 0xffd064, emissive: 0x8c5216, emissiveIntensity: 2.1, roughness: .25, metalness: .86 });
+  const addHotelKey = (id, x, z, label) => {
+    const key = new THREE.Group();
+    key.position.set(x, 1.25, z);
+    key.rotation.x = -.2;
+    key.name = id;
+    context.root.add(key);
+    torus(context, .5, .11, keyMat, 0, 0, 0, { x: Math.PI / 2 }, key);
+    box(context, .16, .14, 1.55, keyMat, 0, 0, .95, 0, key);
+    box(context, .55, .14, .18, keyMat, .22, 0, 1.58, 0, key);
+    pointLight(context, 0xffbb4d, 13, 8, 0, .35, 0, key);
+    interactable(context, id, "hotel_key", x, z, 3.8, label, key);
+    return key;
+  };
+  const keys = [
+    addHotelKey("hotel-key-lobby", -15.5, 72, "Ta den dammiga receptionsnyckeln"),
+    addHotelKey("hotel-key-203", -22, 34, "Ta nyckeln märkt 203"),
+    addHotelKey("hotel-key-basement", 22, -22, "Ta den kalla källarnyckeln")
+  ];
+
+  const paperMat = material(context, "hotel-document-paper", { color: 0xd8caa7, emissive: 0x45391d, emissiveIntensity: .48, roughness: .87 });
+  const inkMat = material(context, "hotel-document-ink", { color: 0x2d211c, roughness: .78 });
+  const addHotelDocument = (id, x, z, label, yaw = 0) => {
+    const document = new THREE.Group();
+    document.position.set(x, .9, z);
+    document.rotation.y = yaw;
+    document.rotation.x = -.06;
+    document.name = id;
+    context.root.add(document);
+    box(context, 2.35, .06, 3.1, paperMat, 0, 0, 0, 0, document);
+    for (let line = 0; line < 6; line += 1) box(context, 1.65 - line % 3 * .18, .035, .06, inkMat, -.18, .055, -1.02 + line * .36, 0, document);
+    pointLight(context, 0xd6b776, 8, 6, 0, .55, 0, document);
+    interactable(context, id, "hotel_document", x, z, 3.9, label, document);
+    return document;
+  };
+  const documents = [
+    addHotelDocument("hotel-document-guestbook", 15.5, 72, "Läs den sista sidan i gästboken", .1),
+    addHotelDocument("hotel-document-room206", 21, 6, "Läs meddelandet från rum 206", -.2),
+    addHotelDocument("hotel-document-warning", -21, -50, "Läs varningen som gömts under sängen", .24)
+  ];
+
+  // Skuggvarelsen har inga fötter, men väljer hela tiden en punkt bakom spelaren.
+  const follower = new THREE.Group();
+  follower.position.set(0, 0, 42);
+  follower.name = "hotel-shadow-follower";
+  follower.userData.followDistance = 13;
+  follower.userData.active = false;
+  context.root.add(follower);
+  const shadowMat = material(context, "hotel-shadow", {
+    color: 0x050407,
+    emissive: 0x08030e,
+    emissiveIntensity: .5,
+    transparent: true,
+    opacity: .86,
+    depthWrite: false,
+    roughness: .93
+  });
+  const shadowEye = material(context, "hotel-shadow-eye", { color: 0xb889ff, emissive: 0x883dff, emissiveIntensity: 4.3, roughness: .12 });
+  const shadowBody = sphere(context, 1.8, 20, 14, shadowMat, 0, 3.25, 0, follower);
+  shadowBody.scale.set(.72, 1.9, .55);
+  const shadowHead = sphere(context, .82, 18, 12, shadowMat, 0, 6.2, 0, follower);
+  shadowHead.scale.set(.7, 1.25, .6);
+  sphere(context, .09, 12, 8, shadowEye, -.23, 6.3, -.55, follower);
+  sphere(context, .09, 12, 8, shadowEye, .23, 6.3, -.55, follower);
+  for (let i = 0; i < 5; i += 1) {
+    const wisp = cone(context, .55 - i * .06, 2.6 + i * .25, 10, shadowMat, -1.15 + i * .58, .7, .2, 0, follower);
+    wisp.rotation.z = (i - 2) * .13;
+  }
+  pointLight(context, 0x6630b8, 16, 11, 0, 5.8, -.4, follower);
+  const followPoints = [
+    new THREE.Vector3(0, 0, 42),
+    new THREE.Vector3(-4.5, 0, 22),
+    new THREE.Vector3(4.5, 0, -6),
+    new THREE.Vector3(-4.5, 0, -34),
+    new THREE.Vector3(4.5, 0, -62),
+    new THREE.Vector3(0, 0, -88)
+  ];
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -105.35);
+  exitDoor.name = "forbidden-hotel-exit-door";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  const exitDoorMat = material(context, "hotel-exit-door", { color: 0x17171d, roughness: .43, metalness: .66 });
+  const exitDoorLeft = box(context, 4.2, 7.6, .46, exitDoorMat, -2.15, 3.8, 0, 0, exitDoor);
+  const exitDoorRight = box(context, 4.2, 7.6, .46, exitDoorMat, 2.15, 3.8, 0, 0, exitDoor);
+  box(context, 7.3, .24, .25, brass, 0, 3.45, .28, 0, exitDoor);
+  doors.push(exitDoorLeft, exitDoorRight);
+
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -103.9);
+  exitLight.name = "forbidden-hotel-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  const exitGlowMat = material(context, "hotel-exit-glow", { color: 0xe52f42, emissive: 0xe20c31, emissiveIntensity: 4, roughness: .16 });
+  box(context, 5.3, 1.2, .2, exitGlowMat, 0, 8.25, 0, 0, exitLight);
+  const exitLamp = pointLight(context, 0xff2346, 44, 21, 0, 7.65, 1, exitLight);
+  exitLamp.userData.openColor = 0x5bff9e;
+  interactable(context, "hotel-exit", "hotel_exit", 0, -100.3, 6.5, "Lås upp hotellets sista dörr", exitDoor);
+
+  context.actors.lobbySign = lobbySign;
+  context.actors.reception = reception;
+  context.actors.receptionPanel = receptionPanel;
+  context.actors.chandeliers = chandeliers;
+  context.actors.lights = corridorLights;
+  context.actors.doors = doors;
+  context.actors.windows = roomWindows;
+  context.actors.beds = beds;
+  context.actors.keys = keys;
+  context.actors.documents = documents;
+  context.actors.follower = follower;
+  context.actors.followPoints = followPoints;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  return finishWorld(context);
+}
+
+function buildGraveyardSecret() {
+  const context = createWorld(
+    "graveyard_secret",
+    { minX: -82, maxX: 82, minZ: -98, maxZ: 98 },
+    { x: 0, y: 0, z: 89, yaw: 0 },
+    { sky: 0x15172b, ground: 0x030504, hemisphere: .7, sun: 0xffa56f, sunIntensity: .62, sunX: 78, sunY: 18, sunZ: -88 }
+  );
+  context.root.userData.backgroundColor = 0x15172b;
+
+  const grass = material(context, "graveyard-grass", { color: 0x17251d, roughness: 1 });
+  const pathMat = material(context, "graveyard-path", { color: 0x5a554c, roughness: .98 });
+  const stoneMats = [0x5f6262, 0x77756e, 0x4d5555].map((color, index) => material(context, `grave-stone-${index}`, { color, roughness: .97, flatShading: true }));
+  const mossMat = material(context, "grave-moss", { color: 0x38543b, roughness: 1 });
+  const iron = material(context, "grave-iron", { color: 0x202628, roughness: .48, metalness: .72 });
+  plane(context, 172, 208, grass, 0, -.05, 0);
+  for (let z = 92; z >= -87; z -= 8) plane(context, 10, 9, pathMat, Math.sin(z * .08) * 2.4, .01, z);
+
+  const gravestones = [];
+  const gravePositions = [];
+  for (let row = 0; row < 9; row += 1) {
+    const z = 70 - row * 16;
+    for (let column = 0; column < 6; column += 1) {
+      const side = column < 3 ? -1 : 1;
+      const lane = column % 3;
+      const x = side * (17 + lane * 18) + Math.sin(row * 1.7 + column) * 2;
+      if (z < -55 && Math.abs(x) < 31) continue;
+      gravePositions.push([x, z, row + column]);
+    }
+  }
+  gravePositions.forEach(([x, z, variant], index) => {
+    const grave = new THREE.Group();
+    grave.position.set(x, 0, z);
+    grave.rotation.y = Math.sin(index * 2.4) * .12;
+    grave.name = `old-gravestone-${index + 1}`;
+    context.root.add(grave);
+    const stone = stoneMats[variant % stoneMats.length];
+    if (variant % 3 === 0) {
+      box(context, 2.8, 3.4, .55, stone, 0, 1.7, 0, 0, grave);
+      sphere(context, 1.4, 18, 10, stone, 0, 3.35, 0, grave).scale.y = .6;
+    } else if (variant % 3 === 1) {
+      box(context, 1, 4.2, .55, stone, 0, 2.1, 0, 0, grave);
+      box(context, 3.1, .85, .58, stone, 0, 2.9, 0, 0, grave);
+    } else {
+      box(context, 3.2, 2.8, .7, stone, 0, 1.4, 0, 0, grave);
+      cone(context, 1.8, 1.8, 4, stone, 0, 3.45, 0, Math.PI / 4, grave);
+    }
+    const moss = box(context, 2.1, .08, .7, mossMat, -.25, 2.2 + variant % 2, -.32, .08, grave);
+    moss.rotation.z = .08;
+    collider(context, x, z, 3.4, 1.4);
+    gravestones.push(grave);
+  });
+
+  const fencePosts = [];
+  for (let z = -91; z <= 91; z += 8) {
+    for (const x of [-78, 78]) {
+      fencePosts.push(cylinder(context, .12, .16, 3.4, 8, iron, x, 1.7, z));
+    }
+  }
+  for (let x = -78; x <= 78; x += 8) {
+    for (const z of [-92, 92]) fencePosts.push(cylinder(context, .12, .16, 3.4, 8, iron, x, 1.7, z));
+  }
+
+  const chapel = new THREE.Group();
+  chapel.position.set(0, 0, -68);
+  chapel.name = "graveyard-chapel";
+  context.root.add(chapel);
+  const chapelStone = material(context, "graveyard-chapel-stone", { color: 0x55575a, roughness: .98 });
+  const chapelRoof = material(context, "graveyard-chapel-roof", { color: 0x24272d, roughness: .88 });
+  plane(context, 28, 31, stoneMats[1], 0, .02, 0, chapel);
+  box(context, 1, 9, 31, chapelStone, -14, 4.5, 0, 0, chapel);
+  box(context, 1, 9, 31, chapelStone, 14, 4.5, 0, 0, chapel);
+  box(context, 28, 9, 1, chapelStone, 0, 4.5, -15.5, 0, chapel);
+  box(context, 9, 9, 1, chapelStone, -9.5, 4.5, 15.5, 0, chapel);
+  box(context, 9, 9, 1, chapelStone, 9.5, 4.5, 15.5, 0, chapel);
+  const roof = cone(context, 21, 8, 4, chapelRoof, 0, 12, 0, Math.PI / 4, chapel);
+  roof.scale.z = .72;
+  collider(context, -14, -68, 1, 31);
+  collider(context, 14, -68, 1, 31);
+  collider(context, 0, -83.5, 28, 1);
+  collider(context, -9.5, -52.5, 9, 1);
+  collider(context, 9.5, -52.5, 9, 1);
+
+  const riddleSpecs = [
+    ["grave-riddle-1", -22, 42, "Jag vaknar när natten dör. Vilken tid är jag?"],
+    ["grave-riddle-2", 24, 7, "Räkna korparna som aldrig flyger."],
+    ["grave-riddle-3", -23, -30, "Vänd namnet som saknar en skugga."]
+  ];
+  const riddles = riddleSpecs.map(([id, x, z, label], index) => {
+    const marker = new THREE.Group();
+    marker.position.set(x, 0, z);
+    marker.name = id;
+    context.root.add(marker);
+    const riddleGlow = material(context, `grave-riddle-glow-${index}`, { color: 0x9fdcff, emissive: 0x3b9ee2, emissiveIntensity: 3.1, roughness: .2 });
+    box(context, 3.8, 3.4, .7, stoneMats[index], 0, 1.7, 0, 0, marker);
+    torus(context, .72, .09, riddleGlow, 0, 2.0, -.42, {}, marker);
+    pointLight(context, 0x68c7ff, 20, 10, 0, 2.2, 0, marker);
+    interactable(context, id, "grave_riddle", x, z, 4.5, label, marker);
+    return marker;
+  });
+
+  const altar = new THREE.Group();
+  altar.position.set(0, 0, -76);
+  altar.name = "graveyard-secret-altar";
+  context.root.add(altar);
+  const altarMat = material(context, "grave-altar", { color: 0x706960, roughness: .9 });
+  const altarGlow = material(context, "grave-altar-glow", { color: 0x9fdcff, emissive: 0x3b9ee2, emissiveIntensity: 3.1, roughness: .2 });
+  box(context, 7.5, 3.3, 3.2, altarMat, 0, 1.65, 0, 0, altar);
+  box(context, 8.1, .28, 3.8, stoneMats[1], 0, 3.34, 0, 0, altar);
+  const altarRune = torus(context, 1.1, .12, altarGlow, 0, 3.55, -.7, { x: Math.PI / 2 }, altar);
+  pointLight(context, 0x7fdfff, 35, 16, 0, 5.2, 0, altar);
+  interactable(context, "grave-altar", "grave_altar", 0, -73.5, 5.5, "Placera gåtornas svar på altaret", altarRune);
+
+  const monster = addMonster(context, 31, -6, 1.05);
+  monster.name = "ikea-monster-in-graveyard";
+  monster.visible = false;
+  monster.userData.revealAtDawn = true;
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -83.1);
+  exitDoor.name = "graveyard-crypt-door";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  const exitDoorMat = material(context, "graveyard-exit-door", { color: 0x273035, roughness: .42, metalness: .72 });
+  for (const x of [-2.2, 2.2]) box(context, 4.25, 6.5, .35, exitDoorMat, x, 3.25, 0, 0, exitDoor);
+  for (let x = -3.8; x <= 3.8; x += 1.25) box(context, .11, 6, .52, iron, x, 3.1, -.08, 0, exitDoor);
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -81.8);
+  exitLight.name = "graveyard-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  const exitGlow = material(context, "graveyard-exit-glow", { color: 0xffb06a, emissive: 0xff681f, emissiveIntensity: 3.7, roughness: .18 });
+  sphere(context, .45, 16, 10, exitGlow, 0, 7.2, 0, exitLight);
+  pointLight(context, 0xff8c4a, 45, 22, 0, 6.7, 1, exitLight);
+  interactable(context, "graveyard-exit", "graveyard_exit", 0, -80, 6.3, "Öppna passagen under kapellet", exitDoor);
+
+  const dawnLights = [];
+  for (const [x, y, z, color, intensity] of [[70, 8, -82, 0xff875d, 48], [45, 16, -90, 0xffc08b, 34], [-55, 24, -80, 0x7d9dff, 20]]) {
+    const light = pointLight(context, color, intensity, 80, x, y, z);
+    light.userData.baseIntensity = intensity;
+    dawnLights.push(light);
+  }
+  const dawnSun = sphere(context, 6.5, 24, 16, exitGlow, 72, 7, -92);
+  dawnSun.name = "graveyard-dawn-sun";
+
+  context.actors.gravestones = gravestones;
+  context.actors.graves = gravestones;
+  context.actors.fencePosts = fencePosts;
+  context.actors.chapel = chapel;
+  context.actors.riddles = riddles;
+  context.actors.riddleStones = riddles;
+  context.actors.altar = altar;
+  context.actors.monster = monster;
+  context.actors.monsterSpawn = monster;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  context.actors.dawnLights = dawnLights;
+  context.actors.dawnSun = dawnSun;
+  return finishWorld(context);
+}
+
+function buildLostCarnival() {
+  const context = createWorld(
+    "lost_carnival",
+    { minX: -105, maxX: 105, minZ: -108, maxZ: 108 },
+    { x: 0, y: 0, z: 98, yaw: 0 },
+    { sky: 0x121124, ground: 0x030305, hemisphere: .62, sun: 0xa083b9, sunIntensity: .55, sunX: -50, sunY: 35 }
+  );
+  context.root.userData.backgroundColor = 0x121124;
+
+  const dirt = material(context, "carnival-dirt", { color: 0x3a342d, roughness: 1 });
+  const midway = material(context, "carnival-midway", { color: 0x605448, roughness: .96 });
+  const red = material(context, "carnival-red", { color: 0x8f2934, roughness: .68, metalness: .12 });
+  const fadedWhite = material(context, "carnival-white", { color: 0xc9bda6, roughness: .8 });
+  const steel = material(context, "carnival-steel", { color: 0x434b51, roughness: .38, metalness: .78 });
+  const wood = material(context, "carnival-wood", { color: 0x583c29, roughness: .94 });
+  plane(context, 220, 228, dirt, 0, -.05, 0);
+  for (let z = 102; z >= -96; z -= 9) plane(context, 17, 10, midway, Math.sin(z * .05) * 3, .01, z);
+
+  const bulbColors = [0xff4050, 0xffdc63, 0x62d9ff, 0xb87bff];
+  const bulbMats = bulbColors.map((color, i) => material(context, `carnival-bulb-${i}`, { color, emissive: color, emissiveIntensity: 3.8, roughness: .18 }));
+  const lights = [];
+  const addBulb = (x, y, z, index, parent = context.root) => {
+    const bulbIndex = ((index % bulbMats.length) + bulbMats.length) % bulbMats.length;
+    const bulb = sphere(context, .18, 12, 8, bulbMats[bulbIndex], x, y, z, parent);
+    bulb.userData.phase = index * .41;
+    lights.push(bulb);
+    return bulb;
+  };
+
+  const entranceArch = new THREE.Group();
+  entranceArch.position.set(0, 0, 84);
+  entranceArch.name = "lost-carnival-entrance";
+  context.root.add(entranceArch);
+  for (const x of [-9, 9]) box(context, 1.2, 10, 1.2, red, x, 5, 0, 0, entranceArch);
+  box(context, 19.2, 1.3, 1.2, fadedWhite, 0, 9.3, 0, 0, entranceArch);
+  const entranceSign = textPanel(context, "DET FÖRSVUNNA TIVOLIT\nÖPPET FÖR ALLTID", {
+    x: 0, y: 9.2, z: 83.3, width: 13, height: 2.7, background: "#351b20", border: "#c89c55",
+    color: "#f1d29b", font: "Georgia, serif", fontSize: 94, emissive: 0x45121c, emissiveIntensity: 1
+  });
+  for (let x = -8; x <= 8; x += 1.3) addBulb(x, 10.2, 83.1, Math.round(x * 2));
+
+  const rides = [];
+  // Karusell.
+  const carousel = new THREE.Group();
+  carousel.position.set(-37, 0, 30);
+  carousel.name = "abandoned-carousel";
+  context.root.add(carousel);
+  cylinder(context, 10.5, 10.5, 1.2, 32, fadedWhite, 0, .6, 0, carousel);
+  cylinder(context, .45, .6, 10.5, 18, steel, 0, 5.6, 0, carousel);
+  const carouselRotor = new THREE.Group();
+  carouselRotor.name = "carousel-rotor";
+  carouselRotor.position.y = 1.2;
+  carousel.add(carouselRotor);
+  const canopy = cone(context, 12.4, 5.5, 24, red, 0, 10.7, 0, 0, carouselRotor);
+  canopy.scale.y = .6;
+  for (let i = 0; i < 10; i += 1) {
+    const angle = i / 10 * Math.PI * 2;
+    const x = Math.cos(angle) * 7.4;
+    const z = Math.sin(angle) * 7.4;
+    cylinder(context, .08, .08, 7.6, 8, steel, x, 5.2, z, carouselRotor);
+    const horse = new THREE.Group();
+    horse.position.set(x, 3.4 + (i % 2) * .45, z);
+    horse.rotation.y = -angle;
+    carouselRotor.add(horse);
+    const horseBody = sphere(context, .85, 16, 10, i % 2 ? fadedWhite : red, 0, 0, 0, horse);
+    horseBody.scale.set(1.7, .65, .7);
+    cylinder(context, .22, .34, 1.5, 10, fadedWhite, 1.05, .55, 0, horse).rotation.z = -.45;
+    for (const lx of [-.65, .65]) cylinder(context, .12, .17, 1.4, 8, steel, lx, -.8, 0, horse);
+  }
+  for (let i = 0; i < 18; i += 1) {
+    const angle = i / 18 * Math.PI * 2;
+    addBulb(Math.cos(angle) * 10.4, 9.2, Math.sin(angle) * 10.4, i, carouselRotor);
+  }
+  carousel.userData.rotor = carouselRotor;
+  carousel.userData.speed = .3;
+  collider(context, -37, 30, 20, 20);
+  rides.push(carousel);
+
+  // Pariserhjul med separat rotor för motoranimation.
+  const ferris = new THREE.Group();
+  ferris.position.set(39, 0, 15);
+  ferris.name = "rusty-ferris-wheel";
+  context.root.add(ferris);
+  for (const x of [-6.5, 6.5]) {
+    const support = cylinder(context, .35, .55, 21, 12, steel, x, 9.2, 0, ferris);
+    support.rotation.z = x < 0 ? -.34 : .34;
+  }
+  const ferrisRotor = new THREE.Group();
+  ferrisRotor.position.set(0, 15, 0);
+  ferrisRotor.rotation.z = .08;
+  ferrisRotor.name = "ferris-wheel-rotor";
+  ferris.add(ferrisRotor);
+  torus(context, 13, .4, red, 0, 0, 0, {}, ferrisRotor);
+  torus(context, 11.8, .14, fadedWhite, 0, 0, 0, {}, ferrisRotor);
+  for (let i = 0; i < 12; i += 1) {
+    const angle = i / 12 * Math.PI * 2;
+    const x = Math.cos(angle) * 13;
+    const y = Math.sin(angle) * 13;
+    box(context, .18, 26, .18, steel, 0, 0, 0, 0, ferrisRotor).rotation.z = angle + Math.PI / 2;
+    const gondola = new THREE.Group();
+    gondola.position.set(x, y, 0);
+    gondola.name = "ferris-gondola";
+    ferrisRotor.add(gondola);
+    box(context, 2.7, 1.5, 2.3, i % 2 ? red : fadedWhite, 0, -1, 0, 0, gondola);
+    addBulb(x, y, -.25, i, ferrisRotor);
+  }
+  ferris.userData.rotor = ferrisRotor;
+  ferris.userData.speed = .18;
+  collider(context, 39, 15, 19, 10);
+  rides.push(ferris);
+
+  // Den tredje attraktionen är en kedjegunga med tomma säten.
+  const swingRide = new THREE.Group();
+  swingRide.position.set(-32, 0, -43);
+  swingRide.name = "empty-chain-swing";
+  context.root.add(swingRide);
+  cylinder(context, 1.2, 2.2, 13, 20, steel, 0, 6.5, 0, swingRide);
+  const swingRotor = new THREE.Group();
+  swingRotor.position.y = 12.7;
+  swingRide.add(swingRotor);
+  cylinder(context, 8.2, 5.5, 1.4, 24, red, 0, 0, 0, swingRotor);
+  for (let i = 0; i < 10; i += 1) {
+    const angle = i / 10 * Math.PI * 2;
+    const chair = new THREE.Group();
+    chair.position.set(Math.cos(angle) * 7, -4.2, Math.sin(angle) * 7);
+    chair.rotation.y = -angle;
+    swingRotor.add(chair);
+    cylinder(context, .05, .05, 7, 7, steel, 0, 3.5, 0, chair);
+    box(context, 1.5, .25, 1.3, fadedWhite, 0, 0, 0, 0, chair);
+    box(context, 1.5, 1.2, .18, red, 0, .7, .55, 0, chair);
+    addBulb(Math.cos(angle) * 7, .4, Math.sin(angle) * 7, i + 3, swingRotor);
+  }
+  swingRide.userData.rotor = swingRotor;
+  swingRide.userData.speed = .4;
+  collider(context, -32, -43, 15, 15);
+  rides.push(swingRide);
+
+  const switchMat = material(context, "carnival-switch-box", { color: 0x343b3d, roughness: .45, metalness: .68 });
+  const leverMat = material(context, "carnival-switch-lever", { color: 0xffb640, emissive: 0xff641b, emissiveIntensity: 2.4, roughness: .25 });
+  const switchSpecs = [
+    ["carnival-switch-1", -22, 42, "Stäng av den gamla karusellen"],
+    ["carnival-switch-2", 24, 26, "Stäng av pariserhjulet"],
+    ["carnival-switch-3", -19, -32, "Stäng av kedjegungan"]
+  ];
+  const switches = switchSpecs.map(([id, x, z, label], index) => {
+    const control = new THREE.Group();
+    control.position.set(x, 0, z);
+    control.name = id;
+    context.root.add(control);
+    box(context, 2.5, 3.4, 1.7, switchMat, 0, 1.7, 0, 0, control);
+    const lever = cylinder(context, .12, .18, 1.8, 10, leverMat, 0, 3.4, -.55, control);
+    lever.rotation.x = -.62;
+    sphere(context, .27, 14, 10, leverMat, 0, 4.13, -1.12, control);
+    pointLight(context, bulbColors[index], 18, 10, 0, 3.3, 0, control);
+    interactable(context, id, "carnival_switch", x, z, 4.2, label, control);
+    return control;
+  });
+
+  const clown = new THREE.Group();
+  const clownSpawn = new THREE.Vector3(16, 0, 62);
+  clown.position.copy(clownSpawn);
+  clown.name = "watching-carnival-clown";
+  clown.userData.active = false;
+  clown.visible = false;
+  context.root.add(clown);
+  const clownSuit = material(context, "carnival-clown-suit", { color: 0x6d2533, roughness: .83 });
+  const clownSkin = material(context, "carnival-clown-skin", { color: 0xd7c9b5, roughness: .65 });
+  const clownBlue = material(context, "carnival-clown-blue", { color: 0x235d80, roughness: .75 });
+  const clownEye = material(context, "carnival-clown-eye", { color: 0xffe071, emissive: 0xff4b17, emissiveIntensity: 3.8, roughness: .1 });
+  box(context, 1.8, 3.3, 1.15, clownSuit, 0, 3.15, 0, 0, clown);
+  sphere(context, .82, 20, 14, clownSkin, 0, 5.35, 0, clown);
+  cone(context, 1.05, 2.4, 16, clownBlue, 0, 7.0, 0, 0, clown);
+  sphere(context, .2, 14, 10, red, 0, 5.25, -.78, clown);
+  sphere(context, .09, 12, 8, clownEye, -.29, 5.55, -.66, clown);
+  sphere(context, .09, 12, 8, clownEye, .29, 5.55, -.66, clown);
+  for (const side of [-1, 1]) {
+    const arm = cylinder(context, .15, .23, 3.5, 10, side < 0 ? clownBlue : clownSuit, side * 1.15, 3.1, 0, clown);
+    arm.rotation.z = side * .2;
+    cylinder(context, .18, .28, 3.1, 10, side < 0 ? clownSuit : clownBlue, side * .5, 1.55, 0, clown);
+  }
+  pointLight(context, 0xff312a, 16, 9, 0, 5.4, -.4, clown);
+  const followPoints = [
+    clownSpawn.clone(), new THREE.Vector3(-10, 0, 48), new THREE.Vector3(13, 0, 20),
+    new THREE.Vector3(-8, 0, -18), new THREE.Vector3(10, 0, -52), new THREE.Vector3(0, 0, -82)
+  ];
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -96);
+  exitDoor.name = "carnival-locked-gate";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  for (const x of [-4.2, 4.2]) box(context, 7.8, 7.5, .45, steel, x, 3.75, 0, 0, exitDoor);
+  for (let x = -7.4; x <= 7.4; x += 1.25) box(context, .13, 7, .6, red, x, 3.6, -.08, 0, exitDoor);
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -94.7);
+  exitLight.name = "carnival-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  for (let x = -7; x <= 7; x += 1.2) addBulb(x, 7.8, 0, Math.round(x * 3), exitLight);
+  pointLight(context, 0xff4f66, 42, 22, 0, 7, 1, exitLight);
+  interactable(context, "carnival-exit", "carnival_exit", 0, -91, 7, "Öppna tivolits grind när alla attraktioner går", exitDoor);
+
+  context.actors.entrance = entranceArch;
+  context.actors.entranceSign = entranceSign;
+  context.actors.rides = rides;
+  context.actors.switches = switches;
+  context.actors.rideSwitches = switches;
+  context.actors.clown = clown;
+  context.actors.clownSpawn = clownSpawn;
+  context.actors.followPoints = followPoints;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  context.actors.lights = lights;
+  return finishWorld(context);
+}
+
+function buildDollmakerHouse() {
+  const context = createWorld(
+    "dollmaker_house",
+    { minX: -34, maxX: 34, minZ: -91, maxZ: 91 },
+    { x: 0, y: 0, z: 82, yaw: 0 },
+    { sky: 0x0c0a12, ground: 0x020102, hemisphere: .48, sun: 0xa99181, sunIntensity: .45, sunX: 30, sunY: 32 }
+  );
+  context.root.userData.backgroundColor = 0x0c0a12;
+  context.root.userData.isInterior = true;
+
+  const floorMat = material(context, "doll-house-floor", { color: 0x48372c, roughness: .93 });
+  const runnerMat = material(context, "doll-house-runner", { color: 0x49202e, roughness: .99 });
+  const wallMat = material(context, "doll-house-wall", { color: 0x81786b, roughness: .98 });
+  const lowerWall = material(context, "doll-house-lower-wall", { color: 0x3f302a, roughness: .92 });
+  const ceilingMat = material(context, "doll-house-ceiling", { color: 0x2d282b, roughness: .96 });
+  const wood = material(context, "doll-house-wood", { color: 0x553725, roughness: .9 });
+  const darkWood = material(context, "doll-house-dark-wood", { color: 0x261b18, roughness: .95 });
+  const porcelain = material(context, "doll-porcelain", { physical: true, color: 0xe1d4c4, roughness: .28, clearcoat: .34, clearcoatRoughness: .22 });
+  const dollEye = material(context, "doll-eye", { color: 0x111016, emissive: 0x291438, emissiveIntensity: .75, roughness: .16 });
+  const hairMats = [0x33231c, 0xb99262, 0x171619].map((color, i) => material(context, `doll-hair-${i}`, { color, roughness: .88 }));
+  const dressMats = [0x6e2638, 0x294c5d, 0x6a5b32, 0x4c315f].map((color, i) => material(context, `doll-dress-${i}`, { color, roughness: .9 }));
+  plane(context, 68, 186, floorMat, 0, -.02, 0);
+  plane(context, 13, 178, runnerMat, 0, .015, 0);
+  box(context, 68, .42, 186, ceilingMat, 0, 8.8, 0);
+
+  for (const x of [-34, 34]) {
+    box(context, 1, 8.8, 186, wallMat, x, 4.4, 0);
+    box(context, .12, 3.1, 184, lowerWall, x + (x < 0 ? .56 : -.56), 1.55, 0);
+    collider(context, x, 0, 1, 186);
+  }
+  box(context, 68, 8.8, 1, wallMat, 0, 4.4, 92);
+  collider(context, 0, 92, 68, 1);
+  for (const x of [-21, 21]) {
+    box(context, 26, 8.8, 1, wallMat, x, 4.4, -92);
+    collider(context, x, -92, 26, 1);
+  }
+
+  // Korridorväggar med tre breda öppningar på vardera sida.
+  const wallSegments = [[69, 38], [28, 32], [-12, 36], [-53, 34], [-82, 18]];
+  for (const side of [-1, 1]) {
+    for (const [z, length] of wallSegments) {
+      box(context, .55, 8.5, length, wallMat, side * 7.5, 4.25, z);
+      box(context, .15, 3.1, length, lowerWall, side * 7.18, 1.55, z);
+      collider(context, side * 7.5, z, .6, length);
+    }
+  }
+  for (const z of [44, 4, -40]) {
+    for (const x of [-20.5, 20.5]) {
+      box(context, 26, 8.5, .5, wallMat, x, 4.25, z);
+      collider(context, x, z, 26, .55);
+    }
+  }
+
+  const workshop = new THREE.Group();
+  workshop.position.set(-20, 0, 63);
+  workshop.name = "dollmaker-workshop";
+  context.root.add(workshop);
+  box(context, 15, .3, 5.3, wood, 0, 2.2, 0, 0, workshop);
+  for (const x of [-6.2, 6.2]) box(context, .35, 2.2, 4.5, darkWood, x, 1.1, 0, 0, workshop);
+  const tools = [];
+  for (let i = 0; i < 7; i += 1) {
+    const tool = cylinder(context, .07, .12, 1.4 + i % 3 * .35, 8, i % 2 ? darkWood : porcelain, -5.2 + i * 1.7, 3.0, 0, workshop);
+    tool.rotation.z = -.7 + i * .22;
+    tools.push(tool);
+  }
+
+  const lights = [];
+  const lampGlow = material(context, "doll-house-lamp", { color: 0xffd9a0, emissive: 0xff9f49, emissiveIntensity: 3, roughness: .24 });
+  for (let z = 78; z >= -80; z -= 18) {
+    const lamp = new THREE.Group();
+    lamp.position.set(z % 36 === 6 ? -.5 : .5, 0, z);
+    lamp.name = "doll-house-flickering-lamp";
+    lamp.userData.phase = Math.abs(z) * .17;
+    context.root.add(lamp);
+    cylinder(context, .08, .08, 2, 8, darkWood, 0, 7.7, 0, lamp);
+    sphere(context, .42, 16, 10, lampGlow, 0, 6.75, 0, lamp);
+    const glow = pointLight(context, 0xffc17b, z % 36 === 6 ? 14 : 24, 16, 0, 6.6, 0, lamp);
+    lamp.userData.light = glow;
+    lights.push(lamp);
+  }
+
+  const dolls = [];
+  const dollPositions = [];
+  const dollSpecs = [
+    [-24, 72, .9], [-16, 69, -.5], [22, 67, 2.5], [29, 55, -2.3],
+    [-26, 28, .45], [-16, 17, -.8], [19, 31, 2.6], [27, 16, -2.5],
+    [-25, -17, .65], [-16, -29, -.45], [19, -14, 2.7], [27, -30, -2.4],
+    [-27, -60, .4], [-17, -73, -.65], [18, -62, 2.5], [27, -77, -2.55]
+  ];
+  dollSpecs.forEach(([x, z, yaw], index) => {
+    const doll = new THREE.Group();
+    doll.position.set(x, 0, z);
+    doll.rotation.y = yaw;
+    doll.scale.setScalar(.88 + index % 4 * .08);
+    doll.name = `watching-doll-${index + 1}`;
+    doll.userData.phase = index * .47;
+    doll.userData.basePosition = new THREE.Vector3(x, 0, z);
+    doll.userData.homeX = x;
+    doll.userData.homeZ = z;
+    context.root.add(doll);
+    box(context, 1.15, 2.05, .72, dressMats[index % dressMats.length], 0, 2.1, 0, 0, doll);
+    sphere(context, .65, 20, 14, porcelain, 0, 3.7, 0, doll);
+    const hair = sphere(context, .69, 18, 12, hairMats[index % hairMats.length], 0, 4.0, .06, doll);
+    hair.scale.y = .62;
+    sphere(context, .075, 10, 8, dollEye, -.22, 3.82, -.56, doll);
+    sphere(context, .075, 10, 8, dollEye, .22, 3.82, -.56, doll);
+    for (const side of [-1, 1]) {
+      const arm = cylinder(context, .08, .13, 1.9, 8, porcelain, side * .76, 2.15, 0, doll);
+      arm.rotation.z = side * .12;
+      cylinder(context, .09, .14, 1.75, 8, porcelain, side * .35, .9, 0, doll);
+    }
+    pointLight(context, 0x6e3c91, 5, 4.5, 0, 3.8, -.6, doll);
+    dolls.push(doll);
+    dollPositions.push(new THREE.Vector3(x, 0, z));
+  });
+
+  const clueGlowColors = [0x6ed9ff, 0xff8fc9, 0xffcf69];
+  const clueSpecs = [
+    ["doll-clue-1", -18, 55, "Läs lappen under dockmakarens verktyg"],
+    ["doll-clue-2", 19, 18, "Undersök dockan som tittar mot väggen"],
+    ["doll-clue-3", -18, -58, "Öppna den lilla speldosan"]
+  ];
+  const clues = clueSpecs.map(([id, x, z, label], index) => {
+    const clue = new THREE.Group();
+    clue.position.set(x, 0, z);
+    clue.name = id;
+    context.root.add(clue);
+    const glowMat = material(context, `doll-clue-glow-${index}`, { color: clueGlowColors[index], emissive: clueGlowColors[index], emissiveIntensity: 3.2, roughness: .2 });
+    box(context, 2.5, .18, 2.2, wood, 0, 1.3, 0, 0, clue);
+    sphere(context, .42, 16, 10, glowMat, 0, 1.62, 0, clue);
+    torus(context, .72, .08, glowMat, 0, 1.6, 0, { x: Math.PI / 2 }, clue);
+    pointLight(context, clueGlowColors[index], 16, 9, 0, 1.8, 0, clue);
+    interactable(context, id, "doll_clue", x, z, 4.2, label, clue);
+    return clue;
+  });
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -91.35);
+  exitDoor.name = "dollmaker-locked-back-door";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  const doorMat = material(context, "dollmaker-exit-door", { color: 0x3c2720, roughness: .86 });
+  for (const x of [-2.05, 2.05]) box(context, 4, 7, .42, doorMat, x, 3.5, 0, 0, exitDoor);
+  box(context, 6.6, .2, .3, darkWood, 0, 3.1, -.32, 0, exitDoor);
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -89.9);
+  exitLight.name = "dollmaker-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  const exitGlowMat = material(context, "dollmaker-exit-glow", { color: 0xd774ff, emissive: 0x8b2fff, emissiveIntensity: 3.8, roughness: .18 });
+  sphere(context, .44, 16, 10, exitGlowMat, 0, 7.7, 0, exitLight);
+  pointLight(context, 0xba5cff, 38, 20, 0, 7.1, 1, exitLight);
+  interactable(context, "doll-exit", "doll_exit", 0, -87, 6.5, "Öppna dockmakarens bakdörr", exitDoor);
+
+  context.actors.workshop = workshop;
+  context.actors.tools = tools;
+  context.actors.dolls = dolls;
+  context.actors.dollPositions = dollPositions;
+  context.actors.clues = clues;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  context.actors.lights = lights;
+  return finishWorld(context);
+}
+
+function buildMidnightMuseum() {
+  const context = createWorld(
+    "midnight_museum",
+    { minX: -42, maxX: 42, minZ: -99, maxZ: 99 },
+    { x: 0, y: 0, z: 90, yaw: 0 },
+    { sky: 0x080b15, ground: 0x010102, hemisphere: .5, sun: 0x8ca3c2, sunIntensity: .4, sunX: -32, sunY: 30 }
+  );
+  context.root.userData.backgroundColor = 0x080b15;
+  context.root.userData.isInterior = true;
+
+  const marble = material(context, "museum-marble", { physical: true, color: 0x716f70, roughness: .34, metalness: .12, clearcoat: .5, clearcoatRoughness: .22 });
+  const runner = material(context, "museum-runner", { color: 0x321b2c, roughness: .98 });
+  const wallMat = material(context, "museum-wall", { color: 0x85817c, roughness: .94 });
+  const lowerWall = material(context, "museum-lower-wall", { color: 0x2e3339, roughness: .78 });
+  const ceiling = material(context, "museum-ceiling", { color: 0x242830, roughness: .92 });
+  const bronze = material(context, "museum-bronze", { color: 0x66513a, emissive: 0x191006, emissiveIntensity: .18, roughness: .43, metalness: .68 });
+  const paleStone = material(context, "museum-statue-stone", { color: 0xb8b3aa, roughness: .64 });
+  const frameMat = material(context, "museum-frame", { color: 0x7f6234, roughness: .37, metalness: .58 });
+  plane(context, 84, 204, marble, 0, -.03, 0);
+  plane(context, 12, 190, runner, 0, .015, 0);
+  box(context, 84, .45, 204, ceiling, 0, 10.2, 0);
+  for (const x of [-42, 42]) {
+    box(context, 1, 10, 204, wallMat, x, 5, 0);
+    box(context, .14, 3.4, 202, lowerWall, x + (x < 0 ? .57 : -.57), 1.7, 0);
+    collider(context, x, 0, 1, 204);
+  }
+  box(context, 84, 10, 1, wallMat, 0, 5, 100);
+  collider(context, 0, 100, 84, 1);
+  for (const x of [-25, 25]) {
+    box(context, 34, 10, 1, wallMat, x, 5, -100);
+    collider(context, x, -100, 34, 1);
+  }
+
+  const entranceSign = textPanel(context, "MIDNATTSMUSEET\nSTÄNGER 23:59", {
+    x: 0, y: 6.2, z: 99.4, width: 13, height: 2.8, background: "#171d27", border: "#9e875a",
+    color: "#ddd0ad", font: "Georgia, serif", fontSize: 102, emissive: 0x17243a, emissiveIntensity: .75
+  });
+  interactable(context, "museum-hours", "sign", 0, 95, 5.5, "Läs museets märkliga öppettid", entranceSign);
+
+  const lights = [];
+  const lightMat = material(context, "museum-gallery-light", { color: 0xcbe9ff, emissive: 0x86c9ff, emissiveIntensity: 3.1, roughness: .18 });
+  for (let z = 86; z >= -88; z -= 16) {
+    const fixture = new THREE.Group();
+    fixture.position.set(0, 0, z);
+    fixture.name = "museum-gallery-light";
+    fixture.userData.phase = Math.abs(z) * .11;
+    context.root.add(fixture);
+    box(context, 5, .12, .75, lightMat, 0, 9.85, 0, 0, fixture);
+    const glow = pointLight(context, 0xb8ddff, z === -42 ? 9 : 24, 18, 0, 9, 0, fixture);
+    fixture.userData.light = glow;
+    lights.push(fixture);
+  }
+
+  const statues = [];
+  const statueSpecs = [[-18, 69, .3], [19, 54, -2.7], [-18, 27, .4], [19, 10, -2.6], [-18, -18, .3], [19, -36, -2.7], [-18, -65, .4], [19, -77, -2.6]];
+  statueSpecs.forEach(([x, z, yaw], index) => {
+    const statue = new THREE.Group();
+    statue.position.set(x, 0, z);
+    statue.rotation.y = yaw;
+    statue.name = `museum-statue-${index + 1}`;
+    statue.userData.baseYaw = yaw;
+    context.root.add(statue);
+    cylinder(context, 2.1, 2.4, 1.2, 20, marble, 0, .6, 0, statue);
+    const body = sphere(context, 1.2, 20, 14, index % 2 ? bronze : paleStone, 0, 3.1, 0, statue);
+    body.scale.set(.72, 1.45, .56);
+    sphere(context, .56, 18, 12, index % 2 ? bronze : paleStone, 0, 5.2, 0, statue);
+    for (const side of [-1, 1]) {
+      const arm = cylinder(context, .15, .23, 2.8, 10, index % 2 ? bronze : paleStone, side * .9, 3.15, 0, statue);
+      arm.rotation.z = side * (.28 + index % 3 * .13);
+    }
+    collider(context, x, z, 4.5, 4.5);
+    statues.push(statue);
+  });
+
+  const paintingColors = [0x243b57, 0x61353d, 0x4b4e2e, 0x352b59, 0x5b462e, 0x254b48];
+  const paintings = [];
+  for (const side of [-1, 1]) {
+    [76, 43, 10, -24, -57, -82].forEach((z, index) => {
+      const painting = new THREE.Group();
+      painting.position.set(side * 41.35, 5.1, z);
+      painting.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      painting.name = `museum-painting-${side < 0 ? "left" : "right"}-${index + 1}`;
+      painting.userData.baseYaw = painting.rotation.y;
+      context.root.add(painting);
+      box(context, 8.2, 5.5, .32, frameMat, 0, 0, 0, 0, painting);
+      const artMat = material(context, `museum-art-${side}-${index}`, { color: paintingColors[(index + (side > 0 ? 2 : 0)) % paintingColors.length], emissive: 0x0c1018, emissiveIntensity: .42, roughness: .73 });
+      box(context, 7.35, 4.65, .38, artMat, 0, 0, -.02, 0, painting);
+      sphere(context, .8 + index % 2 * .3, 16, 10, paleStone, Math.sin(index) * 1.7, .35, -.28, painting).scale.y = 1.4;
+      paintings.push(painting);
+    });
+  }
+
+  const clueSpecs = [
+    ["museum-clue-1", -18, 69, "Undersök statyn som pekar bakåt"],
+    ["museum-clue-2", 37.5, 10, "Studera porträttets ögon"],
+    ["museum-clue-3", -18, -65, "Läs årtalet under den spruckna statyn"]
+  ];
+  const clues = clueSpecs.map(([id, x, z, label], index) => {
+    const clueMat = material(context, `museum-clue-glow-${index}`, { color: 0x92ddff, emissive: 0x37b5ff, emissiveIntensity: 3.2, roughness: .18 });
+    const marker = torus(context, 1.0, .1, clueMat, x, .08, z, { x: Math.PI / 2 });
+    marker.name = id;
+    pointLight(context, 0x55bfff, 15, 9, x, 1.2, z);
+    interactable(context, id, "museum_clue", x, z, 4.7, label, marker);
+    return marker;
+  });
+
+  const museumClock = new THREE.Group();
+  museumClock.position.set(0, 6.4, -88.8);
+  museumClock.name = "museum-clock-2359";
+  context.root.add(museumClock);
+  const clockFace = material(context, "museum-clock-face", { color: 0xe2dbc8, emissive: 0x4e493b, emissiveIntensity: .66, roughness: .58 });
+  const clockHand = material(context, "museum-clock-hand", { color: 0x171417, roughness: .42 });
+  cylinder(context, 2.8, 2.8, .28, 36, clockFace, 0, 0, 0, museumClock).rotation.x = Math.PI / 2;
+  const hourHand = new THREE.Group();
+  const minuteHand = new THREE.Group();
+  hourHand.position.z = -.2;
+  minuteHand.position.z = -.24;
+  hourHand.rotation.z = -(11 + 59 / 60) / 12 * Math.PI * 2;
+  minuteHand.rotation.z = -(59 / 60) * Math.PI * 2;
+  museumClock.add(hourHand, minuteHand);
+  box(context, .16, 1.65, .1, clockHand, 0, .82, 0, 0, hourHand);
+  box(context, .12, 2.3, .09, clockHand, 0, 1.15, 0, 0, minuteHand);
+  sphere(context, .18, 12, 8, clockHand, 0, 0, -.28, museumClock);
+  const clockPanel = textPanel(context, "23:59", {
+    x: 0, y: 2.2, z: -89.1, width: 4.8, height: 1.25, background: "#26191d", border: "#9e414f",
+    color: "#ff9aa9", font: "Arial, sans-serif", fontSize: 150, emissive: 0x5c1422, emissiveIntensity: 1.3
+  });
+
+  const monster = addMonster(context, 0, -74, 1.08);
+  monster.name = "ikea-monster-in-museum";
+  monster.visible = false;
+  monster.userData.appearsAt = "00:00";
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -99.3);
+  exitDoor.name = "museum-emergency-exit";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  const exitDoorMat = material(context, "museum-exit-door", { color: 0x263338, roughness: .48, metalness: .62 });
+  for (const x of [-2.25, 2.25]) box(context, 4.4, 7.4, .42, exitDoorMat, x, 3.7, 0, 0, exitDoor);
+  box(context, 7.2, .2, .3, bronze, 0, 3.3, -.28, 0, exitDoor);
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -97.9);
+  exitLight.name = "museum-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  const exitGlow = material(context, "museum-exit-glow", { color: 0xf33b4f, emissive: 0xe10f34, emissiveIntensity: 4, roughness: .16 });
+  box(context, 5.2, 1.1, .2, exitGlow, 0, 8.2, 0, 0, exitLight);
+  pointLight(context, 0xff3453, 42, 22, 0, 7.6, 1, exitLight);
+  interactable(context, "museum-exit", "museum_exit", 0, -94.5, 6.5, "Öppna museets nödutgång", exitDoor);
+
+  context.actors.entranceSign = entranceSign;
+  context.actors.statues = statues;
+  context.actors.paintings = paintings;
+  context.actors.clues = clues;
+  context.actors.clock = museumClock;
+  context.actors.clockPanel = clockPanel;
+  context.actors.clockHands = [hourHand, minuteHand];
+  context.actors.monster = monster;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  context.actors.lights = lights;
+  return finishWorld(context);
+}
+
+function buildForgottenHospital() {
+  const context = createWorld(
+    "forgotten_hospital",
+    { minX: -108, maxX: 108, minZ: -106, maxZ: 108 },
+    { x: 0, y: 0, z: 97, yaw: 0 },
+    { sky: 0x071014, ground: 0x010303, hemisphere: .5, sun: 0x91b7b1, sunIntensity: .45, sunX: -30, sunY: 36 }
+  );
+  context.root.userData.backgroundColor = 0x071014;
+  context.root.userData.isInterior = true;
+
+  const tile = material(context, "hospital-tile", { physical: true, color: 0x687572, roughness: .38, metalness: .08, clearcoat: .48, clearcoatRoughness: .25 });
+  const wardTile = material(context, "hospital-ward-tile", { color: 0x53615d, roughness: .72 });
+  const wallMat = material(context, "hospital-wall", { color: 0x8b9188, roughness: .96 });
+  const lowerWall = material(context, "hospital-lower-wall", { color: 0x3f5a56, roughness: .84 });
+  const ceiling = material(context, "hospital-ceiling", { color: 0x343d3e, roughness: .94 });
+  const steel = material(context, "hospital-steel", { color: 0x69777b, roughness: .32, metalness: .79 });
+  const pale = material(context, "hospital-pale", { color: 0xb9c4ba, roughness: .83 });
+  const curtainMat = material(context, "hospital-curtain", { color: 0x769a93, roughness: .98, transparent: true, opacity: .84 });
+  const warningRed = material(context, "hospital-warning", { color: 0xb43b3d, emissive: 0x6c1118, emissiveIntensity: 1.4, roughness: .42 });
+
+  // Lobbyn ligger för sig; de tre hemliga våningarna finns som isolerade avdelningar.
+  plane(context, 72, 60, tile, 0, 0, 78);
+  box(context, 72, .42, 60, ceiling, 0, 9.4, 78);
+  for (const x of [-36, 36]) {
+    box(context, 1, 9.2, 60, wallMat, x, 4.6, 78);
+    collider(context, x, 78, 1, 60);
+  }
+  box(context, 72, 9.2, 1, wallMat, 0, 4.6, 108);
+  box(context, 72, 9.2, 1, wallMat, 0, 4.6, 48);
+  collider(context, 0, 108, 72, 1);
+  collider(context, 0, 48, 72, 1);
+
+  const lobbySign = textPanel(context, "DET GLÖMDA SJUKHUSET\nHISSVÅNINGAR: 1 · 2 · 3", {
+    x: 0, y: 6.2, z: 107.4, width: 15, height: 3, background: "#172729", border: "#71918a",
+    color: "#c9ded8", font: "Arial, sans-serif", fontSize: 94, emissive: 0x123b39, emissiveIntensity: .82
+  });
+
+  const reception = new THREE.Group();
+  reception.position.set(-18, 0, 78);
+  reception.name = "hospital-abandoned-reception";
+  context.root.add(reception);
+  box(context, 14, 2.5, 4, lowerWall, 0, 1.25, 0, 0, reception);
+  box(context, 14.6, .25, 4.5, steel, 0, 2.6, 0, 0, reception);
+  collider(context, -18, 78, 14, 4);
+
+  const elevator = new THREE.Group();
+  elevator.position.set(0, 0, 55);
+  elevator.name = "hospital-impossible-elevator";
+  context.root.add(elevator);
+  const elevatorFrame = material(context, "hospital-elevator-frame", { color: 0x313d41, roughness: .36, metalness: .82 });
+  box(context, 13, 8.4, 1, elevatorFrame, 0, 4.2, 0, 0, elevator);
+  const elevatorDoors = [];
+  for (const x of [-3.1, 3.1]) {
+    const door = box(context, 5.9, 7.3, .18, steel, x, 3.65, -.58, 0, elevator);
+    door.name = `hospital-elevator-door-${x < 0 ? "left" : "right"}`;
+    door.userData.closedX = x;
+    elevatorDoors.push(door);
+  }
+  const floorDisplay = textPanel(context, "VÅNING 1\n4 · 7 · 13?", {
+    x: 0, y: 8.1, z: 54.25, width: 5.2, height: 1.45, background: "#161b1c", border: "#8d3c43",
+    color: "#ff7883", font: "Arial, sans-serif", fontSize: 108, emissive: 0x75111d, emissiveIntensity: 1.3
+  });
+  interactable(context, "hospital-elevator", "hospital_elevator", 0, 59, 5.5, "Tryck på hissknappen som inte fanns nyss", elevator);
+
+  const wardCenters = [-72, 0, 72];
+  const floorNumbers = [4, 7, 13];
+  const floorSpawns = wardCenters.map((x, index) => {
+    const spawn = new THREE.Vector3(x, 0, 31);
+    spawn.floor = floorNumbers[index];
+    spawn.yaw = 0;
+    return spawn;
+  });
+  const wards = [];
+  const floorSigns = [];
+  const wardBeds = [];
+  wardCenters.forEach((centerX, wardIndex) => {
+    const ward = new THREE.Group();
+    ward.position.set(centerX, 0, -28);
+    ward.name = `secret-hospital-floor-${floorNumbers[wardIndex]}`;
+    context.root.add(ward);
+    plane(context, 52, 122, wardIndex % 2 ? tile : wardTile, 0, 0, 0, ward);
+    box(context, 52, .42, 122, ceiling, 0, 9.2, 0, 0, ward);
+    for (const x of [-26, 26]) {
+      box(context, 1, 9, 122, wallMat, x, 4.5, 0, 0, ward);
+      box(context, .12, 3.1, 120, lowerWall, x + (x < 0 ? .56 : -.56), 1.55, 0, 0, ward);
+    }
+    box(context, 52, 9, 1, wallMat, 0, 4.5, 61, 0, ward);
+    box(context, 52, 9, 1, wallMat, 0, 4.5, -61, 0, ward);
+    collider(context, centerX - 26, -28, 1, 122);
+    collider(context, centerX + 26, -28, 1, 122);
+    collider(context, centerX, 33, 52, 1);
+    collider(context, centerX, -89, 52, 1);
+
+    const sign = textPanel(context, `HEMLIG VÅNING ${floorNumbers[wardIndex]}\nFINNS EJ PÅ KARTAN`, {
+      x: centerX, y: 6.2, z: 32.4, width: 11, height: 2.5, background: "#1c2a2a", border: "#8a343e",
+      color: "#efb0ac", font: "Arial, sans-serif", fontSize: 90, emissive: 0x5a1018, emissiveIntensity: 1.1
+    });
+    floorSigns.push(sign);
+
+    for (let bedIndex = 0; bedIndex < 8; bedIndex += 1) {
+      const side = bedIndex < 4 ? -1 : 1;
+      const row = bedIndex % 4;
+      const bed = new THREE.Group();
+      bed.position.set(centerX + side * 15, 0, 14 - row * 24);
+      bed.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      bed.name = `hospital-bed-floor-${floorNumbers[wardIndex]}-${bedIndex + 1}`;
+      context.root.add(bed);
+      box(context, 4.3, .55, 7.3, steel, 0, .55, 0, 0, bed);
+      box(context, 3.9, .55, 6.8, pale, 0, 1.08, 0, 0, bed);
+      box(context, 4.3, 2.3, .22, steel, 0, 1.4, -3.55, 0, bed);
+      box(context, 4.1, .12, 2.6, curtainMat, 0, 2.4, .9, 0, bed);
+      wardBeds.push(bed);
+    }
+    wards.push(ward);
+  });
+
+  const lights = [];
+  const fluorescent = material(context, "hospital-fluorescent", { color: 0xd5fff2, emissive: 0x9debdc, emissiveIntensity: 3.1, roughness: .18 });
+  [[0, 78], ...wardCenters.flatMap((x) => [30, 5, -20, -45, -70].map((z) => [x, z]))].forEach(([x, z], index) => {
+    const fixture = new THREE.Group();
+    fixture.position.set(x, 0, z);
+    fixture.name = "hospital-flickering-light";
+    fixture.userData.phase = index * .37;
+    context.root.add(fixture);
+    box(context, 4.4, .11, .72, fluorescent, 0, 8.85, 0, 0, fixture);
+    const glow = pointLight(context, 0xb9ffe9, index % 6 === 4 ? 8 : 22, 18, 0, 8.1, 0, fixture);
+    fixture.userData.light = glow;
+    lights.push(fixture);
+  });
+
+  const recordMat = material(context, "hospital-record-paper", { color: 0xd7cfb4, emissive: 0x3d3a24, emissiveIntensity: .5, roughness: .85 });
+  const recordInk = material(context, "hospital-record-ink", { color: 0x263337, roughness: .75 });
+  const records = wardCenters.map((x, index) => {
+    const z = -78;
+    const record = new THREE.Group();
+    record.position.set(x, .9, z);
+    record.name = `hospital-record-${index + 1}`;
+    context.root.add(record);
+    box(context, 3, .08, 3.8, recordMat, 0, 0, 0, 0, record);
+    for (let line = 0; line < 7; line += 1) box(context, 2.2 - line % 2 * .4, .035, .07, line === 0 ? warningRed : recordInk, 0, .08, -1.3 + line * .37, 0, record);
+    pointLight(context, 0xffc986, 10, 7, 0, .6, 0, record);
+    interactable(context, `hospital-record-${index + 1}`, "hospital_record", x, z, 4.6, `Läs patientjournalen från våning ${floorNumbers[index]}`, record);
+    return record;
+  });
+
+  const nurse = new THREE.Group();
+  nurse.position.set(72, 0, -44);
+  nurse.name = "old-blood-stained-nurse";
+  nurse.visible = false;
+  nurse.userData.active = false;
+  context.root.add(nurse);
+  const nurseDress = material(context, "hospital-nurse-dress", { color: 0x9ca8a1, roughness: .9 });
+  const nurseStain = material(context, "hospital-nurse-stain", { color: 0x672b2d, roughness: .96 });
+  const nurseSkin = material(context, "hospital-nurse-skin", { color: 0xb0a69d, roughness: .72 });
+  const nurseEye = material(context, "hospital-nurse-eye", { color: 0xff666b, emissive: 0xff202d, emissiveIntensity: 3.5, roughness: .12 });
+  const nurseBody = box(context, 2.1, 4.2, 1.25, nurseDress, 0, 3.3, 0, 0, nurse);
+  box(context, 1.25, 1.7, .08, nurseStain, -.2, 3.25, -.67, .18, nurse);
+  sphere(context, .73, 20, 14, nurseSkin, 0, 5.85, 0, nurse);
+  box(context, 1.7, .35, .8, nurseDress, 0, 6.62, 0, 0, nurse);
+  box(context, .35, .12, 1.25, warningRed, 0, 6.82, -.12, 0, nurse);
+  box(context, 1.25, .12, .35, warningRed, 0, 6.82, -.12, 0, nurse);
+  sphere(context, .08, 10, 8, nurseEye, -.25, 6.0, -.62, nurse);
+  sphere(context, .08, 10, 8, nurseEye, .25, 6.0, -.62, nurse);
+  for (const side of [-1, 1]) {
+    const arm = cylinder(context, .12, .2, 3.6, 10, nurseSkin, side * 1.25, 3.4, 0, nurse);
+    arm.rotation.z = side * .12;
+    cylinder(context, .17, .25, 3.2, 10, nurseDress, side * .55, 1.6, 0, nurse);
+  }
+  pointLight(context, 0xff3849, 14, 9, 0, 6, -.5, nurse);
+  const followPoints = [
+    new THREE.Vector3(72, 0, -44), new THREE.Vector3(-72, 0, -48),
+    new THREE.Vector3(0, 0, -70), new THREE.Vector3(28, 0, 88)
+  ];
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(35.3, 0, 78);
+  exitDoor.rotation.y = -Math.PI / 2;
+  exitDoor.name = "hospital-emergency-exit";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  for (const x of [-2, 2]) box(context, 3.9, 7.1, .4, lowerWall, x, 3.55, 0, 0, exitDoor);
+  box(context, 6.3, .2, .3, steel, 0, 3.2, -.28, 0, exitDoor);
+  const exitLight = new THREE.Group();
+  exitLight.position.set(34, 0, 78);
+  exitLight.rotation.y = -Math.PI / 2;
+  exitLight.name = "hospital-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  box(context, 5, 1.1, .2, warningRed, 0, 8.1, 0, 0, exitLight);
+  pointLight(context, 0xff3d55, 42, 22, 0, 7.5, 1, exitLight);
+  interactable(context, "hospital-exit", "hospital_exit", 30.5, 78, 6.2, "Öppna sjukhusets nödutgång", exitDoor);
+
+  context.actors.lobbySign = lobbySign;
+  context.actors.reception = reception;
+  context.actors.elevator = elevator;
+  context.actors.elevatorDoors = elevatorDoors;
+  context.actors.floorDisplay = floorDisplay;
+  context.actors.floorSpawns = floorSpawns;
+  context.actors.wards = wards;
+  context.actors.floorSigns = floorSigns;
+  context.actors.beds = wardBeds;
+  context.actors.records = records;
+  context.actors.nurse = nurse;
+  context.actors.followPoints = followPoints;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  context.actors.lights = lights;
+  return finishWorld(context);
+}
+
+function buildFourFloorsDown() {
+  const context = createWorld(
+    "four_floors_down",
+    { minX: -34, maxX: 34, minZ: -99, maxZ: 99 },
+    { x: 0, y: 0, z: 90, yaw: 0 },
+    { sky: 0x05070b, ground: 0x010102, hemisphere: .42, sun: 0x768591, sunIntensity: .32, sunX: 24, sunY: 22 }
+  );
+  context.root.userData.backgroundColor = 0x05070b;
+  context.root.userData.isInterior = true;
+
+  const controlFloor = material(context, "basement-control-floor", { color: 0x42484a, roughness: .65, metalness: .12 });
+  const basementFloor = material(context, "basement-floor", { color: 0x262b2e, roughness: .83 });
+  const concrete = material(context, "basement-concrete", { color: 0x555b5b, roughness: .98 });
+  const darkConcrete = material(context, "basement-dark-concrete", { color: 0x292f32, roughness: .92 });
+  const steel = material(context, "basement-steel", { color: 0x434d54, roughness: .36, metalness: .8 });
+  const rust = material(context, "basement-rust", { color: 0x73442f, roughness: .82, metalness: .38 });
+  const screenMat = material(context, "basement-screen", { color: 0x79e8c0, emissive: 0x1bc77f, emissiveIntensity: 3, roughness: .15 });
+  plane(context, 68, 58, controlFloor, 0, 0, 72);
+  plane(context, 24, 154, basementFloor, 0, .005, -25);
+  box(context, 68, .42, 202, darkConcrete, 0, 9.2, 0);
+
+  for (const x of [-34, 34]) {
+    box(context, 1, 9.2, 202, concrete, x, 4.6, 0);
+    collider(context, x, 0, 1, 202);
+  }
+  box(context, 68, 9.2, 1, concrete, 0, 4.6, 100);
+  collider(context, 0, 100, 68, 1);
+  for (const x of [-21, 21]) {
+    box(context, 26, 9.2, 1, concrete, x, 4.6, -100);
+    collider(context, x, -100, 26, 1);
+  }
+  // Statiska sidoväggar lämnar alltid en 24 meter bred gemensam korridor.
+  for (const x of [-12, 12]) {
+    box(context, .8, 8.8, 154, concrete, x, 4.4, -25);
+    box(context, .14, 3.2, 152, darkConcrete, x + (x < 0 ? .48 : -.48), 1.6, -25);
+    collider(context, x, -25, .85, 154);
+  }
+
+  const controlHouse = new THREE.Group();
+  controlHouse.position.set(0, 0, 78);
+  controlHouse.name = "four-floors-control-house";
+  context.root.add(controlHouse);
+  const controlDesk = box(context, 22, 2.4, 4.5, steel, 0, 1.2, 0, 0, controlHouse);
+  collider(context, 0, 78, 22, 4.5);
+  const monitors = [];
+  for (let i = 0; i < 5; i += 1) {
+    const monitor = box(context, 3.2, 2.1, .35, screenMat, -7.6 + i * 3.8, 3.25, -.8, 0, controlHouse);
+    monitor.name = `basement-monitor-${i + 1}`;
+    monitor.userData.phase = i * .6;
+    monitors.push(monitor);
+  }
+  const controlSign = textPanel(context, "KONTROLLHUS 04\nHISS: FYRA VÅNINGAR NER", {
+    x: 0, y: 6.6, z: 99.4, width: 13.5, height: 2.7, background: "#172021", border: "#648779",
+    color: "#bce6d5", font: "Arial, sans-serif", fontSize: 96, emissive: 0x164a39, emissiveIntensity: 1
+  });
+
+  const elevator = new THREE.Group();
+  elevator.position.set(0, 0, 55);
+  elevator.name = "control-house-basement-elevator";
+  context.root.add(elevator);
+  box(context, 14, 8.5, 1, steel, 0, 4.25, 0, 0, elevator);
+  const elevatorDoors = [];
+  for (const x of [-3.3, 3.3]) {
+    const door = box(context, 6.3, 7.4, .2, darkConcrete, x, 3.7, -.58, 0, elevator);
+    door.name = `basement-elevator-door-${x < 0 ? "left" : "right"}`;
+    elevatorDoors.push(door);
+  }
+  const elevatorDisplay = textPanel(context, "0\n-1 · -2 · -3 · -4", {
+    x: 0, y: 8.1, z: 54.25, width: 5.8, height: 1.5, background: "#15191a", border: "#9b473c",
+    color: "#ff806b", font: "Arial, sans-serif", fontSize: 105, emissive: 0x6e2017, emissiveIntensity: 1.25
+  });
+  interactable(context, "basement-elevator", "basement_elevator", 0, 59.5, 5.7, "Åk fyra våningar ner med kontrollhusets hiss", elevator);
+  const basementSpawn = { x: 0, z: 46, yaw: 0 };
+
+  const lights = [];
+  const corridorGlow = material(context, "basement-light", { color: 0xc7f0e4, emissive: 0x77d6bd, emissiveIntensity: 2.8, roughness: .2 });
+  [91, 66, 45, 28, 10, -8, -26, -44, -62, -80, -94].forEach((z, index) => {
+    const fixture = new THREE.Group();
+    fixture.position.set(index % 2 ? .6 : -.6, 0, z);
+    fixture.name = "basement-flickering-light";
+    fixture.userData.phase = index * .51;
+    context.root.add(fixture);
+    box(context, 4.2, .12, .7, corridorGlow, 0, 8.82, 0, 0, fixture);
+    const glow = pointLight(context, 0xa6ead5, index % 4 === 2 ? 8 : 19, 17, 0, 8, 0, fixture);
+    fixture.userData.light = glow;
+    lights.push(fixture);
+  });
+
+  // Varje layout är endast visuell och delar samma kollisionsfria mittgång.
+  const corridorLayouts = [];
+  const layoutColors = [0x386e65, 0x6b3a3f, 0x4c426c, 0x74623c];
+  for (let layoutIndex = 0; layoutIndex < 4; layoutIndex += 1) {
+    const layout = new THREE.Group();
+    layout.name = `shifting-corridor-layout-${layoutIndex + 1}`;
+    layout.visible = layoutIndex === 0;
+    layout.userData.layoutIndex = layoutIndex;
+    layout.userData.spawn = { ...basementSpawn };
+    layout.userData.zone = { minX: -10.5, maxX: 10.5, minZ: -94, maxZ: 48 };
+    context.root.add(layout);
+    const accent = material(context, `basement-layout-accent-${layoutIndex}`, {
+      color: layoutColors[layoutIndex], emissive: layoutColors[layoutIndex], emissiveIntensity: .48, roughness: .72
+    });
+    for (let segment = 0; segment < 8; segment += 1) {
+      const z = 38 - segment * 18;
+      const side = (segment + layoutIndex) % 2 ? -1 : 1;
+      box(context, 1.2 + layoutIndex * .25, 5.2, 8 + (segment % 3) * 2, accent, side * 10.65, 3, z, (layoutIndex - 1.5) * .03, layout);
+      box(context, 18 - layoutIndex, .35, .7, accent, side * 1.2, 7.2, z - 5, (segment % 2 ? .08 : -.08), layout);
+      if (layoutIndex === 0) {
+        for (let pipe = 0; pipe < 3; pipe += 1) {
+          const tube = cylinder(context, .11, .11, 13, 8, rust, side * (8.8 + pipe * .42), 6.3, z, layout);
+          tube.rotation.x = Math.PI / 2;
+        }
+      } else if (layoutIndex === 1) {
+        torus(context, 1.2 + segment % 2 * .4, .13, accent, side * 9.7, 4.2, z, { y: Math.PI / 2 }, layout);
+      } else if (layoutIndex === 2) {
+        cone(context, .7, 2.1, 4, accent, side * 9.9, 5.4, z, layoutIndex * .2, layout);
+      } else {
+        sphere(context, .5, 14, 10, accent, side * 9.8, 4.5, z, layout);
+      }
+    }
+    corridorLayouts.push(layout);
+  }
+
+  // Dörrarna ligger utanför layoutgrupperna så de alltid kan nås via testteleport.
+  const doors = [];
+  const shiftingDoorSpecs = [[-9.2, 30, Math.PI / 2], [9.2, 0, -Math.PI / 2], [-9.2, -30, Math.PI / 2], [9.2, -60, -Math.PI / 2]];
+  shiftingDoorSpecs.forEach(([x, z, yaw], index) => {
+    const door = new THREE.Group();
+    door.position.set(x, 0, z);
+    door.rotation.y = yaw;
+    door.name = `shifting-door-${index + 1}`;
+    door.userData.layoutAfter = (index + 1) % corridorLayouts.length;
+    context.root.add(door);
+    const doorMat = material(context, `shifting-door-mat-${index}`, {
+      color: 0x344047, emissive: layoutColors[index], emissiveIntensity: .42, roughness: .42, metalness: .6
+    });
+    box(context, 5.4, 6.9, .42, doorMat, 0, 3.45, 0, 0, door);
+    box(context, 4.2, .18, .28, rust, 0, 3.1, -.28, 0, door);
+    const numberMat = material(context, `shifting-number-${index}`, { color: 0xb7fff0, emissive: 0x35d8b2, emissiveIntensity: 2.4, roughness: .18 });
+    const number = sphere(context, .34, 14, 10, numberMat, 0, 5.45, -.32, door);
+    number.scale.x = 1.5 + index * .18;
+    pointLight(context, 0x4edbb7, 13, 8, 0, 5.2, -.3, door);
+    interactable(context, `shifting-door-${index + 1}`, "shifting_door", x + (x < 0 ? 3.3 : -3.3), z, 4.6, `Öppna den skiftande dörren ${index + 1}`, door);
+    doors.push(door);
+  });
+
+  const exitDoor = new THREE.Group();
+  exitDoor.position.set(0, 0, -99.3);
+  exitDoor.name = "four-floors-real-exit";
+  exitDoor.userData.locked = true;
+  context.root.add(exitDoor);
+  const exitDoorMat = material(context, "basement-exit-door", { color: 0x25343a, roughness: .42, metalness: .7 });
+  for (const x of [-2.25, 2.25]) box(context, 4.4, 7.4, .42, exitDoorMat, x, 3.7, 0, 0, exitDoor);
+  box(context, 7.3, .2, .3, rust, 0, 3.25, -.28, 0, exitDoor);
+  const exitLight = new THREE.Group();
+  exitLight.position.set(0, 0, -97.9);
+  exitLight.name = "basement-exit-light";
+  exitLight.visible = false;
+  context.root.add(exitLight);
+  const exitGlow = material(context, "basement-exit-glow", { color: 0x4dffc5, emissive: 0x13dd98, emissiveIntensity: 4, roughness: .15 });
+  box(context, 5.3, 1.1, .2, exitGlow, 0, 8.15, 0, 0, exitLight);
+  pointLight(context, 0x43ffbc, 45, 22, 0, 7.55, 1, exitLight);
+  interactable(context, "basement-exit", "basement_exit", 0, -94.5, 6.5, "Öppna den riktiga utgången efter fyra skiftande dörrar", exitDoor);
+
+  context.actors.controlHouse = controlHouse;
+  context.actors.controlDesk = controlDesk;
+  context.actors.controlSign = controlSign;
+  context.actors.monitors = monitors;
+  context.actors.elevator = elevator;
+  context.actors.elevatorDoors = elevatorDoors;
+  context.actors.elevatorDisplay = elevatorDisplay;
+  context.actors.basementSpawn = basementSpawn;
+  context.actors.corridorLayouts = corridorLayouts;
+  context.actors.doors = doors;
+  context.actors.exitDoor = exitDoor;
+  context.actors.exitLight = exitLight;
+  context.actors.lights = lights;
   return finishWorld(context);
 }

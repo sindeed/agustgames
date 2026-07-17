@@ -230,6 +230,25 @@ Flödet visar den bekräftade huvudidén. Exakt hur öknen, vulkanön, den gömd
 **Idéstatus:** bekräftad
 **Byggstatus:** ej verifierad
 
+## Nio nya skräckvärldar efter byn
+
+Efter att mysteriet i byn är löst fortsätter resan i den här ordningen:
+
+1. **Den gamla skolan:** ljus blinkar, dörrar låser sig, fotsteg hörs och Skramlaren kommer exakt 03:33. Tre pussel öppnar nödutgången.
+2. **Fyren vid havet:** en tsunami sveper över en hel stormstad. Spelarna måste hinna upp till fyrens slutna skyddsrum och sedan avslöja hemligheten i källaren.
+3. **Det förbjudna hotellet:** tre nycklar och tre dokument ska hittas medan en korridorskugga följer efter.
+4. **Kyrkogårdens hemlighet:** tre gravgåtor och ett altare bryter förbannelsen. Om gryningen hinner komma vaknar samma monster som i IKEA.
+5. **Det försvunna tivolit:** övergivna attraktioner startar av sig själva och en mystisk clown följer spelarna.
+6. **Dockmakarens hus:** dockorna byter plats varje gång spelaren vänder sig om.
+7. **Museet efter stängning:** statyer och tavlor vaknar 00:00. Nödutgångens kod måste samlas och IKEA-monstret undvikas.
+8. **Det glömda sjukhuset:** hissen stannar på våning 4, 7 och 13, som saknas på kartan, medan en gammal blodfläckig sjuksköterska jagar spelarna.
+9. **Fyra våningar ner:** kontrollhusets hiss når en hemlig källare där korridoren byggs om efter varje öppnad dörr.
+
+Efter den fjärde källardörren går resan tillbaka till den enorma skogen och en ny obby-loop börjar. Alla nio kapitel spelas i förstaperson och använder riktiga 3D-miljöer, ljus, skuggor, dimma och ljudsignaler.
+
+**Idéstatus:** bekräftad
+**Byggstatus:** byggt och Chromium-verifierat 2026-07-17
+
 ## Tid, väder och naturkatastrofer
 
 - Världen ska ha en tydlig dag- och nattcykel.
@@ -265,7 +284,10 @@ Det ska kännas som att samma skrämmande monster jagar spelarna genom flera vä
 - i IKEA klockan 03:33 varje natt,
 - i det stora hålet,
 - utanför det hemsökta huset,
-- och ur sanden under ökennätterna.
+- ur sanden under ökennätterna,
+- i den gamla skolan exakt 03:33,
+- på kyrkogården vid gryningen,
+- och i museet när klockan slår 00:00.
 
 Monstret binder ihop världarna och får spelarna att undra hur det alltid kan hitta dem. Det är inte bestämt ännu exakt hur monstret ser ut, vad det heter eller varför det följer efter spelarna.
 
@@ -313,7 +335,8 @@ Följande detaljer är inte bestämda och ska inte hittas på utan skaparnas nä
 | Spökstation, farligt tågval och nya världar | Ja | Ej verifierad |
 | Öken, nattmonster och kartgrotta till IKEA | Ja | Ej verifierad |
 | Vulkanö med ljudvarning och IKEA-retur vid misslyckande | Ja | Ej verifierad |
-| Gömda gamla byn, engelska skyltar och växande mysterier | Ja | Ej verifierad |
+| Gömda gamla byn, engelska skyltar och växande mysterier | Ja | Byggt och testat |
+| Nio skräckvärldar från gamla skolan till Fyra våningar ner | Ja | Byggt och testat |
 | Dag/natt, väder, tsunami och tornado | Ja | Ej verifierad |
 | Förstaperson, högupplöst 3D, skuggor och detaljerad natur | Ja | Ej verifierad |
 | Svenska i hela spelet, med engelska gamla byfynd som undantag | Ja | Ej verifierad |
