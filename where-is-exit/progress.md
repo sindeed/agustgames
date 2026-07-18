@@ -100,3 +100,18 @@ Original prompt: Jag vill ha ett spel som heter Where is Exit.
 - Full regression passerar fortfarande: Game Over tillbaka till start-rummet, full
   Solo-vinst genom tre banor och iPad-touch från start-rum till Solo.
 - Inga kända fel eller lösa TODO:er återstår för start-rumsbottarna.
+
+## Kamerarelativ styrning
+
+- Ny önskan: framåt, bakåt, vänster och höger ska alltid räknas från det håll
+  kameran tittar åt, på både tangentbord och touch.
+- Implementerat: WASD, piltangenter och styrkorset använder kamerans närmaste
+  rutriktning. Styrningen uppdateras även medan kameran vrids.
+- `render_game_to_text` redovisar nu kamerans aktuella framåt- och högerriktning
+  så att alla fyra riktningarna kan verifieras automatiskt.
+- Verifierat i Chromium vid alla fyra kardinala kameravinklar: framåt, bakåt,
+  vänster och höger flyttar exakt i kamerans riktningar utan att kameran centreras om.
+- iPhone-test med touchdrag och styrkors är godkänt utan konsol- eller sidfel.
+- Full regression passerar: Game Over/återstart, full Solo-vinst genom tre banor
+  och touch från start-rummet till Solo fungerar med kamerarelativa rutter.
+- Inga kända fel eller lösa TODO:er återstår för den kamerarelativa styrningen.

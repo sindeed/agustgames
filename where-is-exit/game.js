@@ -821,18 +821,38 @@
     checkShadowCollision();
   }
 
-  function directionFromCode(code) {
-    const directions = {
-      ArrowUp: { x: 0, y: -1 },
-      KeyW: { x: 0, y: -1 },
-      ArrowDown: { x: 0, y: 1 },
-      KeyS: { x: 0, y: 1 },
-      ArrowLeft: { x: -1, y: 0 },
-      KeyA: { x: -1, y: 0 },
-      ArrowRight: { x: 1, y: 0 },
-      KeyD: { x: 1, y: 0 },
+  function cameraMovementBasis() {
+    const cameraX = Math.cos(state.cameraAngle);
+    const cameraY = Math.sin(state.cameraAngle);
+    const forward = Math.abs(cameraX) >= Math.abs(cameraY)
+      ? { x: Math.sign(cameraX) || 1, y: 0 }
+      : { x: 0, y: Math.sign(cameraY) || 1 };
+    return {
+      forward,
+      right: { x: -forward.y, y: forward.x },
     };
-    return directions[code] || null;
+  }
+
+  function directionFromCode(code) {
+    const intents = {
+      ArrowUp: { forward: 1, right: 0 },
+      KeyW: { forward: 1, right: 0 },
+      ArrowDown: { forward: -1, right: 0 },
+      KeyS: { forward: -1, right: 0 },
+      ArrowLeft: { forward: 0, right: -1 },
+      KeyA: { forward: 0, right: -1 },
+      ArrowRight: { forward: 0, right: 1 },
+      KeyD: { forward: 0, right: 1 },
+    };
+    const intent = intents[code];
+    if (!intent) {
+      return null;
+    }
+    const basis = cameraMovementBasis();
+    return {
+      x: basis.forward.x * intent.forward + basis.right.x * intent.right,
+      y: basis.forward.y * intent.forward + basis.right.y * intent.right,
+    };
   }
 
   function pressDirection(code) {
@@ -2923,6 +2943,7 @@
 
   function renderGameToText() {
     const sonarActive = state.sonar.activeMs > 0;
+    const movementBasis = cameraMovementBasis();
     const payload = {
       coordinateSystem:
         "Grid coordinates: origin (0,0) is the top-left tile; x increases right and y increases down.",
@@ -2941,6 +2962,11 @@
         avatarView: avatarViewFromAngles(),
         dragging: cameraPointer.active,
         gesture: "Drag the canvas horizontally to orbit and vertically to look up or down.",
+      },
+      controls: {
+        movement: "cameraRelative",
+        forward: movementBasis.forward,
+        right: movementBasis.right,
       },
       mode: state.mode,
       scene: state.scene,
