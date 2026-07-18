@@ -19,6 +19,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 | Wilder: The Big City | [`wilder-big-city/`](wilder-big-city/) | Utforska den stora staden Wilder i förstapersons-3D. Välj en av 19 personer (4 poliser, 5 tjuvar och 10 vanliga människor), kör fordon och besök stadens 13 byggnader. |
 | Wildbound: The Stormwake Trail | [`wildbound/`](wildbound/) | Ett stort originellt förstapersonsäventyr med vildmark, floder, vägar, bybor, häststall, strid och kreativ byggmagi. |
 | IKEA 3:33 | [`ikea-333/`](ikea-333/) | Ett stort förstapersonsäventyr i 23 kapitel. Överlev IKEA 03:33 och fortsätt genom drakgrottor, hajö, spöktåg, vulkan och nio nya skräckvärldar från den gamla skolan till den föränderliga källaren. |
+| Where is Exit? | [`where-is-exit/`](where-is-exit/) | Neonlabyrint i tre våningar. Avslöja den riktiga EXIT-dörren med sökpulsen och undvik skuggorna. |
 
 ## Struktur
 
@@ -30,6 +31,7 @@ agustgames/
 ├── wilder-big-city/  ← Förstapersons-3D i staden Wilder
 ├── wildbound/        ← Stort förstapersonsäventyr i en levande vildmark
 ├── ikea-333/         ← Förstapersons-3D i 23 kapitel med möbelbygge, drakar, katastrofer och skräckvärldar
+├── where-is-exit/    ← Neonlabyrint med sökpuls, falska utgångar och skuggor
 └── ...               ← nya spel läggs i egna mappar
 ```
 
