@@ -12,6 +12,7 @@
   const pauseButton = document.getElementById("pause-btn");
   const soundButton = document.getElementById("sound-btn");
   const fullscreenButton = document.getElementById("fullscreen-btn");
+  const boatControlButton = document.getElementById("boat-control-btn");
 
   const LOGICAL_WIDTH = 1140;
   const LOGICAL_HEIGHT = 720;
@@ -36,6 +37,7 @@
   const CAMERA_MIN_PITCH = -0.3;
   const CAMERA_MAX_PITCH = 0.38;
   const LOBBY_BOT_MOVE_TIME = 460;
+  const BOAT_MOVE_TIME = 180;
 
   const LEVELS = [
     {
@@ -110,8 +112,8 @@
 
   const LOBBY_DOOR_TYPES = {
     "1": { mode: "solo", label: "SOLO", color: "#55e8ff", available: true, players: 1 },
-    "2": { mode: "duo", label: "DUO", color: "#ffd45e", available: false, players: 2 },
-    "3": { mode: "team", label: "TEAM", color: "#ff5a91", available: false, players: 3 },
+    "2": { mode: "duo", label: "DUO", color: "#ffd45e", available: true, players: 2 },
+    "3": { mode: "team", label: "TEAM", color: "#ff5a91", available: true, players: 3 },
   };
 
   const LOBBY_BOT_PLANS = [
@@ -127,8 +129,8 @@
       path: [{ x: 8, y: 4 }, { x: 8, y: 3 }],
     },
     {
-      id: "tiki",
-      name: "TIKI",
+      id: "teo",
+      name: "TEO",
       targetMode: "team",
       targetLabel: "TEAM",
       color: "#ff5a91",
@@ -149,6 +151,68 @@
       path: [{ x: 11, y: 5 }, { x: 12, y: 5 }, { x: 12, y: 4 }, { x: 11.75, y: 3 }],
     },
   ];
+
+  const SEA_MAP = Array.from({ length: GRID_HEIGHT }, () => ".".repeat(GRID_WIDTH));
+  const SEA_ISLANDS = [
+    {
+      id: "hotel-island",
+      name: "HOTELLÖN",
+      x: 9,
+      y: 1,
+      dockX: 9,
+      dockY: 2,
+      isCorrect: true,
+      hasHotel: true,
+      color: "#b8ff69",
+    },
+    {
+      id: "mist-island",
+      name: "DIMÖN",
+      x: 4,
+      y: 4,
+      dockX: 4,
+      dockY: 5,
+      isCorrect: false,
+      hasHotel: false,
+      color: "#8fc3c9",
+    },
+    {
+      id: "rock-island",
+      name: "KLIPPÖN",
+      x: 14,
+      y: 5,
+      dockX: 14,
+      dockY: 6,
+      isCorrect: false,
+      hasHotel: false,
+      color: "#b39a7a",
+    },
+  ];
+
+  const HOTEL_MAP_TEMPLATE = [
+    "####H####H####H####",
+    "#.................#",
+    "#..#####.#####....#",
+    "#..#...#.#...#....#",
+    "#..#K..#.#........#",
+    "#..#...#.#........H",
+    "#..##.##.#####....#",
+    "#.................#",
+    "#........S........#",
+    "#.................#",
+    "###################",
+  ];
+  const HOTEL_DOOR_SPOTS = [
+    { id: "room-101", label: "RUM 101", x: 4, y: 0 },
+    { id: "room-102", label: "RUM 102", x: 9, y: 0 },
+    { id: "room-103", label: "RUM 103", x: 14, y: 0 },
+    { id: "room-104", label: "RUM 104", x: 18, y: 5 },
+  ];
+  const HOTEL_CORRECT_DOOR = {
+    solo: "room-104",
+    duo: "room-102",
+    team: "room-103",
+  };
 
   const COLORS = {
     night: "#050c1a",
@@ -181,6 +245,19 @@
     doors: [],
     lobbyDoors: [],
     lobbyBots: [],
+    partyBots: [],
+    boat: null,
+    deckPlayer: null,
+    controlTarget: "player",
+    islands: [],
+    hotel: null,
+    inventory: {
+      hotelKey: false,
+    },
+    adventure: {
+      seaCompleted: false,
+      hotelCompleted: false,
+    },
     hearts: MAX_HEARTS,
     mistakes: 0,
     elapsedMs: 0,
@@ -256,6 +333,21 @@
     const teamBotCount = LOBBY_BOT_PLANS.filter((bot) => bot.targetMode === "team").length;
     if (LOBBY_BOT_PLANS.length !== 3 || duoBotCount !== 1 || teamBotCount !== 2) {
       throw new Error("The start room needs one Duo bot and two Team bots.");
+    }
+    if (
+      HOTEL_MAP_TEMPLATE.length !== GRID_HEIGHT ||
+      HOTEL_MAP_TEMPLATE.some((row) => row.length !== GRID_WIDTH)
+    ) {
+      throw new Error("The hotel must be exactly 19x11 tiles.");
+    }
+    const hotelCells = HOTEL_MAP_TEMPLATE.join("");
+    if (
+      HOTEL_DOOR_SPOTS.length !== 4 ||
+      (hotelCells.match(/H/g) || []).length !== 4 ||
+      (hotelCells.match(/K/g) || []).length !== 1 ||
+      (hotelCells.match(/S/g) || []).length !== 1
+    ) {
+      throw new Error("The hotel needs one start, one key and four doors.");
     }
   }
 
@@ -337,6 +429,241 @@
     });
   }
 
+  function setSceneClass(scene) {
+    ["lobby", "sea", "hotel", "maze"].forEach((name) => {
+      document.body.classList.remove(name + "-mode");
+    });
+    document.body.classList.add(scene + "-mode");
+    updateBoatControlButton();
+  }
+
+  function updateBoatControlButton() {
+    if (!boatControlButton) {
+      return;
+    }
+    const steeringBoat = state.scene === "sea" && state.controlTarget === "boat";
+    boatControlButton.textContent = steeringBoat ? "PERSONSTYRNING" : "BÅTSTYRNING";
+    boatControlButton.setAttribute(
+      "aria-label",
+      steeringBoat ? "Byt till personstyrning" : "Byt till båtstyrning"
+    );
+    boatControlButton.classList.toggle("active", steeringBoat);
+  }
+
+  function createPartyBots(mode) {
+    return LOBBY_BOT_PLANS
+      .filter((plan) => plan.targetMode === mode)
+      .map((plan, index) => ({
+        id: plan.id,
+        name: plan.name,
+        targetMode: plan.targetMode,
+        targetLabel: plan.targetLabel,
+        color: plan.color,
+        bodyColor: plan.bodyColor,
+        x: 0,
+        y: 0,
+        fromX: 0,
+        fromY: 0,
+        facingX: 0,
+        facingY: -1,
+        moveAnimMs: 0,
+        walkMs: index * 130,
+        startDelayMs: index * 170,
+        status: "aboard",
+        roleLabel: "HJÄLPER",
+      }));
+  }
+
+  function partyNames() {
+    return state.partyBots.map((bot) => bot.name).join(" + ");
+  }
+
+  function setMapCell(x, y, symbol) {
+    const row = state.map[y];
+    state.map[y] = row.slice(0, x) + symbol + row.slice(x + 1);
+  }
+
+  function positionPartyBotsAtStart() {
+    if (!state.player || state.partyBots.length === 0) {
+      return;
+    }
+    const forward = { x: state.player.facingX, y: state.player.facingY };
+    const right = { x: -forward.y, y: forward.x };
+    const offsets = [
+      { x: -forward.x, y: -forward.y },
+      { x: -right.x, y: -right.y },
+      { x: right.x, y: right.y },
+      { x: forward.x, y: forward.y },
+    ];
+    const occupied = new Set([state.player.x + "," + state.player.y]);
+    state.partyBots.forEach((bot, index) => {
+      const offset = offsets.find((candidate) => {
+        const x = state.player.x + candidate.x;
+        const y = state.player.y + candidate.y;
+        return isWalkable(x, y) && !occupied.has(x + "," + y);
+      }) || { x: 0, y: 0 };
+      bot.x = state.player.x + offset.x;
+      bot.y = state.player.y + offset.y;
+      bot.fromX = bot.x;
+      bot.fromY = bot.y;
+      bot.facingX = forward.x;
+      bot.facingY = forward.y;
+      bot.moveAnimMs = 0;
+      bot.walkMs = index * 130;
+      bot.status = "following";
+      bot.roleLabel = "FÖLJER";
+      occupied.add(bot.x + "," + bot.y);
+    });
+  }
+
+  function movePartyBehind(previousPlayer) {
+    let target = { x: previousPlayer.x, y: previousPlayer.y };
+    state.partyBots.forEach((bot) => {
+      const previousBot = { x: bot.x, y: bot.y };
+      const dx = target.x - bot.x;
+      const dy = target.y - bot.y;
+      const length = Math.hypot(dx, dy) || 1;
+      bot.fromX = bot.x;
+      bot.fromY = bot.y;
+      bot.x = target.x;
+      bot.y = target.y;
+      if (dx !== 0 || dy !== 0) {
+        bot.facingX = dx / length;
+        bot.facingY = dy / length;
+      }
+      bot.moveAnimMs = MOVE_TIME;
+      bot.status = "following";
+      target = previousBot;
+    });
+  }
+
+  function buildHotelMap(correctDoorId) {
+    const rows = HOTEL_MAP_TEMPLATE.slice();
+    HOTEL_DOOR_SPOTS.forEach((door) => {
+      const symbol = door.id === correctDoorId ? "E" : "F";
+      rows[door.y] =
+        rows[door.y].slice(0, door.x) + symbol + rows[door.y].slice(door.x + 1);
+    });
+    return rows;
+  }
+
+  function loadSea() {
+    state.scene = "sea";
+    state.map = SEA_MAP.slice();
+    state.start = { x: 9, y: 9 };
+    state.shadows = [];
+    state.doors = [];
+    state.lobbyDoors = [];
+    state.lobbyBots = [];
+    state.levelElapsedMs = 0;
+    state.sonar.activeMs = 0;
+    state.sonar.cooldownMs = 0;
+    state.sonar.elapsedMs = 0;
+    state.levelBannerMs = 0;
+    state.particles = [];
+    state.inventory.hotelKey = false;
+    state.adventure.seaCompleted = false;
+    state.adventure.hotelCompleted = false;
+    state.hotel = null;
+    state.islands = SEA_ISLANDS.map((island) => ({ ...island, visited: false }));
+    state.boat = {
+      x: state.start.x,
+      y: state.start.y,
+      fromX: state.start.x,
+      fromY: state.start.y,
+      facingX: 0,
+      facingY: -1,
+      moveAnimMs: 0,
+      pendingDockId: null,
+      dockedAtIslandId: null,
+    };
+    state.deckPlayer = { x: 0, y: 0 };
+    state.controlTarget = "player";
+    state.player = {
+      x: state.boat.x,
+      y: state.boat.y,
+      fromX: state.boat.x,
+      fromY: state.boat.y,
+      moveAnimMs: 0,
+      facingX: 0,
+      facingY: -1,
+    };
+    state.partyBots.forEach((bot) => {
+      bot.status = "aboard";
+      bot.moveAnimMs = 0;
+      bot.roleLabel = "OMBORD";
+    });
+    setCameraFacing(0, -1, true);
+    setSceneClass("sea");
+    const companions = partyNames();
+    setMessage(
+      companions
+        ? companions + " FÖLJER MED • TRYCK BÅTSTYRNING"
+        : "DU ÄR OMBORD • TRYCK BÅTSTYRNING",
+      3600
+    );
+  }
+
+  function loadHotel() {
+    const correctDoorId = HOTEL_CORRECT_DOOR[state.playMode] || "room-104";
+    state.scene = "hotel";
+    state.map = buildHotelMap(correctDoorId);
+    state.start = null;
+    state.shadows = [];
+    state.doors = HOTEL_DOOR_SPOTS.map((door) => ({
+      ...door,
+      isReal: door.id === correctDoorId,
+      opened: false,
+    }));
+    state.lobbyDoors = [];
+    state.lobbyBots = [];
+    state.sonar.activeMs = 0;
+    state.sonar.cooldownMs = 0;
+    state.sonar.elapsedMs = 0;
+    state.levelBannerMs = 0;
+    state.particles = [];
+    let keyPosition = null;
+    for (let y = 0; y < GRID_HEIGHT; y += 1) {
+      for (let x = 0; x < GRID_WIDTH; x += 1) {
+        const cell = state.map[y][x];
+        if (cell === "S") {
+          state.start = { x, y };
+        } else if (cell === "K") {
+          keyPosition = { x, y };
+        }
+      }
+    }
+    if (!state.start || !keyPosition) {
+      throw new Error("The hotel needs a start and one key.");
+    }
+    state.hotel = {
+      correctDoorId,
+      key: { ...keyPosition, id: "hotel-key", collected: false },
+      wrongDoorAttempts: 0,
+      doors: state.doors,
+    };
+    state.inventory.hotelKey = false;
+    state.controlTarget = "player";
+    state.player = {
+      x: state.start.x,
+      y: state.start.y,
+      fromX: state.start.x,
+      fromY: state.start.y,
+      moveAnimMs: 0,
+      facingX: 0,
+      facingY: -1,
+    };
+    positionPartyBotsAtStart();
+    setCameraFacing(0, -1, true);
+    setSceneClass("hotel");
+    setMessage(
+      state.partyBots.length > 0
+        ? partyNames() + ": VI HJÄLPER DIG HITTA NYCKELN"
+        : "HITTA DEN ENDA NYCKELN",
+      3200
+    );
+  }
+
   function chooseInitialFacing() {
     const directions = [
       { x: 0, y: 1 },
@@ -359,6 +686,15 @@
     state.doors = [];
     state.lobbyDoors = [];
     state.lobbyBots = [];
+    state.partyBots = [];
+    state.boat = null;
+    state.deckPlayer = null;
+    state.controlTarget = "player";
+    state.islands = [];
+    state.hotel = null;
+    state.inventory.hotelKey = false;
+    state.adventure.seaCompleted = false;
+    state.adventure.hotelCompleted = false;
     state.levelElapsedMs = 0;
     state.sonar.activeMs = 0;
     state.sonar.cooldownMs = 0;
@@ -367,7 +703,7 @@
     state.levelBannerMs = 0;
     state.transitionMs = 0;
     state.particles = [];
-    document.body.classList.add("lobby-mode");
+    setSceneClass("lobby");
 
     for (let y = 0; y < GRID_HEIGHT; y += 1) {
       for (let x = 0; x < GRID_WIDTH; x += 1) {
@@ -417,7 +753,7 @@
     state.levelBannerMs = LEVEL_BANNER_DURATION;
     state.transitionMs = 0;
     state.particles = [];
-    document.body.classList.remove("lobby-mode");
+    setSceneClass("maze");
 
     for (let y = 0; y < GRID_HEIGHT; y += 1) {
       for (let x = 0; x < GRID_WIDTH; x += 1) {
@@ -459,6 +795,7 @@
       facingX: initialFacing.x,
       facingY: initialFacing.y,
     };
+    positionPartyBotsAtStart();
     setCameraFacing(initialFacing.x, initialFacing.y, true);
 
     setMessage(index === 0 ? "SPACE = SÖKPULS" : "NY VÅNING", 1900);
@@ -470,6 +807,7 @@
     clearHeldInput();
     state.mode = "playing";
     state.playMode = null;
+    state.partyBots = [];
     state.hearts = MAX_HEARTS;
     state.mistakes = 0;
     state.elapsedMs = 0;
@@ -566,6 +904,7 @@
     const initialFacing = chooseInitialFacing();
     state.player.facingX = initialFacing.x;
     state.player.facingY = initialFacing.y;
+    positionPartyBotsAtStart();
     setCameraFacing(initialFacing.x, initialFacing.y, true);
     state.shadows.forEach((shadow, index) => {
       shadow.x = shadow.spawnX;
@@ -637,18 +976,141 @@
     }
 
     state.playMode = door.mode;
+    state.partyBots = createPartyBots(door.mode);
     state.hearts = MAX_HEARTS;
     state.mistakes = 0;
     state.elapsedMs = 0;
     state.mode = "playing";
-    loadLevel(0);
-    setMessage(door.label + " VALT • HITTA UTGÅNGEN", 1900);
+    loadSea();
+    setMessage(door.label + " VALT • BÖRJA PÅ BÅTEN", 2200);
     playSound("rightDoor");
     render();
   }
 
+  function toggleBoatControl() {
+    if (state.mode !== "playing" || state.scene !== "sea") {
+      return;
+    }
+    clearHeldInput();
+    state.controlTarget = state.controlTarget === "boat" ? "player" : "boat";
+    updateBoatControlButton();
+    setMessage(
+      state.controlTarget === "boat"
+        ? "BÅTSTYRNING • KÖR MOT HOTELLÖN"
+        : "PERSONSTYRNING • DU GÅR PÅ DÄCKET",
+      1700
+    );
+    playSound("rightDoor");
+  }
+
+  function tryMoveSea(dx, dy) {
+    state.player.facingX = dx;
+    state.player.facingY = dy;
+
+    if (state.controlTarget === "player") {
+      const nextX = Math.max(-1, Math.min(1, state.deckPlayer.x + dx));
+      const nextY = Math.max(-1, Math.min(1, state.deckPlayer.y + dy));
+      if (nextX === state.deckPlayer.x && nextY === state.deckPlayer.y) {
+        state.bumpMs = 110;
+        playSound("bump");
+        return;
+      }
+      state.deckPlayer.x = nextX;
+      state.deckPlayer.y = nextY;
+      state.player.moveAnimMs = MOVE_TIME;
+      playSound("step");
+      return;
+    }
+
+    if (!state.boat || state.boat.moveAnimMs > 0 || state.boat.pendingDockId) {
+      return;
+    }
+    const targetX = state.boat.x + dx;
+    const targetY = state.boat.y + dy;
+    const outside = targetX < 1 || targetX > GRID_WIDTH - 2 || targetY < 1 || targetY > GRID_HEIGHT - 2;
+    const islandBody = state.islands.some(
+      (island) => island.x === targetX && island.y === targetY
+    );
+    if (outside || islandBody) {
+      state.bumpMs = 150;
+      setMessage(outside ? "VÄND TILLBAKA MOT ÖARNA" : "FÖR GRUNT • HITTA BRYGGAN", 1100);
+      playSound("bump");
+      return;
+    }
+
+    state.boat.fromX = state.boat.x;
+    state.boat.fromY = state.boat.y;
+    state.boat.x = targetX;
+    state.boat.y = targetY;
+    state.boat.facingX = dx;
+    state.boat.facingY = dy;
+    state.boat.moveAnimMs = BOAT_MOVE_TIME;
+    state.player.x = targetX;
+    state.player.y = targetY;
+    state.player.fromX = state.boat.fromX;
+    state.player.fromY = state.boat.fromY;
+    const dockedIsland = state.islands.find(
+      (island) => island.dockX === targetX && island.dockY === targetY
+    );
+    if (dockedIsland) {
+      dockedIsland.visited = true;
+      if (dockedIsland.isCorrect) {
+        state.boat.pendingDockId = dockedIsland.id;
+        setMessage("RÄTT Ö • LÄGG TILL VID HOTELLET", 1500);
+      } else {
+        setMessage(dockedIsland.name + " • HOTELLET ÄR INTE HÄR", 1500);
+      }
+    }
+    playSound("boat");
+  }
+
+  function commitPlayerStep(targetX, targetY) {
+    const previousPlayer = { x: state.player.x, y: state.player.y };
+    state.player.fromX = state.player.x;
+    state.player.fromY = state.player.y;
+    state.player.x = targetX;
+    state.player.y = targetY;
+    state.player.moveAnimMs = MOVE_TIME;
+    movePartyBehind(previousPlayer);
+    playSound("step");
+  }
+
+  function handleHotelDoor(door) {
+    if (!state.inventory.hotelKey) {
+      setMessage("DÖRREN ÄR LÅST • HITTA NYCKELN", 1500);
+      state.bumpMs = 160;
+      playSound("bump");
+      return;
+    }
+    if (!door.isReal) {
+      state.hotel.wrongDoorAttempts += 1;
+      const correctDoor = state.doors.find((candidate) => candidate.isReal);
+      setMessage(
+        state.partyBots.length > 0
+          ? state.partyBots[0].name + ": PROVA " + correctDoor.label
+          : "NYCKELN PASSAR INTE I " + door.label,
+        1800
+      );
+      state.bumpMs = 190;
+      playSound("wrongDoor");
+      return;
+    }
+
+    door.opened = true;
+    state.adventure.hotelCompleted = true;
+    playSound("rightDoor");
+    clearHeldInput();
+    loadLevel(0);
+    setMessage("RÄTT HOTELLRUM • NU BÖRJAR LABYRINTEN", 2300);
+  }
+
   function tryMove(dx, dy) {
     if (state.mode !== "playing" || !state.player) {
+      return;
+    }
+
+    if (state.scene === "sea") {
+      tryMoveSea(dx, dy);
       return;
     }
 
@@ -673,12 +1135,32 @@
         return;
       }
 
-      state.player.fromX = state.player.x;
-      state.player.fromY = state.player.y;
-      state.player.x = targetX;
-      state.player.y = targetY;
-      state.player.moveAnimMs = MOVE_TIME;
-      playSound("step");
+      commitPlayerStep(targetX, targetY);
+      return;
+    }
+
+    if (state.scene === "hotel") {
+      const hotelDoor = state.doors.find(
+        (door) => door.x === targetX && door.y === targetY
+      );
+      if (hotelDoor) {
+        handleHotelDoor(hotelDoor);
+        return;
+      }
+      commitPlayerStep(targetX, targetY);
+      if (targetCell === "K" && state.hotel && !state.hotel.key.collected) {
+        state.hotel.key.collected = true;
+        state.inventory.hotelKey = true;
+        setMapCell(targetX, targetY, ".");
+        const correctDoor = state.doors.find((door) => door.isReal);
+        setMessage(
+          state.partyBots.length > 0
+            ? state.partyBots[0].name + ": NYCKELN PASSAR " + correctDoor.label
+            : "NYCKEL HITTAD • PROVA DÖRRARNA",
+          2300
+        );
+        playSound("key");
+      }
       return;
     }
 
@@ -692,12 +1174,7 @@
       return;
     }
 
-    state.player.fromX = state.player.x;
-    state.player.fromY = state.player.y;
-    state.player.x = targetX;
-    state.player.y = targetY;
-    state.player.moveAnimMs = MOVE_TIME;
-    playSound("step");
+    commitPlayerStep(targetX, targetY);
     checkShadowCollision();
   }
 
@@ -948,12 +1425,35 @@
     if (state.player.moveAnimMs > 0) {
       state.player.moveAnimMs = Math.max(0, state.player.moveAnimMs - dt);
     }
+    state.partyBots.forEach((bot) => {
+      if (bot.moveAnimMs > 0) {
+        bot.walkMs += dt;
+        bot.moveAnimMs = Math.max(0, bot.moveAnimMs - dt);
+      }
+    });
     if (state.scene === "lobby") {
       updateLobbyBots(dt);
       return;
     }
 
     state.elapsedMs += dt;
+    if (state.scene === "sea") {
+      if (state.boat && state.boat.moveAnimMs > 0) {
+        state.boat.moveAnimMs = Math.max(0, state.boat.moveAnimMs - dt);
+        if (state.boat.moveAnimMs <= 0 && state.boat.pendingDockId) {
+          state.boat.dockedAtIslandId = state.boat.pendingDockId;
+          state.boat.pendingDockId = null;
+          state.adventure.seaCompleted = true;
+          clearHeldInput();
+          loadHotel();
+        }
+      }
+      return;
+    }
+    if (state.scene === "hotel") {
+      return;
+    }
+
     state.levelElapsedMs += dt;
     if (state.invulnerableMs > 0) {
       state.invulnerableMs = Math.max(0, state.invulnerableMs - dt);
@@ -1141,6 +1641,83 @@
       ctx.font = "900 13px Trebuchet MS";
       ctx.textAlign = "center";
       ctx.fillText("1 BOT → DUO  •  2 BOTTAR → TEAM", 570, 44);
+      ctx.textAlign = "left";
+      return;
+    }
+
+    if (state.scene === "sea") {
+      roundedRect(76, 16, 270, 44, 14);
+      ctx.fillStyle = "rgba(15, 67, 91, 0.88)";
+      ctx.fill();
+      ctx.fillStyle = "#9ff6ff";
+      ctx.font = "900 12px Trebuchet MS";
+      ctx.textAlign = "left";
+      ctx.fillText("STORT HAV • " + state.playMode.toUpperCase(), 94, 35);
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "900 14px Trebuchet MS";
+      ctx.fillText(partyNames() || "SOLO PÅ BÅTEN", 94, 52);
+
+      roundedRect(403, 19, 334, 38, 13);
+      ctx.fillStyle = state.controlTarget === "boat"
+        ? "rgba(31, 126, 154, 0.94)"
+        : "rgba(5, 27, 46, 0.9)";
+      ctx.fill();
+      ctx.strokeStyle = state.controlTarget === "boat" ? "#ffe071" : "#55e8ff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "1000 14px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillText(
+        state.controlTarget === "boat" ? "STYR BÅTEN • HITTA HOTELLÖN" : "STYR PERSONEN PÅ DÄCKET",
+        570,
+        44
+      );
+
+      const hotelIsland = state.islands.find((island) => island.isCorrect);
+      const distance = hotelIsland && state.boat
+        ? Math.round(Math.hypot(hotelIsland.dockX - state.boat.x, hotelIsland.dockY - state.boat.y))
+        : 0;
+      ctx.fillStyle = "#ffe071";
+      ctx.font = "1000 15px Trebuchet MS";
+      ctx.textAlign = "right";
+      ctx.fillText("HOTELLÖN  " + distance + " sjömil", 1044, 43);
+      ctx.textAlign = "left";
+      return;
+    }
+
+    if (state.scene === "hotel") {
+      roundedRect(76, 16, 270, 44, 14);
+      ctx.fillStyle = "rgba(72, 40, 58, 0.9)";
+      ctx.fill();
+      ctx.fillStyle = "#ffd98a";
+      ctx.font = "900 12px Trebuchet MS";
+      ctx.textAlign = "left";
+      ctx.fillText("Ö-HOTELLET • " + state.playMode.toUpperCase(), 94, 35);
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "900 14px Trebuchet MS";
+      ctx.fillText(partyNames() || "HITTA RÄTT DÖRR", 94, 52);
+
+      roundedRect(403, 19, 334, 38, 13);
+      ctx.fillStyle = state.inventory.hotelKey
+        ? "rgba(126, 92, 25, 0.94)"
+        : "rgba(39, 24, 42, 0.92)";
+      ctx.fill();
+      ctx.strokeStyle = state.inventory.hotelKey ? "#ffd45e" : "#8f6c85";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "1000 14px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillText(
+        state.inventory.hotelKey ? "🔑 NYCKEL HITTAD • PROVA DÖRRARNA" : "🔑 HITTA DEN ENDA NYCKELN",
+        570,
+        44
+      );
+      ctx.fillStyle = "#ffd98a";
+      ctx.font = "1000 15px Trebuchet MS";
+      ctx.textAlign = "right";
+      ctx.fillText("4 HOTELLRUM", 1044, 43);
       ctx.textAlign = "left";
       return;
     }
@@ -1489,11 +2066,25 @@
     };
   }
 
-  function doorStyleForCell(cell) {
+  function doorStyleForCell(cell, mapX, mapY) {
     if (LOBBY_DOOR_TYPES[cell]) {
       return {
         ...LOBBY_DOOR_TYPES[cell],
         text: LOBBY_DOOR_TYPES[cell].label,
+      };
+    }
+    if (state.scene === "hotel" && (cell === "E" || cell === "F")) {
+      const door = state.doors.find((candidate) => candidate.x === mapX && candidate.y === mapY);
+      if (!door) {
+        return null;
+      }
+      const companionHint =
+        state.inventory.hotelKey && state.partyBots.length > 0 && door.isReal;
+      return {
+        color: companionHint ? COLORS.lime : "#ffd45e",
+        text: door.label,
+        available: true,
+        mode: "hotel-room",
       };
     }
     if (cell === "E" || cell === "F") {
@@ -1510,21 +2101,24 @@
   }
 
   function drawThirdPersonBackdrop(camera) {
+    const hotelScene = state.scene === "hotel";
     const ceiling = ctx.createLinearGradient(0, VIEW_TOP, 0, camera.horizon);
-    ceiling.addColorStop(0, "#071426");
-    ceiling.addColorStop(0.65, "#102b43");
-    ceiling.addColorStop(1, "#173c52");
+    ceiling.addColorStop(0, hotelScene ? "#231726" : "#071426");
+    ceiling.addColorStop(0.65, hotelScene ? "#503044" : "#102b43");
+    ceiling.addColorStop(1, hotelScene ? "#6d4353" : "#173c52");
     ctx.fillStyle = ceiling;
     ctx.fillRect(0, VIEW_TOP, LOGICAL_WIDTH, camera.horizon - VIEW_TOP);
 
     const floor = ctx.createLinearGradient(0, camera.horizon, 0, LOGICAL_HEIGHT);
-    floor.addColorStop(0, "#4f5961");
-    floor.addColorStop(0.32, "#283945");
-    floor.addColorStop(1, "#08131f");
+    floor.addColorStop(0, hotelScene ? "#375b62" : "#4f5961");
+    floor.addColorStop(0.32, hotelScene ? "#173e4c" : "#283945");
+    floor.addColorStop(1, hotelScene ? "#071b2a" : "#08131f");
     ctx.fillStyle = floor;
     ctx.fillRect(0, camera.horizon, LOGICAL_WIDTH, LOGICAL_HEIGHT - camera.horizon);
 
-    ctx.strokeStyle = "rgba(112, 225, 243, 0.11)";
+    ctx.strokeStyle = hotelScene
+      ? "rgba(255, 212, 94, 0.15)"
+      : "rgba(112, 225, 243, 0.11)";
     ctx.lineWidth = 2;
     for (let distance = 0.85; distance <= 15; distance += 1) {
       const y = camera.horizon + CAMERA_FOCAL * CAMERA_HEIGHT / distance;
@@ -1573,10 +2167,13 @@
       const clippedTop = Math.max(VIEW_TOP, top);
       const clippedBottom = Math.min(LOGICAL_HEIGHT, bottom);
       const height = Math.max(0, clippedBottom - clippedTop);
-      const doorStyle = doorStyleForCell(hit.cell);
+      const doorStyle = doorStyleForCell(hit.cell, hit.mapX, hit.mapY);
+      const hotelScene = state.scene === "hotel";
 
       if (doorStyle) {
-        ctx.fillStyle = hit.side === 1 ? "#06111d" : "#091a2a";
+        ctx.fillStyle = hotelScene
+          ? (hit.side === 1 ? "#211219" : "#321b24")
+          : (hit.side === 1 ? "#06111d" : "#091a2a");
         ctx.fillRect(screenX, clippedTop, RAY_STRIP_WIDTH + 0.5, height);
         ctx.save();
         ctx.globalAlpha = Math.max(0.1, 0.27 - hit.distance * 0.008);
@@ -1620,6 +2217,8 @@
       } else {
         if (hit.cell === "V") {
           ctx.fillStyle = hit.side === 1 ? "#06101b" : "#091827";
+        } else if (hotelScene) {
+          ctx.fillStyle = hit.side === 1 ? "#4a2b3c" : "#684052";
         } else {
           ctx.fillStyle = hit.side === 1 ? "#102941" : "#183a57";
         }
@@ -1666,7 +2265,7 @@
       .filter((surface) => surface.right - surface.left >= 9)
       .sort((a, b) => b.distance - a.distance)
       .forEach((surface) => {
-        const style = doorStyleForCell(surface.cell);
+        const style = doorStyleForCell(surface.cell, surface.mapX, surface.mapY);
         if (!style) {
           return;
         }
@@ -1703,7 +2302,7 @@
 
         if (LOBBY_DOOR_TYPES[surface.cell] && surface.bottom - centerY > 36) {
           const status = style.available
-            ? "1 SPELARE"
+            ? style.players + " SPELARE"
             : style.players + " SPELARE • SNART";
           ctx.font = "900 " + Math.round(Math.max(9, Math.min(13, signWidth * 0.085))) + "px Trebuchet MS";
           ctx.fillStyle = style.available ? COLORS.white : "#d4d9df";
@@ -1892,9 +2491,11 @@
     ctx.restore();
 
     const labelFontSize = Math.round(Math.max(9, Math.min(13, height * 0.075)));
-    const labelText = bot.status === "arrived"
-      ? bot.name + " ✓ " + bot.targetLabel
-      : bot.name + " → " + bot.targetLabel;
+    const labelText = bot.roleLabel
+      ? bot.name + " • " + bot.roleLabel
+      : bot.status === "arrived"
+        ? bot.name + " ✓ " + bot.targetLabel
+        : bot.name + " → " + bot.targetLabel;
     ctx.font = "1000 " + labelFontSize + "px Trebuchet MS";
     const labelWidth = Math.max(60, Math.min(116, ctx.measureText(labelText).width + 18));
     const labelY = -height - labelFontSize - 8;
@@ -1925,6 +2526,79 @@
       })
       .sort((a, b) => b.projection.depth - a.projection.depth)
       .forEach(({ bot, projection }) => drawLobbyBotSprite(bot, projection, zBuffer));
+  }
+
+  function drawThirdPersonPartyBots(camera, zBuffer) {
+    if (state.scene === "lobby" || state.scene === "sea") {
+      return;
+    }
+    state.partyBots
+      .map((bot) => {
+        const position = animationPosition(bot, MOVE_TIME);
+        return {
+          bot,
+          projection: projectWorldSprite(camera, position.x + 0.5, position.y + 0.5),
+        };
+      })
+      .sort((a, b) => b.projection.depth - a.projection.depth)
+      .forEach(({ bot, projection }) => drawLobbyBotSprite(bot, projection, zBuffer));
+  }
+
+  function drawThirdPersonHotelKey(camera, zBuffer) {
+    if (state.scene !== "hotel" || !state.hotel || state.hotel.key.collected) {
+      return;
+    }
+    const key = state.hotel.key;
+    const projection = projectWorldSprite(camera, key.x + 0.5, key.y + 0.5);
+    if (
+      projection.depth <= 0.12 ||
+      projection.screenX < -120 ||
+      projection.screenX > LOGICAL_WIDTH + 120
+    ) {
+      return;
+    }
+    const size = Math.max(38, Math.min(130, CAMERA_FOCAL * 0.34 / projection.depth));
+    const screenColumn = Math.max(0, Math.min(LOGICAL_WIDTH - 1, Math.round(projection.screenX)));
+    if (zBuffer[screenColumn] < projection.depth - 0.16) {
+      return;
+    }
+    const bob = Math.sin(state.visualTime / 180) * Math.min(7, size * 0.08);
+    ctx.save();
+    ctx.translate(projection.screenX, projection.screenBottom - size * 0.58 - bob);
+    ctx.rotate(Math.sin(state.visualTime / 620) * 0.13);
+    ctx.shadowColor = "#ffd45e";
+    ctx.shadowBlur = Math.max(12, size * 0.25);
+    ctx.strokeStyle = "#ffd45e";
+    ctx.fillStyle = "#ffe98f";
+    ctx.lineWidth = Math.max(5, size * 0.11);
+    ctx.beginPath();
+    ctx.arc(-size * 0.2, -size * 0.08, size * 0.19, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.03, size * 0.02);
+    ctx.lineTo(size * 0.36, size * 0.32);
+    ctx.lineTo(size * 0.5, size * 0.16);
+    ctx.moveTo(size * 0.25, size * 0.23);
+    ctx.lineTo(size * 0.38, size * 0.08);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.rotate(-Math.sin(state.visualTime / 620) * 0.13);
+    const label = state.partyBots.length > 0
+      ? state.partyBots[0].name + ": NYCKEL!"
+      : "NYCKEL";
+    ctx.font = "1000 " + Math.round(Math.max(11, size * 0.16)) + "px Trebuchet MS";
+    const width = Math.max(70, ctx.measureText(label).width + 22);
+    roundedRect(-width / 2, -size * 0.72, width, 28, 9);
+    ctx.fillStyle = "rgba(35, 22, 12, 0.92)";
+    ctx.fill();
+    ctx.strokeStyle = "#ffd45e";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#fff8d2";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, 0, -size * 0.72 + 14);
+    ctx.restore();
   }
 
   function drawThirdPersonShadows(camera, zBuffer) {
@@ -2325,6 +2999,308 @@
     ctx.restore();
   }
 
+  function projectSeaIsland(island, boatPosition, horizon) {
+    const dirX = Math.cos(state.cameraAngle);
+    const dirY = Math.sin(state.cameraAngle);
+    const rightX = -dirY;
+    const rightY = dirX;
+    const relativeX = island.x - boatPosition.x;
+    const relativeY = island.y - boatPosition.y;
+    const depth = relativeX * dirX + relativeY * dirY;
+    const side = relativeX * rightX + relativeY * rightY;
+    const distance = Math.max(0.7, depth + 1.1);
+    return {
+      depth,
+      screenX: LOGICAL_WIDTH / 2 + side * 205 / distance,
+      screenY: horizon + 285 / distance,
+      scale: Math.max(0.22, Math.min(1.8, 1.55 / distance)),
+    };
+  }
+
+  function drawSeaIsland(island, projection) {
+    if (
+      projection.depth < -0.4 ||
+      projection.screenX < -260 ||
+      projection.screenX > LOGICAL_WIDTH + 260
+    ) {
+      return;
+    }
+    const pulse = island.isCorrect ? 1 + Math.sin(state.visualTime / 260) * 0.08 : 1;
+    const width = (island.isCorrect ? 380 : 250) * projection.scale * pulse;
+    const height = width * 0.32;
+    ctx.save();
+    ctx.translate(projection.screenX, projection.screenY);
+    ctx.globalAlpha = Math.max(0.28, Math.min(1, 1.2 - Math.max(0, projection.depth - 5) * 0.1));
+    ctx.fillStyle = "rgba(0, 9, 17, 0.46)";
+    ctx.beginPath();
+    ctx.ellipse(0, height * 0.22, width * 0.58, height * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = island.isCorrect ? "#d6c77a" : "#9f9678";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, width * 0.5, height * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = island.color;
+    ctx.beginPath();
+    ctx.ellipse(0, -height * 0.08, width * 0.4, height * 0.36, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (island.isCorrect) {
+      const buildingWidth = width * 0.26;
+      const buildingHeight = Math.max(24, width * 0.18);
+      ctx.fillStyle = "#f2d8af";
+      ctx.fillRect(-buildingWidth / 2, -buildingHeight - height * 0.2, buildingWidth, buildingHeight);
+      ctx.fillStyle = "#a1495c";
+      ctx.beginPath();
+      ctx.moveTo(-buildingWidth * 0.62, -buildingHeight - height * 0.2);
+      ctx.lineTo(0, -buildingHeight - height * 0.58);
+      ctx.lineTo(buildingWidth * 0.62, -buildingHeight - height * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#55e8ff";
+      ctx.fillRect(-buildingWidth * 0.31, -buildingHeight * 0.75 - height * 0.2, buildingWidth * 0.18, buildingHeight * 0.22);
+      ctx.fillRect(buildingWidth * 0.13, -buildingHeight * 0.75 - height * 0.2, buildingWidth * 0.18, buildingHeight * 0.22);
+      ctx.strokeStyle = "#ffe071";
+      ctx.lineWidth = Math.max(2, width * 0.012);
+      ctx.beginPath();
+      ctx.moveTo(0, height * 0.2);
+      ctx.lineTo(0, height * 0.85);
+      ctx.stroke();
+    } else if (island.id === "rock-island") {
+      ctx.fillStyle = "#625c66";
+      ctx.beginPath();
+      ctx.moveTo(-width * 0.16, -height * 0.05);
+      ctx.lineTo(-width * 0.04, -height * 0.75);
+      ctx.lineTo(width * 0.18, -height * 0.12);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = "#604822";
+      ctx.lineWidth = Math.max(2, width * 0.018);
+      ctx.beginPath();
+      ctx.moveTo(0, -height * 0.12);
+      ctx.lineTo(width * 0.04, -height * 0.82);
+      ctx.stroke();
+      ctx.fillStyle = "#5fc276";
+      for (let index = -2; index <= 2; index += 1) {
+        ctx.beginPath();
+        ctx.ellipse(
+          width * 0.04 + index * width * 0.035,
+          -height * 0.8,
+          width * 0.12,
+          height * 0.12,
+          index * 0.35,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+    }
+
+    if (projection.depth < 8.5) {
+      const label = island.visited && !island.isCorrect ? island.name + " • INTE HÄR" : island.name;
+      ctx.font = "1000 " + Math.round(Math.max(11, Math.min(18, width * 0.08))) + "px Trebuchet MS";
+      const labelWidth = Math.max(80, ctx.measureText(label).width + 24);
+      roundedRect(-labelWidth / 2, -height * 1.35, labelWidth, 30, 10);
+      ctx.fillStyle = "rgba(3, 15, 28, 0.9)";
+      ctx.fill();
+      ctx.strokeStyle = island.isCorrect ? "#ffe071" : "#9fd8df";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = island.isCorrect ? "#fff4b2" : COLORS.white;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 0, -height * 1.35 + 15);
+    }
+    ctx.restore();
+  }
+
+  function drawSeaMinimap(boatPosition) {
+    const x = 904;
+    const y = 122;
+    const width = 200;
+    const height = 128;
+    ctx.save();
+    roundedRect(x, y, width, height, 16);
+    ctx.fillStyle = "rgba(3, 20, 35, 0.78)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(116, 235, 255, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#d9f8ff";
+    ctx.font = "900 11px Trebuchet MS";
+    ctx.textAlign = "center";
+    ctx.fillText("HAVSKARTA", x + width / 2, y + 17);
+    state.islands.forEach((island) => {
+      const px = x + 16 + island.x / (GRID_WIDTH - 1) * (width - 32);
+      const py = y + 25 + island.y / (GRID_HEIGHT - 1) * (height - 38);
+      ctx.fillStyle = island.isCorrect ? "#ffe071" : island.color;
+      ctx.beginPath();
+      ctx.arc(px, py, island.isCorrect ? 7 : 5, 0, Math.PI * 2);
+      ctx.fill();
+      if (island.isCorrect) {
+        ctx.strokeStyle = "rgba(255, 224, 113, 0.7)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 10 + Math.sin(state.visualTime / 240) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+    const boatX = x + 16 + boatPosition.x / (GRID_WIDTH - 1) * (width - 32);
+    const boatY = y + 25 + boatPosition.y / (GRID_HEIGHT - 1) * (height - 38);
+    ctx.fillStyle = "#55e8ff";
+    ctx.beginPath();
+    ctx.moveTo(boatX, boatY - 8);
+    ctx.lineTo(boatX - 6, boatY + 6);
+    ctx.lineTo(boatX + 6, boatY + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSeaBoat() {
+    const moving = state.boat && state.boat.moveAnimMs > 0;
+    const bob = Math.sin(state.visualTime / 210) * 5;
+    const turn = state.boat
+      ? normalizeAngle(Math.atan2(state.boat.facingY, state.boat.facingX) - state.cameraAngle)
+      : 0;
+    ctx.save();
+    ctx.translate(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT - 45 + bob);
+    ctx.rotate(Math.sin(turn) * 0.08);
+    if (moving) {
+      ctx.strokeStyle = "rgba(220, 252, 255, 0.7)";
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(-42, -5);
+      ctx.quadraticCurveTo(-78, 70, -126, 116);
+      ctx.moveTo(42, -5);
+      ctx.quadraticCurveTo(78, 70, 126, 116);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(0, 9, 17, 0.45)";
+    ctx.beginPath();
+    ctx.ellipse(0, 12, 112, 28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = "#55e8ff";
+    ctx.shadowBlur = 17;
+    ctx.fillStyle = "#c76522";
+    ctx.beginPath();
+    ctx.moveTo(-104, -18);
+    ctx.lineTo(-68, -164);
+    ctx.quadraticCurveTo(0, -210, 68, -164);
+    ctx.lineTo(104, -18);
+    ctx.quadraticCurveTo(0, 25, -104, -18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#55e8ff";
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.fillStyle = "#17394a";
+    ctx.beginPath();
+    ctx.moveTo(-62, -53);
+    ctx.lineTo(-38, -148);
+    ctx.quadraticCurveTo(0, -171, 38, -148);
+    ctx.lineTo(62, -53);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#091827";
+    roundedRect(-50, -142, 100, 43, 15);
+    ctx.fill();
+    ctx.strokeStyle = "#7df1ff";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    const playerX = state.deckPlayer ? state.deckPlayer.x * 27 : 0;
+    const playerY = state.deckPlayer ? state.deckPlayer.y * 17 : 0;
+    ctx.fillStyle = COLORS.orange;
+    ctx.beginPath();
+    ctx.arc(playerX, -82 + playerY, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff1c1";
+    ctx.beginPath();
+    ctx.arc(playerX, -88 + playerY, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#071425";
+    ctx.beginPath();
+    ctx.arc(playerX + 4, -91 + playerY, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    const seats = state.partyBots.length === 1
+      ? [{ x: 48, y: -62 }]
+      : [{ x: -52, y: -60 }, { x: 52, y: -60 }];
+    state.partyBots.forEach((bot, index) => {
+      const seat = seats[index] || { x: 0, y: -55 };
+      ctx.fillStyle = bot.bodyColor;
+      roundedRect(seat.x - 18, seat.y - 20, 36, 38, 11);
+      ctx.fill();
+      ctx.strokeStyle = bot.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = "#d9edf2";
+      roundedRect(seat.x - 16, seat.y - 42, 32, 24, 8);
+      ctx.fill();
+      ctx.fillStyle = "#10263c";
+      roundedRect(seat.x - 11, seat.y - 36, 22, 12, 4);
+      ctx.fill();
+      ctx.fillStyle = "#9ff6ff";
+      ctx.beginPath();
+      ctx.arc(seat.x + 5, seat.y - 30, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "1000 11px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillText(bot.name, seat.x, seat.y + 32);
+    });
+    ctx.restore();
+  }
+
+  function drawSeaWorld() {
+    if (!state.boat) {
+      return;
+    }
+    const horizon = Math.max(210, Math.min(390, 286 + state.cameraPitch * 240));
+    const sky = ctx.createLinearGradient(0, VIEW_TOP, 0, horizon);
+    sky.addColorStop(0, "#07172d");
+    sky.addColorStop(0.74, "#2d7894");
+    sky.addColorStop(1, "#ffd37a");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, VIEW_TOP, LOGICAL_WIDTH, horizon - VIEW_TOP);
+    ctx.fillStyle = "rgba(255, 240, 176, 0.82)";
+    ctx.beginPath();
+    ctx.arc(188, horizon - 54, 28, 0, Math.PI * 2);
+    ctx.fill();
+
+    const water = ctx.createLinearGradient(0, horizon, 0, LOGICAL_HEIGHT);
+    water.addColorStop(0, "#1c7890");
+    water.addColorStop(0.45, "#0c4c68");
+    water.addColorStop(1, "#031521");
+    ctx.fillStyle = water;
+    ctx.fillRect(0, horizon, LOGICAL_WIDTH, LOGICAL_HEIGHT - horizon);
+    ctx.strokeStyle = "rgba(177, 241, 247, 0.26)";
+    ctx.lineWidth = 2;
+    for (let band = 1; band <= 14; band += 1) {
+      const ratio = band / 14;
+      const y = horizon + ratio * ratio * (LOGICAL_HEIGHT - horizon);
+      const shift = Math.sin(state.visualTime / 310 + band * 1.7) * 42;
+      ctx.beginPath();
+      for (let x = -80; x <= LOGICAL_WIDTH + 80; x += 82) {
+        const px = x + shift + (band % 2) * 31;
+        ctx.moveTo(px, y);
+        ctx.quadraticCurveTo(px + 22, y - 5 - ratio * 8, px + 48, y);
+      }
+      ctx.stroke();
+    }
+
+    const boatPosition = animationPosition(state.boat, BOAT_MOVE_TIME);
+    state.islands
+      .map((island) => ({ island, projection: projectSeaIsland(island, boatPosition, horizon) }))
+      .filter((item) => item.projection.depth >= -0.4)
+      .sort((a, b) => b.projection.depth - a.projection.depth)
+      .forEach(({ island, projection }) => drawSeaIsland(island, projection));
+    drawSeaMinimap(boatPosition);
+    drawSeaBoat();
+  }
+
   function drawThirdPersonWorld() {
     if (!state.player) {
       return;
@@ -2339,6 +3315,8 @@
     const world = drawRaycastWalls(camera);
     drawThirdPersonShadows(camera, world.zBuffer);
     drawThirdPersonLobbyBots(camera, world.zBuffer);
+    drawThirdPersonHotelKey(camera, world.zBuffer);
+    drawThirdPersonPartyBots(camera, world.zBuffer);
     drawThirdPersonFlashlight(camera);
     drawVisibleDoorSigns(world.visibleDoorSurfaces);
     drawThirdPersonFocus(camera);
@@ -2677,12 +3655,18 @@
 
     ctx.save();
     ctx.translate(shakeAmount + bumpAmount, -shakeAmount * 0.35);
-    drawThirdPersonWorld();
+    if (state.scene === "sea") {
+      drawSeaWorld();
+    } else {
+      drawThirdPersonWorld();
+    }
     drawParticles();
     ctx.restore();
 
     drawVignette();
-    drawThirdPersonAvatar();
+    if (state.scene !== "sea") {
+      drawThirdPersonAvatar();
+    }
     drawMessage();
     drawLevelBanner();
     drawTransition();
@@ -2744,6 +3728,12 @@
     }
     if (name === "step") {
       tone(95, 0.045, "triangle", 0.018);
+    } else if (name === "boat") {
+      tone(118, 0.11, "sawtooth", 0.022, 0, 92);
+      tone(240, 0.07, "triangle", 0.016, 0.03, 180);
+    } else if (name === "key") {
+      tone(740, 0.18, "triangle", 0.065);
+      tone(1110, 0.3, "sine", 0.055, 0.1);
     } else if (name === "bump") {
       tone(85, 0.07, "square", 0.025);
     } else if (name === "sonar") {
@@ -2801,6 +3791,11 @@
       event.preventDefault();
       if (!event.repeat) {
         activateSonar();
+      }
+    } else if (event.code === "KeyB") {
+      event.preventDefault();
+      if (!event.repeat) {
+        toggleBoatControl();
       }
     } else if (event.code === "KeyP") {
       if (!event.repeat) {
@@ -2944,9 +3939,17 @@
   function renderGameToText() {
     const sonarActive = state.sonar.activeMs > 0;
     const movementBasis = cameraMovementBasis();
+    const objective = state.scene === "lobby"
+      ? "chooseMode"
+      : state.scene === "sea"
+        ? "sailToHotelIsland"
+        : state.scene === "hotel"
+          ? state.inventory.hotelKey ? "openCorrectHotelDoor" : "findHotelKey"
+          : "findExit";
     const payload = {
-      coordinateSystem:
-        "Grid coordinates: origin (0,0) is the top-left tile; x increases right and y increases down.",
+      coordinateSystem: state.scene === "sea"
+        ? "Sea grid: origin is top-left; x increases east/right and y increases south/down. Deck coordinates range from -1 to 1."
+        : "Grid coordinates: origin (0,0) is the top-left tile; x increases right and y increases down.",
       camera: {
         mode: "thirdPersonOrbit",
         fovDegrees: CAMERA_FOV_DEGREES,
@@ -2967,12 +3970,22 @@
         movement: "cameraRelative",
         forward: movementBasis.forward,
         right: movementBasis.right,
+        activeTarget: state.scene === "sea" ? state.controlTarget : "player",
+        canToggleBoatControl: state.scene === "sea",
+        toggleLabel: state.scene === "sea" ? "BÅTSTYRNING" : null,
       },
       mode: state.mode,
       scene: state.scene,
       playMode: state.playMode,
+      objective: { id: objective },
       level: state.scene === "maze" ? state.levelIndex + 1 : null,
-      levelName: state.scene === "maze" ? LEVELS[state.levelIndex].name : "START ROOM",
+      levelName: state.scene === "maze"
+        ? LEVELS[state.levelIndex].name
+        : state.scene === "sea"
+          ? "STORT HAV"
+          : state.scene === "hotel"
+            ? "Ö-HOTELLET"
+            : "START ROOM",
       mapRows: state.map,
       player: state.player
         ? {
@@ -2997,7 +4010,13 @@
         x: door.x,
         y: door.y,
         isReal: door.isReal,
-        visibleLabel: sonarActive ? (door.isReal ? "YES" : "NO") : "EXIT",
+        id: door.id || null,
+        label: door.label || "EXIT",
+        locked: state.scene === "hotel" ? !state.inventory.hotelKey : false,
+        opened: Boolean(door.opened),
+        visibleLabel: state.scene === "hotel"
+          ? door.label
+          : sonarActive ? (door.isReal ? "YES" : "NO") : "EXIT",
       })),
       lobbyDoors: state.lobbyDoors.map((door) => ({
         x: door.x,
@@ -3030,6 +4049,67 @@
         moveRemainingMs: Math.round(bot.moveAnimMs),
         waitRemainingMs: Math.round(bot.waitMs),
       })),
+      party: {
+        expectedSize: 1 + state.partyBots.length,
+        memberIds: ["player", ...state.partyBots.map((bot) => bot.id)],
+        companions: state.partyBots.map((bot) => ({
+          id: bot.id,
+          name: bot.name,
+          status: bot.status,
+          x: Math.round(bot.x * 100) / 100,
+          y: Math.round(bot.y * 100) / 100,
+          facingX: Math.round(bot.facingX * 100) / 100,
+          facingY: Math.round(bot.facingY * 100) / 100,
+          moveRemainingMs: Math.round(bot.moveAnimMs),
+          onBoat: state.scene === "sea",
+        })),
+      },
+      boat: state.boat
+        ? {
+            x: state.boat.x,
+            y: state.boat.y,
+            fromX: state.boat.fromX,
+            fromY: state.boat.fromY,
+            facingX: state.boat.facingX,
+            facingY: state.boat.facingY,
+            moveRemainingMs: Math.round(state.boat.moveAnimMs),
+            dockedAtIslandId: state.boat.dockedAtIslandId,
+            deckPlayer: state.deckPlayer ? { ...state.deckPlayer } : null,
+          }
+        : null,
+      islands: state.islands.map((island) => ({
+        id: island.id,
+        name: island.name,
+        dockX: island.dockX,
+        dockY: island.dockY,
+        isCorrect: island.isCorrect,
+        hasHotel: island.hasHotel,
+        visited: island.visited,
+        distance: state.boat
+          ? Math.round(Math.hypot(island.dockX - state.boat.x, island.dockY - state.boat.y) * 100) / 100
+          : null,
+      })),
+      inventory: {
+        hotelKey: state.inventory.hotelKey,
+        keyCount: state.inventory.hotelKey ? 1 : 0,
+      },
+      hotel: state.hotel
+        ? {
+            correctDoorId: state.hotel.correctDoorId,
+            key: { ...state.hotel.key },
+            wrongDoorAttempts: state.hotel.wrongDoorAttempts,
+            doors: state.hotel.doors.map((door) => ({
+              id: door.id,
+              label: door.label,
+              x: door.x,
+              y: door.y,
+              isCorrect: door.isReal,
+              locked: !state.inventory.hotelKey,
+              opened: Boolean(door.opened),
+            })),
+          }
+        : null,
+      adventure: { ...state.adventure },
       shadows: state.shadows.map((shadow) => ({
         x: shadow.x,
         y: shadow.y,
@@ -3058,6 +4138,11 @@
   pauseButton.addEventListener("click", togglePause);
   soundButton.addEventListener("click", toggleSound);
   fullscreenButton.addEventListener("click", toggleFullscreen);
+  boatControlButton.addEventListener("click", () => {
+    initAudio();
+    toggleBoatControl();
+    canvas.focus();
+  });
   canvas.addEventListener("pointerdown", beginCameraDrag, { passive: false });
   canvas.addEventListener("pointermove", moveCameraDrag, { passive: false });
   canvas.addEventListener("pointerup", endCameraDrag, { passive: false });

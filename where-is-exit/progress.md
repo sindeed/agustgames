@@ -90,7 +90,7 @@ Original prompt: Jag vill ha ett spel som heter Where is Exit.
 
 - Ny önskan: spelaren ska börja tillsammans med tre bottar; en går till Duo och två
   går till Team.
-- Klart: DUBI, TIKI och TOTO skapas bredvid spelaren med separata, fördröjda
+- Klart: DUBI, TEO och TOTO skapas bredvid spelaren med separata, fördröjda
   gångvägar och stannar vid rätt dörr utan att blockera spelarens rörelse.
 - Klart: bottarna ritas som färgkodade små robotar i tredjepersonsvyn och redovisas
   i `render_game_to_text` för automatiska tester.
@@ -115,3 +115,23 @@ Original prompt: Jag vill ha ett spel som heter Where is Exit.
 - Full regression passerar: Game Over/återstart, full Solo-vinst genom tre banor
   och touch från start-rummet till Solo fungerar med kamerarelativa rutter.
 - Inga kända fel eller lösa TODO:er återstår för den kamerarelativa styrningen.
+
+## Båtresan, hotellet och följeslagare
+
+- Ny önskan: Duo ska ta med botten vid Duo, Team ska ta med de två Team-bottarna,
+  alla lägen ska börja på en styrbar båt och därefter fortsätta till ett hotell med
+  en enda nyckel och flera dörrar.
+- Namnändring: Team-botten heter TEO; Team består av TEO och TOTO.
+- Implementerat: Solo, Duo och Team är spelbara. Duo väljer DUBI, Team väljer TEO
+  och TOTO, och valda bottar visas ombord samt följer spelaren i hotellet/labyrinten.
+- Implementerat: separat tredjepersonsvy över ett stort hav med vågor, öar, havskarta,
+  neonbåt och växling mellan PERSONSTYRNING och BÅTSTYRNING med knapp eller B.
+- Implementerat: rätt brygga leder till Ö-HOTELLET. Där finns fyra hotellrum men
+  exakt en nyckel; fel dörr behåller nyckeln och rätt dörr leder vidare till labyrinten.
+- DUBI/TEO/TOTO hjälper genom att peka ut rätt hotellrum när nyckeln hittas.
+- Officiella Playwright-klienten har verifierat start-rum → båt → hotell → nyckel →
+  rätt dörr → alla tre labyrintbanor → seger utan konsol- eller sidfel.
+- Riktade tester är godkända för Duo och Team, fel och rätt hotelldörr, styrväxling,
+  hållen input vid scenbyte samt iPhone 393×852 och iPad 1024×1366.
+- Havs-, hotell-, nyckel-, labyrint-, seger- och mobilbilder är visuellt granskade.
+- Inga kända fel eller lösa TODO:er återstår för båt- och hotellresan.

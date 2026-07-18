@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="../apple-touch-icon.png">
   <link rel="icon" href="../favicon.ico" sizes="any">
   <title>Where is Exit?</title>
-  <link rel="stylesheet" href="style.css?v=20260718-9">
+  <link rel="stylesheet" href="style.css?v=20260718-11">
 </head>
 <body>
   <main class="game-shell">
@@ -31,10 +31,11 @@
           <p class="eyebrow">A NEON MAZE GAME</p>
           <h1><span>WHERE IS</span> EXIT<span class="question">?</span></h1>
           <p class="tagline">Fyra dörrar. Bara en leder ut.</p>
-          <p class="story">Du börjar i det lilla start-rummet med tre bottar. En går till Duo och två går till Team. Dra över spelbilden för att se alla från olika håll.</p>
+          <p class="story">Välj Solo, Duo eller Team. Kör båt över det stora havet, hitta rätt ö och leta efter hotellets enda nyckel. DUBI följer med i Duo; TEO och TOTO följer med i Team.</p>
           <div class="controls-list" aria-label="Kontroller">
             <span><b>Gå dit du tittar</b> WASD / pilar</span>
             <span><b>Se dig omkring</b> dra bilden</span>
+            <span><b>Byt båt/person</b> B</span>
             <span><b>Sökpuls</b> Space</span>
             <span><b>Paus</b> P</span>
             <span><b>Helskärm</b> F</span>
@@ -83,6 +84,10 @@
         </button>
       </div>
 
+      <button class="boat-control-button" id="boat-control-btn" aria-label="Byt till båtstyrning">
+        BÅTSTYRNING
+      </button>
+
       <div class="rotate-message" aria-hidden="true">
         <div>↻</div>
         <p>Liggande ger större spelbild</p>
@@ -91,6 +96,6 @@
     <noscript>Spelet behöver JavaScript för att fungera.</noscript>
   </main>
 
-  <script src="game.js?v=20260718-10"></script>
+  <script src="game.js?v=20260718-11"></script>
 </body>
 </html>
