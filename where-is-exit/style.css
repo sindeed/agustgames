@@ -217,6 +217,10 @@ canvas.camera-dragging {
   animation: question-flicker 2.6s steps(1) infinite;
 }
 
+body.touch .panel h1 .question {
+  animation: none;
+}
+
 .panel h2 {
   margin-top: 8px;
   color: #f5ffe2;
@@ -312,9 +316,14 @@ body.touch .touch-controls {
   display: block;
 }
 
+body.play-roulette-mode .touch-controls {
+  display: none;
+}
+
 body.lobby-mode .search-button,
 body.sea-mode .search-button,
-body.hotel-mode .search-button {
+body.hotel-mode .search-button,
+body.play-hunt-mode .search-button {
   display: none;
 }
 

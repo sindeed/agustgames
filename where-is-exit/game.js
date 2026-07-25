@@ -9,6 +9,9 @@
   const gameoverScreen = document.getElementById("gameover-screen");
   const victoryScreen = document.getElementById("victory-screen");
   const victoryStats = document.getElementById("victory-stats");
+  const victoryEyebrow = victoryScreen.querySelector(".eyebrow");
+  const victoryTitle = victoryScreen.querySelector("h2");
+  const replayButton = document.getElementById("replay-btn");
   const pauseButton = document.getElementById("pause-btn");
   const soundButton = document.getElementById("sound-btn");
   const fullscreenButton = document.getElementById("fullscreen-btn");
@@ -38,6 +41,7 @@
   const CAMERA_MAX_PITCH = 0.38;
   const LOBBY_BOT_MOVE_TIME = 460;
   const BOAT_MOVE_TIME = 180;
+  const PARTY_HELPER_MOVE_TIME = 180;
 
   const LEVELS = [
     {
@@ -99,18 +103,19 @@
   const LOBBY_MAP = [
     "VVVVVVVVVVVVVVVVVVV",
     "VVVVVVVVVVVVVVVVVVV",
-    "VVVV##1##2##3##VVVV",
-    "VVVV#.........#VVVV",
-    "VVVV#.........#VVVV",
-    "VVVV#.........#VVVV",
-    "VVVV#....S....#VVVV",
-    "VVVV#.........#VVVV",
-    "VVVV###########VVVV",
+    "VVV#4#1#2#3#VVVVVVV",
+    "VVV#.......#VVVVVVV",
+    "VVV#.......#VVVVVVV",
+    "VVV#.......#VVVVVVV",
+    "VVV#...S...#VVVVVVV",
+    "VVV#.......#VVVVVVV",
+    "VVV#########VVVVVVV",
     "VVVVVVVVVVVVVVVVVVV",
     "VVVVVVVVVVVVVVVVVVV",
   ];
 
   const LOBBY_DOOR_TYPES = {
+    "4": { mode: "play", label: "PLAY", color: "#ff3e58", available: true, players: 10 },
     "1": { mode: "solo", label: "SOLO", color: "#55e8ff", available: true, players: 1 },
     "2": { mode: "duo", label: "DUO", color: "#ffd45e", available: true, players: 2 },
     "3": { mode: "team", label: "TEAM", color: "#ff5a91", available: true, players: 3 },
@@ -125,8 +130,8 @@
       color: "#ffd45e",
       bodyColor: "#b87820",
       startDelayMs: 450,
-      spawn: { x: 8, y: 5 },
-      path: [{ x: 8, y: 4 }, { x: 8, y: 3 }],
+      spawn: { x: 6, y: 5 },
+      path: [{ x: 7, y: 5 }, { x: 8, y: 5 }, { x: 8, y: 4 }, { x: 8, y: 3 }],
     },
     {
       id: "teo",
@@ -136,8 +141,8 @@
       color: "#ff5a91",
       bodyColor: "#bd356c",
       startDelayMs: 700,
-      spawn: { x: 9, y: 5 },
-      path: [{ x: 10, y: 5 }, { x: 10, y: 4 }, { x: 11, y: 4 }, { x: 11, y: 3 }],
+      spawn: { x: 7, y: 5 },
+      path: [{ x: 8, y: 5 }, { x: 9, y: 5 }, { x: 10, y: 5 }, { x: 10, y: 4 }, { x: 10, y: 3 }],
     },
     {
       id: "toto",
@@ -147,8 +152,8 @@
       color: "#ff5a91",
       bodyColor: "#7947b8",
       startDelayMs: 950,
-      spawn: { x: 10, y: 5 },
-      path: [{ x: 11, y: 5 }, { x: 12, y: 5 }, { x: 12, y: 4 }, { x: 11.75, y: 3 }],
+      spawn: { x: 8, y: 5 },
+      path: [{ x: 9, y: 5 }, { x: 9, y: 4 }, { x: 10, y: 4 }, { x: 10.25, y: 3 }],
     },
   ];
 
@@ -214,6 +219,54 @@
     team: "room-103",
   };
 
+  const PLAY_ROULETTE_SPIN_MS = 4600;
+  const PLAY_ROULETTE_REVEAL_MS = 1500;
+  const PLAY_HUNT_START_DELAY_MS = 1500;
+  const PLAY_BOT_MOVE_TIME = 260;
+  const PLAY_MONSTER_MOVE_TIME = 210;
+  const PLAY_BOT_ROSTER = [
+    { id: "bot-01", name: "DUBI", color: "#ffd45e", bodyColor: "#b87820" },
+    { id: "bot-02", name: "TEO", color: "#ff5a91", bodyColor: "#bd356c" },
+    { id: "bot-03", name: "TOTO", color: "#b979ff", bodyColor: "#7947b8" },
+    { id: "bot-04", name: "BIBI", color: "#55a8ff", bodyColor: "#2867a6" },
+    { id: "bot-05", name: "NEO", color: "#7eff8b", bodyColor: "#34884a" },
+    { id: "bot-06", name: "LEO", color: "#55e8ff", bodyColor: "#247d91" },
+    { id: "bot-07", name: "MIMI", color: "#ff9f55", bodyColor: "#a65b28" },
+    { id: "bot-08", name: "NOVA", color: "#ff6bd6", bodyColor: "#9a3f82" },
+    { id: "bot-09", name: "ZIGGY", color: "#b8ff69", bodyColor: "#668f38" },
+  ];
+  const PLAY_ROULETTE_MAP = [
+    "###################",
+    "#.................#",
+    "#.................#",
+    "#.................#",
+    "#.................#",
+    "#.................#",
+    "#.................#",
+    "#.................#",
+    "#........S........#",
+    "#.................#",
+    "###################",
+  ];
+  const PLAY_HUNT_MAP = [
+    "#########E#########",
+    "#.................#",
+    "#..###.......###..#",
+    "#..#...........#..#",
+    "#......#####......#",
+    "F.....##...##.....F",
+    "#......#####......#",
+    "#..#...........#..#",
+    "#..###.......###..#",
+    "#....K...S........#",
+    "#########F#########",
+  ];
+  const PLAY_HUNT_BOT_SPAWNS = [
+    { x: 4, y: 1 }, { x: 9, y: 1 }, { x: 14, y: 1 },
+    { x: 4, y: 3 }, { x: 9, y: 3 }, { x: 14, y: 3 },
+    { x: 4, y: 7 }, { x: 9, y: 7 }, { x: 14, y: 7 },
+  ];
+
   const COLORS = {
     night: "#050c1a",
     nightBlue: "#0a1b31",
@@ -246,6 +299,14 @@
     lobbyDoors: [],
     lobbyBots: [],
     partyBots: [],
+    partyAssistance: {
+      scene: null,
+      keyMarked: false,
+      correctHotelDoorId: null,
+      correctExit: null,
+      warnedWrongExit: null,
+      navigationActive: false,
+    },
     boat: null,
     deckPlayer: null,
     controlTarget: "player",
@@ -258,6 +319,7 @@
       seaCompleted: false,
       hotelCompleted: false,
     },
+    play: null,
     hearts: MAX_HEARTS,
     mistakes: 0,
     elapsedMs: 0,
@@ -302,6 +364,7 @@
   let audioContext = null;
   let pixelRatio = 1;
   let lastFrameTime = performance.now();
+  let forcedPlayMonsterId = null;
 
   function validateLevels() {
     LEVELS.forEach((level, levelIndex) => {
@@ -326,8 +389,8 @@
     const lobbyDoorCount = LOBBY_MAP.join("")
       .split("")
       .filter((cell) => LOBBY_DOOR_TYPES[cell]).length;
-    if (lobbyDoorCount !== 3 || !LOBBY_MAP.join("").includes("S")) {
-      throw new Error("The start room needs one start and three mode doors.");
+    if (lobbyDoorCount !== 4 || !LOBBY_MAP.join("").includes("S")) {
+      throw new Error("The start room needs one start and four mode doors.");
     }
     const duoBotCount = LOBBY_BOT_PLANS.filter((bot) => bot.targetMode === "duo").length;
     const teamBotCount = LOBBY_BOT_PLANS.filter((bot) => bot.targetMode === "team").length;
@@ -348,6 +411,25 @@
       (hotelCells.match(/S/g) || []).length !== 1
     ) {
       throw new Error("The hotel needs one start, one key and four doors.");
+    }
+    if (
+      PLAY_ROULETTE_MAP.length !== GRID_HEIGHT ||
+      PLAY_ROULETTE_MAP.some((row) => row.length !== GRID_WIDTH) ||
+      PLAY_HUNT_MAP.length !== GRID_HEIGHT ||
+      PLAY_HUNT_MAP.some((row) => row.length !== GRID_WIDTH)
+    ) {
+      throw new Error("The Play rooms must be exactly 19x11 tiles.");
+    }
+    const playCells = PLAY_HUNT_MAP.join("");
+    if (
+      PLAY_BOT_ROSTER.length !== 9 ||
+      PLAY_HUNT_BOT_SPAWNS.length !== 9 ||
+      (playCells.match(/E/g) || []).length !== 1 ||
+      (playCells.match(/F/g) || []).length !== 3 ||
+      (playCells.match(/K/g) || []).length !== 1 ||
+      (playCells.match(/S/g) || []).length !== 1
+    ) {
+      throw new Error("Play needs nine bots, one key and four doors with one real exit.");
     }
   }
 
@@ -430,10 +512,24 @@
   }
 
   function setSceneClass(scene) {
-    ["lobby", "sea", "hotel", "maze"].forEach((name) => {
+    [
+      "lobby",
+      "sea",
+      "hotel",
+      "maze",
+      "play",
+      "roulette",
+      "hunt",
+      "play-roulette",
+      "play-hunt",
+    ].forEach((name) => {
       document.body.classList.remove(name + "-mode");
     });
     document.body.classList.add(scene + "-mode");
+    if (scene === "play") {
+      const playPhase = state.play && state.play.phase === "hunt" ? "hunt" : "roulette";
+      document.body.classList.add("play-" + playPhase + "-mode");
+    }
     updateBoatControlButton();
   }
 
@@ -471,6 +567,15 @@
         startDelayMs: index * 170,
         status: "aboard",
         roleLabel: "HJÄLPER",
+        helperTask: null,
+        helperTarget: null,
+        helperStation: null,
+        helperPath: [],
+        helperPathIndex: 0,
+        helperWaitMs: 0,
+        arrivalStatus: null,
+        arrivalRoleLabel: null,
+        followsPlayer: false,
       }));
   }
 
@@ -483,7 +588,18 @@
     state.map[y] = row.slice(0, x) + symbol + row.slice(x + 1);
   }
 
-  function positionPartyBotsAtStart() {
+  function resetPartyAssistance(scene) {
+    state.partyAssistance = {
+      scene: scene || null,
+      keyMarked: false,
+      correctHotelDoorId: null,
+      correctExit: null,
+      warnedWrongExit: null,
+      navigationActive: scene === "sea" && state.partyBots.length > 0,
+    };
+  }
+
+  function placePartyBotsForDeployment() {
     if (!state.player || state.partyBots.length === 0) {
       return;
     }
@@ -510,30 +626,255 @@
       bot.facingY = forward.y;
       bot.moveAnimMs = 0;
       bot.walkMs = index * 130;
-      bot.status = "following";
-      bot.roleLabel = "FÖLJER";
+      bot.status = "preparing_help";
+      bot.roleLabel = "HJÄLPER";
+      bot.helperTask = null;
+      bot.helperTarget = null;
+      bot.helperStation = null;
+      bot.helperPath = [];
+      bot.helperPathIndex = 0;
+      bot.helperWaitMs = index * 260;
+      bot.arrivalStatus = null;
+      bot.arrivalRoleLabel = null;
+      bot.followsPlayer = false;
       occupied.add(bot.x + "," + bot.y);
     });
   }
 
-  function movePartyBehind(previousPlayer) {
-    let target = { x: previousPlayer.x, y: previousPlayer.y };
+  function findHelperStation(bot, target, reserved) {
+    const directions = [
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+      { x: 0, y: -1 },
+      { x: -1, y: 0 },
+    ];
+    return directions
+      .map((direction) => ({
+        x: target.x + direction.x,
+        y: target.y + direction.y,
+      }))
+      .filter((candidate) => {
+        return isWalkable(candidate.x, candidate.y) &&
+          !reserved.has(candidate.x + "," + candidate.y);
+      })
+      .map((candidate) => ({
+        ...candidate,
+        path: findPath(bot.x, bot.y, candidate.x, candidate.y),
+      }))
+      .filter((candidate) => candidate.path.length > 0)
+      .sort((a, b) => a.path.length - b.path.length)[0] || null;
+  }
+
+  function helperForTask(taskId) {
+    return state.partyBots.find((bot) => bot.helperTask === taskId) || null;
+  }
+
+  function markPartyHelperArrival(bot, announce) {
+    if (!bot.helperTarget || bot.helperTarget.scene !== state.scene) {
+      return;
+    }
+    bot.status = bot.arrivalStatus || "helping_at_target";
+    bot.roleLabel = bot.arrivalRoleLabel || "HJÄLPER HÄR";
+    bot.helperPathIndex = bot.helperPath.length;
+    const dx = bot.helperTarget.x - bot.x;
+    const dy = bot.helperTarget.y - bot.y;
+    const length = Math.hypot(dx, dy) || 1;
+    bot.facingX = dx / length;
+    bot.facingY = dy / length;
+
+    if (bot.helperTask === "hotel-key") {
+      state.partyAssistance.keyMarked = true;
+      if (announce) setMessage(bot.name + ": NYCKELN ÄR HÄR", 1900);
+    } else if (bot.helperTask === "hotel-correct-door") {
+      state.partyAssistance.correctHotelDoorId = bot.helperTarget.doorId;
+      if (announce) setMessage(bot.name + ": JAG VISAR RÄTT RUM", 1900);
+    } else if (bot.helperTask === "maze-correct-exit") {
+      state.partyAssistance.correctExit = {
+        x: bot.helperTarget.x,
+        y: bot.helperTarget.y,
+      };
+      if (announce) setMessage(bot.name + ": JAG HITTADE RÄTT EXIT", 1900);
+    } else if (bot.helperTask === "maze-wrong-door") {
+      state.partyAssistance.warnedWrongExit = {
+        x: bot.helperTarget.x,
+        y: bot.helperTarget.y,
+      };
+      if (announce) setMessage(bot.name + ": DEN HÄR EXIT ÄR FEL", 1900);
+    }
+  }
+
+  function assignPartyHelperTask(bot, task) {
+    const station = findHelperStation(bot, task.target, task.reserved);
+    bot.helperTask = task.id;
+    bot.helperTarget = {
+      scene: state.scene,
+      type: task.targetType,
+      id: task.targetId || null,
+      doorId: task.doorId || null,
+      x: task.target.x,
+      y: task.target.y,
+    };
+    bot.helperStation = station
+      ? { x: station.x, y: station.y }
+      : { x: bot.x, y: bot.y };
+    bot.helperPath = station ? station.path.slice(1) : [];
+    bot.helperPathIndex = 0;
+    bot.helperWaitMs = task.delayMs || 0;
+    bot.arrivalStatus = task.arrivalStatus;
+    bot.arrivalRoleLabel = task.arrivalRoleLabel;
+    bot.status = task.movingStatus;
+    bot.roleLabel = task.movingRoleLabel;
+    bot.moveAnimMs = 0;
+    bot.followsPlayer = false;
+    task.reserved.add(bot.helperStation.x + "," + bot.helperStation.y);
+    if (bot.helperPath.length === 0) {
+      markPartyHelperArrival(bot, false);
+    }
+  }
+
+  function deployPartyHelpers() {
+    resetPartyAssistance(state.scene);
+    if (state.partyBots.length === 0 || (state.scene !== "hotel" && state.scene !== "maze")) {
+      return;
+    }
+    placePartyBotsForDeployment();
+    const reserved = new Set();
+
+    if (state.scene === "hotel") {
+      assignPartyHelperTask(state.partyBots[0], {
+        id: "hotel-key",
+        targetType: "key",
+        targetId: state.hotel.key.id,
+        target: state.hotel.key,
+        reserved,
+        delayMs: 240,
+        movingStatus: "searching_key",
+        movingRoleLabel: "LETAR NYCKEL",
+        arrivalStatus: "pointing_key",
+        arrivalRoleLabel: "NYCKEL HÄR",
+      });
+      if (state.partyBots[1]) {
+        const correctDoor = state.doors.find((door) => door.isReal);
+        assignPartyHelperTask(state.partyBots[1], {
+          id: "hotel-correct-door",
+          targetType: "door",
+          targetId: correctDoor.id,
+          doorId: correctDoor.id,
+          target: correctDoor,
+          reserved,
+          delayMs: 520,
+          movingStatus: "checking_room",
+          movingRoleLabel: "KOLLAR RUM",
+          arrivalStatus: "pointing_door",
+          arrivalRoleLabel: "RÄTT RUM",
+        });
+      }
+      return;
+    }
+
+    const correctExit = state.doors.find((door) => door.isReal);
+    assignPartyHelperTask(state.partyBots[0], {
+      id: "maze-correct-exit",
+      targetType: "exit",
+      targetId: "exit-" + correctExit.x + "-" + correctExit.y,
+      target: correctExit,
+      reserved,
+      delayMs: 240,
+      movingStatus: "searching_exit",
+      movingRoleLabel: "LETAR EXIT",
+      arrivalStatus: "pointing_exit",
+      arrivalRoleLabel: "RÄTT EXIT",
+    });
+    if (state.partyBots[1]) {
+      const wrongExit = state.doors
+        .filter((door) => !door.isReal)
+        .sort((a, b) => {
+          const distanceA = Math.abs(a.x - state.start.x) + Math.abs(a.y - state.start.y);
+          const distanceB = Math.abs(b.x - state.start.x) + Math.abs(b.y - state.start.y);
+          return distanceA - distanceB;
+        })[0];
+      assignPartyHelperTask(state.partyBots[1], {
+        id: "maze-wrong-door",
+        targetType: "exit",
+        targetId: "exit-" + wrongExit.x + "-" + wrongExit.y,
+        target: wrongExit,
+        reserved,
+        delayMs: 520,
+        movingStatus: "checking_door",
+        movingRoleLabel: "KOLLAR EXIT",
+        arrivalStatus: "warning_wrong_door",
+        arrivalRoleLabel: "FEL DÖRR",
+      });
+    }
+  }
+
+  function reassignHotelHelpersAfterKey() {
+    const keyHelper = helperForTask("hotel-key");
+    const correctDoor = state.doors.find((door) => door.isReal);
+    if (!keyHelper || !correctDoor) {
+      return;
+    }
+    state.partyAssistance.keyMarked = true;
+    if (state.partyBots.length === 1) {
+      assignPartyHelperTask(keyHelper, {
+        id: "hotel-correct-door",
+        targetType: "door",
+        targetId: correctDoor.id,
+        doorId: correctDoor.id,
+        target: correctDoor,
+        reserved: new Set(),
+        delayMs: 120,
+        movingStatus: "checking_room",
+        movingRoleLabel: "KOLLAR RUM",
+        arrivalStatus: "pointing_door",
+        arrivalRoleLabel: "RÄTT RUM",
+      });
+      return;
+    }
+    keyHelper.helperPath = [];
+    keyHelper.helperPathIndex = 0;
+    keyHelper.moveAnimMs = 0;
+    keyHelper.status = "key_found";
+    keyHelper.roleLabel = "NYCKEL HITTAD";
+  }
+
+  function updatePartyHelpers(dt) {
+    if (state.scene !== "hotel" && state.scene !== "maze") {
+      return;
+    }
     state.partyBots.forEach((bot) => {
-      const previousBot = { x: bot.x, y: bot.y };
-      const dx = target.x - bot.x;
-      const dy = target.y - bot.y;
+      if (!bot.helperTask) {
+        return;
+      }
+      if (bot.helperWaitMs > 0) {
+        bot.helperWaitMs = Math.max(0, bot.helperWaitMs - dt);
+        return;
+      }
+      if (bot.moveAnimMs > 0) {
+        bot.walkMs += dt;
+        bot.moveAnimMs = Math.max(0, bot.moveAnimMs - dt);
+        if (bot.moveAnimMs > 0) {
+          return;
+        }
+      }
+      if (bot.helperPathIndex >= bot.helperPath.length) {
+        if (bot.status !== bot.arrivalStatus && bot.status !== "key_found") {
+          markPartyHelperArrival(bot, true);
+        }
+        return;
+      }
+      const next = bot.helperPath[bot.helperPathIndex];
+      const dx = next.x - bot.x;
+      const dy = next.y - bot.y;
       const length = Math.hypot(dx, dy) || 1;
       bot.fromX = bot.x;
       bot.fromY = bot.y;
-      bot.x = target.x;
-      bot.y = target.y;
-      if (dx !== 0 || dy !== 0) {
-        bot.facingX = dx / length;
-        bot.facingY = dy / length;
-      }
-      bot.moveAnimMs = MOVE_TIME;
-      bot.status = "following";
-      target = previousBot;
+      bot.x = next.x;
+      bot.y = next.y;
+      bot.facingX = dx / length;
+      bot.facingY = dy / length;
+      bot.helperPathIndex += 1;
+      bot.moveAnimMs = PARTY_HELPER_MOVE_TIME;
     });
   }
 
@@ -547,7 +888,662 @@
     return rows;
   }
 
+  function createPlayBots() {
+    const centerX = 9;
+    const centerY = 5;
+    return PLAY_BOT_ROSTER.map((profile, index) => {
+      const seat = index + 1;
+      const seatAngle = Math.PI / 2 + seat * Math.PI * 2 / 10;
+      const x = centerX + Math.cos(seatAngle) * 3.35;
+      const y = centerY + Math.sin(seatAngle) * 2.35;
+      return {
+        ...profile,
+        targetMode: "play",
+        targetLabel: "PLAY",
+        rouletteSeat: seat,
+        role: "survivor",
+        status: "active",
+        task: "waiting",
+        roleLabel: "VÄNTAR",
+        helperTask: null,
+        x,
+        y,
+        fromX: x,
+        fromY: y,
+        facingX: (centerX - x) / (Math.hypot(centerX - x, centerY - y) || 1),
+        facingY: (centerY - y) / (Math.hypot(centerX - x, centerY - y) || 1),
+        moveAnimMs: 0,
+        moveTimerMs: index * 36,
+        walkMs: index * 91,
+        startDelayMs: index * 57,
+        aiTick: index,
+        path: [],
+        pathIndex: 0,
+        followsPlayer: false,
+      };
+    });
+  }
+
+  function getPlayActors() {
+    if (!state.play || !state.player) {
+      return [];
+    }
+    return [state.player, ...state.play.bots];
+  }
+
+  function getPlayActor(id) {
+    return getPlayActors().find((actor) => actor.id === id) || null;
+  }
+
+  function getPlayMonster() {
+    return state.play ? getPlayActor(state.play.monsterId) : null;
+  }
+
+  function getActivePlaySurvivors() {
+    return getPlayActors().filter(
+      (actor) => actor.role === "survivor" && actor.status === "active"
+    );
+  }
+
+  function configurePlayRouletteTarget(monsterId) {
+    if (!state.play || !state.play.roulette) {
+      return false;
+    }
+    const actors = getPlayActors();
+    const requested = actors.find((actor) => actor.id === monsterId);
+    const chosen = requested || actors[Math.floor(Math.random() * actors.length)];
+    if (!chosen) {
+      return false;
+    }
+    const seatIndex = chosen.id === "player" ? 0 : chosen.rouletteSeat;
+    const targetAngle = Math.PI / 2 + seatIndex * Math.PI * 2 / 10;
+    const startAngle = state.play.roulette.arrowAngle || -Math.PI / 2;
+    const fullTurn = Math.PI * 2;
+    const positiveDelta = ((targetAngle - startAngle) % fullTurn + fullTurn) % fullTurn;
+    state.play.pendingMonsterId = chosen.id;
+    state.play.roulette.elapsedMs = 0;
+    state.play.roulette.revealRemainingMs = PLAY_ROULETTE_REVEAL_MS;
+    state.play.roulette.revealed = false;
+    state.play.roulette.startAngle = startAngle;
+    state.play.roulette.targetAngle = targetAngle;
+    state.play.roulette.totalRotation = fullTurn * 6 + positiveDelta;
+    return true;
+  }
+
+  function loadPlayRoulette() {
+    state.scene = "play";
+    state.playMode = "play";
+    state.map = PLAY_ROULETTE_MAP.slice();
+    state.start = { x: 9, y: 8 };
+    state.shadows = [];
+    state.doors = [];
+    state.lobbyDoors = [];
+    state.lobbyBots = [];
+    state.partyBots = [];
+    resetPartyAssistance("play");
+    state.boat = null;
+    state.deckPlayer = null;
+    state.controlTarget = "player";
+    state.islands = [];
+    state.hotel = null;
+    state.inventory.hotelKey = false;
+    state.levelElapsedMs = 0;
+    state.sonar.activeMs = 0;
+    state.sonar.cooldownMs = 0;
+    state.sonar.elapsedMs = 0;
+    state.invulnerableMs = 0;
+    state.levelBannerMs = 0;
+    state.transitionMs = 0;
+    state.particles = [];
+    state.player = {
+      id: "player",
+      name: "DU",
+      rouletteSeat: 0,
+      role: "survivor",
+      status: "active",
+      task: "waiting",
+      roleLabel: "VÄNTAR",
+      color: COLORS.orange,
+      bodyColor: "#d77b25",
+      x: state.start.x,
+      y: state.start.y,
+      fromX: state.start.x,
+      fromY: state.start.y,
+      moveAnimMs: 0,
+      facingX: 0,
+      facingY: -1,
+      followsPlayer: false,
+    };
+    state.play = {
+      phase: "roulette",
+      bots: createPlayBots(),
+      pendingMonsterId: null,
+      monsterId: null,
+      playerRole: null,
+      playerStatus: "active",
+      result: null,
+      roulette: {
+        elapsedMs: 0,
+        durationMs: PLAY_ROULETTE_SPIN_MS,
+        revealRemainingMs: PLAY_ROULETTE_REVEAL_MS,
+        revealed: false,
+        startAngle: -Math.PI / 2,
+        targetAngle: 0,
+        totalRotation: 0,
+        arrowAngle: -Math.PI / 2,
+      },
+      key: null,
+      correctDoorId: null,
+      correctDoorKnown: false,
+      monsterReleaseMs: PLAY_HUNT_START_DELAY_MS,
+      monsterFrozen: false,
+      caughtIds: [],
+      wrongDoorAttempts: 0,
+    };
+    configurePlayRouletteTarget(forcedPlayMonsterId);
+    forcedPlayMonsterId = null;
+    setCameraFacing(0, -1, true);
+    setSceneClass("play");
+    setMessage("DEN RÖDA PILEN VÄLJER MONSTER...", PLAY_ROULETTE_SPIN_MS);
+    playSound("start");
+  }
+
+  function revealPlayMonster() {
+    if (!state.play || state.play.phase !== "roulette" || state.play.roulette.revealed) {
+      return;
+    }
+    state.play.monsterId = state.play.pendingMonsterId;
+    state.play.roulette.revealed = true;
+    state.play.roulette.revealRemainingMs = PLAY_ROULETTE_REVEAL_MS;
+    getPlayActors().forEach((actor) => {
+      actor.role = actor.id === state.play.monsterId ? "monster" : "survivor";
+      actor.roleLabel = actor.role === "monster" ? "MONSTER" : "ÖVERLEVARE";
+    });
+    state.play.playerRole = state.player.role;
+    const monster = getPlayMonster();
+    setMessage(
+      monster && monster.id === "player"
+        ? "PILEN VALDE DIG • DU ÄR MONSTRET!"
+        : (monster ? monster.name : "EN BOT") + " BLEV MONSTRET!",
+      PLAY_ROULETTE_REVEAL_MS
+    );
+    state.flashMs = 360;
+    playSound("wrongDoor");
+  }
+
+  function playDoorId(x, y) {
+    if (y === 0) return "play-door-north";
+    if (x === GRID_WIDTH - 1) return "play-door-east";
+    if (y === GRID_HEIGHT - 1) return "play-door-south";
+    return "play-door-west";
+  }
+
+  function playDoorLabel(x, y) {
+    if (y === 0) return "DÖRR 1";
+    if (x === GRID_WIDTH - 1) return "DÖRR 2";
+    if (y === GRID_HEIGHT - 1) return "DÖRR 3";
+    return "DÖRR 4";
+  }
+
+  function nearestPlayDoorStation(actor, door) {
+    const options = [
+      { x: door.x, y: door.y + 1 },
+      { x: door.x - 1, y: door.y },
+      { x: door.x, y: door.y - 1 },
+      { x: door.x + 1, y: door.y },
+    ]
+      .filter((point) => isWalkable(point.x, point.y))
+      .map((point) => ({
+        ...point,
+        path: findPath(actor.x, actor.y, point.x, point.y),
+      }))
+      .filter((point) => point.path.length > 0)
+      .sort((a, b) => a.path.length - b.path.length);
+    return options[0] || null;
+  }
+
+  function assignPlayBotTasks() {
+    if (!state.play || state.play.phase !== "hunt") {
+      return;
+    }
+    const survivorBots = state.play.bots.filter(
+      (bot) => bot.role === "survivor" && bot.status === "active"
+    );
+    const monsterBot = state.play.bots.find(
+      (bot) => bot.role === "monster" && bot.status === "active"
+    );
+    if (monsterBot) {
+      monsterBot.task = "chase";
+      monsterBot.roleLabel = "JAGAR";
+    }
+
+    survivorBots.forEach((bot) => {
+      bot.task = "escape";
+      bot.roleLabel = "HJÄLPER";
+      bot.path = [];
+      bot.pathIndex = 0;
+      bot.followsPlayer = false;
+    });
+
+    if (!state.play.key.collected && survivorBots[0]) {
+      survivorBots[0].task = "find-key";
+      survivorBots[0].roleLabel = "LETAR NYCKEL";
+    }
+    const doorScoutIndex = state.play.key.collected ? 0 : 1;
+    if (!state.play.correctDoorKnown && survivorBots[doorScoutIndex]) {
+      survivorBots[doorScoutIndex].task = "find-door";
+      survivorBots[doorScoutIndex].roleLabel = "KOLLAR DÖRR";
+    }
+    if (state.play.key.collected && state.play.correctDoorKnown && survivorBots[0]) {
+      survivorBots[0].task = "unlock-door";
+      survivorBots[0].roleLabel = "LÅSER UPP";
+    }
+  }
+
+  function beginPlayHunt() {
+    if (!state.play || state.scene !== "play" || state.play.phase === "result") {
+      return false;
+    }
+    if (!state.play.monsterId) {
+      revealPlayMonster();
+    }
+    if (!state.play.monsterId) {
+      return false;
+    }
+
+    clearHeldInput();
+    state.play.phase = "hunt";
+    state.play.result = null;
+    state.play.monsterReleaseMs = PLAY_HUNT_START_DELAY_MS;
+    state.play.monsterFrozen = false;
+    state.play.caughtIds = [];
+    state.play.correctDoorKnown = false;
+    state.play.wrongDoorAttempts = 0;
+    state.map = PLAY_HUNT_MAP.slice();
+    state.doors = [];
+    state.start = null;
+    let keyPosition = null;
+    for (let y = 0; y < GRID_HEIGHT; y += 1) {
+      for (let x = 0; x < GRID_WIDTH; x += 1) {
+        const cell = state.map[y][x];
+        if (cell === "S") {
+          state.start = { x, y };
+        } else if (cell === "K") {
+          keyPosition = { x, y };
+        } else if (cell === "E" || cell === "F") {
+          state.doors.push({
+            id: playDoorId(x, y),
+            label: playDoorLabel(x, y),
+            x,
+            y,
+            isReal: cell === "E",
+            opened: false,
+          });
+        }
+      }
+    }
+    if (!state.start || !keyPosition || state.doors.length !== 4) {
+      throw new Error("Play hunt could not find its start, key and four doors.");
+    }
+    const correctDoor = state.doors.find((door) => door.isReal);
+    state.play.correctDoorId = correctDoor.id;
+    state.play.key = {
+      id: "play-key",
+      x: keyPosition.x,
+      y: keyPosition.y,
+      collected: false,
+      collectedById: null,
+    };
+
+    const actors = getPlayActors();
+    actors.forEach((actor) => {
+      actor.role = actor.id === state.play.monsterId ? "monster" : "survivor";
+      actor.status = "active";
+      actor.task = actor.role === "monster" ? "chase" : "escape";
+      actor.roleLabel = actor.role === "monster" ? "MONSTER" : "ÖVERLEVARE";
+      actor.moveAnimMs = 0;
+    });
+    state.play.playerRole = state.player.role;
+    state.play.playerStatus = "active";
+
+    const monster = getPlayMonster();
+    monster.x = state.start.x;
+    monster.y = state.start.y;
+    monster.fromX = monster.x;
+    monster.fromY = monster.y;
+    monster.facingX = 0;
+    monster.facingY = -1;
+    monster.moveTimerMs = PLAY_HUNT_START_DELAY_MS;
+
+    const survivors = actors.filter((actor) => actor.role === "survivor");
+    survivors.forEach((actor, index) => {
+      const spawn = PLAY_HUNT_BOT_SPAWNS[index % PLAY_HUNT_BOT_SPAWNS.length];
+      actor.x = spawn.x;
+      actor.y = spawn.y;
+      actor.fromX = spawn.x;
+      actor.fromY = spawn.y;
+      actor.facingX = 0;
+      actor.facingY = 1;
+      actor.moveAnimMs = 0;
+      actor.moveTimerMs = 120 + index * 48;
+      actor.aiTick = index;
+    });
+    state.start = { x: state.player.x, y: state.player.y };
+    assignPlayBotTasks();
+    setCameraFacing(state.player.facingX, state.player.facingY, true);
+    setSceneClass("play");
+    setMessage(
+      state.play.playerRole === "monster"
+        ? "DU ÄR MONSTRET • FÅNGA ALLA NIO!"
+        : (monster.name || "MONSTRET") + " JAGAR • HITTA NYCKELN!",
+      2800
+    );
+    return true;
+  }
+
+  function updatePlayRoulette(dt) {
+    const roulette = state.play.roulette;
+    if (!roulette.revealed) {
+      roulette.elapsedMs = Math.min(roulette.durationMs, roulette.elapsedMs + dt);
+      const progress = roulette.durationMs > 0
+        ? roulette.elapsedMs / roulette.durationMs
+        : 1;
+      const eased = 1 - Math.pow(1 - Math.max(0, Math.min(1, progress)), 4);
+      roulette.arrowAngle = roulette.startAngle + roulette.totalRotation * eased;
+      if (roulette.elapsedMs >= roulette.durationMs) {
+        roulette.arrowAngle = roulette.targetAngle;
+        revealPlayMonster();
+      }
+      return;
+    }
+    roulette.revealRemainingMs = Math.max(0, roulette.revealRemainingMs - dt);
+    if (roulette.revealRemainingMs <= 0) {
+      beginPlayHunt();
+    }
+  }
+
+  function collectPlayKey(actor) {
+    if (
+      !state.play ||
+      state.play.phase !== "hunt" ||
+      state.play.key.collected ||
+      actor.role !== "survivor" ||
+      actor.status !== "active"
+    ) {
+      return false;
+    }
+    state.play.key.collected = true;
+    state.play.key.collectedById = actor.id;
+    setMapCell(state.play.key.x, state.play.key.y, ".");
+    setMessage((actor.name || "DU") + " HITTADE NYCKELN!", 1700);
+    playSound("key");
+    assignPlayBotTasks();
+    return true;
+  }
+
+  function discoverCorrectPlayDoor(actor) {
+    if (!state.play || state.play.correctDoorKnown) {
+      return;
+    }
+    state.play.correctDoorKnown = true;
+    const door = state.doors.find((candidate) => candidate.isReal);
+    setMessage((actor.name || "DU") + ": " + door.label + " ÄR RÄTT!", 1900);
+    playSound("rightDoor");
+    assignPlayBotTasks();
+  }
+
+  function finishPlayRound(winner) {
+    if (!state.play || state.play.phase === "result") {
+      return;
+    }
+    state.play.phase = "result";
+    state.play.result = winner;
+    state.mode = "victory";
+    clearHeldInput();
+    createConfetti();
+    victoryEyebrow.textContent = "PLAY ÄR AVGJORT";
+    victoryTitle.textContent =
+      winner === "survivors" ? "Överlevarna vann!" : "Monstret vann!";
+    const caughtCount = state.play.caughtIds.length;
+    victoryStats.textContent = winner === "survivors"
+      ? "Nyckeln öppnade rätt dörr."
+      : "Alla " + caughtCount + " överlevare blev tagna.";
+    replayButton.textContent = "TILL START-RUMMET";
+    victoryScreen.classList.remove("hidden");
+    state.flashMs = 520;
+    playSound(winner === "survivors" ? "victory" : "gameover");
+  }
+
+  function catchPlaySurvivor(actor) {
+    if (
+      !state.play ||
+      state.play.phase !== "hunt" ||
+      actor.role !== "survivor" ||
+      actor.status !== "active"
+    ) {
+      return;
+    }
+    actor.status = "caught";
+    actor.task = "caught";
+    actor.roleLabel = "TAGEN";
+    if (!state.play.caughtIds.includes(actor.id)) {
+      state.play.caughtIds.push(actor.id);
+    }
+    if (actor.id === "player") {
+      state.play.playerStatus = "caught";
+      clearHeldInput();
+      setMessage("DU BLEV TAGEN • BOTTARNA FORTSÄTTER", 2100);
+    } else {
+      setMessage(actor.name + " BLEV TAGEN!", 1200);
+    }
+    state.flashMs = 260;
+    playSound("hurt");
+    if (getActivePlaySurvivors().length === 0) {
+      finishPlayRound("monster");
+      return;
+    }
+    assignPlayBotTasks();
+  }
+
+  function checkPlayCatches() {
+    if (!state.play || state.play.phase !== "hunt") {
+      return;
+    }
+    const monster = getPlayMonster();
+    if (!monster || monster.status !== "active") {
+      return;
+    }
+    getActivePlaySurvivors().forEach((survivor) => {
+      if (survivor.x === monster.x && survivor.y === monster.y) {
+        catchPlaySurvivor(survivor);
+      }
+    });
+  }
+
+  function movePlayActor(actor, next, duration) {
+    const dx = next.x - actor.x;
+    const dy = next.y - actor.y;
+    actor.fromX = actor.x;
+    actor.fromY = actor.y;
+    actor.x = next.x;
+    actor.y = next.y;
+    actor.facingX = dx;
+    actor.facingY = dy;
+    actor.moveAnimMs = duration;
+    actor.walkMs = (actor.walkMs || 0) + duration;
+  }
+
+  function updatePlayBotStep(bot) {
+    if (bot.status !== "active" || state.play.phase !== "hunt") {
+      return;
+    }
+    if (bot.role === "monster") {
+      if (state.play.monsterFrozen || state.play.monsterReleaseMs > 0) {
+        return;
+      }
+      const targets = getActivePlaySurvivors()
+        .map((survivor) => ({
+          survivor,
+          path: findPath(bot.x, bot.y, survivor.x, survivor.y),
+        }))
+        .filter((item) => item.path.length > 0)
+        .sort((a, b) => a.path.length - b.path.length);
+      if (targets[0] && targets[0].path[1]) {
+        movePlayActor(bot, targets[0].path[1], PLAY_MONSTER_MOVE_TIME);
+      }
+      checkPlayCatches();
+      return;
+    }
+
+    if (bot.task === "find-key" && !state.play.key.collected) {
+      const path = findPath(bot.x, bot.y, state.play.key.x, state.play.key.y);
+      if (path[1]) {
+        movePlayActor(bot, path[1], PLAY_BOT_MOVE_TIME);
+      }
+      if (bot.x === state.play.key.x && bot.y === state.play.key.y) {
+        collectPlayKey(bot);
+      }
+    } else if (bot.task === "find-door" && !state.play.correctDoorKnown) {
+      const door = state.doors.find((candidate) => candidate.isReal);
+      const station = nearestPlayDoorStation(bot, door);
+      if (station && station.path[1]) {
+        movePlayActor(bot, station.path[1], PLAY_BOT_MOVE_TIME);
+      }
+      if (station && bot.x === station.x && bot.y === station.y) {
+        discoverCorrectPlayDoor(bot);
+      }
+    } else if (bot.task === "unlock-door") {
+      const door = state.doors.find((candidate) => candidate.isReal);
+      const station = nearestPlayDoorStation(bot, door);
+      if (station && station.path[1]) {
+        movePlayActor(bot, station.path[1], PLAY_BOT_MOVE_TIME);
+      }
+      if (
+        station &&
+        bot.x === station.x &&
+        bot.y === station.y &&
+        state.play.key.collected
+      ) {
+        door.opened = true;
+        finishPlayRound("survivors");
+      }
+    } else {
+      const monster = getPlayMonster();
+      const options = [
+        { x: bot.x + 1, y: bot.y },
+        { x: bot.x, y: bot.y + 1 },
+        { x: bot.x - 1, y: bot.y },
+        { x: bot.x, y: bot.y - 1 },
+      ].filter((point) => isWalkable(point.x, point.y));
+      options.sort((a, b) => {
+        const distanceA = Math.abs(a.x - monster.x) + Math.abs(a.y - monster.y);
+        const distanceB = Math.abs(b.x - monster.x) + Math.abs(b.y - monster.y);
+        if (distanceA !== distanceB) return distanceB - distanceA;
+        return ((a.x * 7 + a.y * 11 + bot.aiTick) % 5) -
+          ((b.x * 7 + b.y * 11 + bot.aiTick) % 5);
+      });
+      if (options[0]) {
+        movePlayActor(bot, options[0], PLAY_BOT_MOVE_TIME);
+      }
+    }
+    bot.aiTick += 1;
+    checkPlayCatches();
+  }
+
+  function updatePlayHunt(dt) {
+    state.play.monsterReleaseMs = Math.max(0, state.play.monsterReleaseMs - dt);
+    state.play.bots.forEach((bot) => {
+      if (bot.moveAnimMs > 0) {
+        bot.moveAnimMs = Math.max(0, bot.moveAnimMs - dt);
+        bot.walkMs += dt;
+      }
+      if (state.play.phase !== "hunt" || bot.status !== "active") {
+        return;
+      }
+      bot.moveTimerMs -= dt;
+      if (bot.moveTimerMs <= 0 && bot.moveAnimMs <= 0) {
+        updatePlayBotStep(bot);
+        bot.moveTimerMs += bot.role === "monster" ? 410 : 520;
+      }
+    });
+    checkPlayCatches();
+  }
+
+  function updatePlay(dt) {
+    if (!state.play) {
+      return;
+    }
+    if (state.play.phase === "roulette") {
+      updatePlayRoulette(dt);
+    } else if (state.play.phase === "hunt") {
+      updatePlayHunt(dt);
+    }
+  }
+
+  function handlePlayDoor(door) {
+    if (state.player.role === "monster") {
+      setMessage("MONSTRET KAN INTE FLY!", 1100);
+      state.bumpMs = 150;
+      playSound("bump");
+      return;
+    }
+    if (!state.play.key.collected) {
+      setMessage("DÖRREN ÄR LÅST • HITTA NYCKELN", 1400);
+      state.bumpMs = 160;
+      playSound("bump");
+      return;
+    }
+    if (!door.isReal) {
+      state.play.wrongDoorAttempts += 1;
+      setMessage("FEL DÖRR • NYCKELN PASSAR INTE", 1400);
+      state.bumpMs = 180;
+      playSound("wrongDoor");
+      return;
+    }
+    door.opened = true;
+    state.play.correctDoorKnown = true;
+    finishPlayRound("survivors");
+  }
+
+  function tryMovePlay(dx, dy) {
+    if (
+      !state.play ||
+      state.play.phase !== "hunt" ||
+      (state.player.role === "survivor" && state.player.status !== "active")
+    ) {
+      if (state.play && state.play.phase === "roulette") {
+        setMessage("VÄNTA TILLS PILEN HAR STANNAT", 800);
+      }
+      return;
+    }
+    state.player.facingX = dx;
+    state.player.facingY = dy;
+    const targetX = state.player.x + dx;
+    const targetY = state.player.y + dy;
+    const targetCell = cellAt(targetX, targetY);
+    if (targetCell === "#" || targetCell === "V") {
+      state.bumpMs = 120;
+      playSound("bump");
+      return;
+    }
+    const door = state.doors.find((candidate) => candidate.x === targetX && candidate.y === targetY);
+    if (door) {
+      handlePlayDoor(door);
+      return;
+    }
+    commitPlayerStep(targetX, targetY);
+    if (
+      targetCell === "K" &&
+      state.player.role === "survivor" &&
+      !state.play.key.collected
+    ) {
+      collectPlayKey(state.player);
+    }
+    checkPlayCatches();
+  }
+
   function loadSea() {
+    state.play = null;
     state.scene = "sea";
     state.map = SEA_MAP.slice();
     state.start = { x: 9, y: 9 };
@@ -588,23 +1584,44 @@
       facingX: 0,
       facingY: -1,
     };
+    resetPartyAssistance("sea");
+    const hotelIsland = state.islands.find((island) => island.isCorrect);
     state.partyBots.forEach((bot) => {
-      bot.status = "aboard";
+      bot.status = "navigating";
       bot.moveAnimMs = 0;
-      bot.roleLabel = "OMBORD";
+      bot.roleLabel = "NAVIGERAR";
+      bot.helperTask = "sea-navigation";
+      bot.helperTarget = hotelIsland
+        ? {
+            scene: "sea",
+            type: "island-dock",
+            id: hotelIsland.id,
+            doorId: null,
+            x: hotelIsland.dockX,
+            y: hotelIsland.dockY,
+          }
+        : null;
+      bot.helperStation = null;
+      bot.helperPath = [];
+      bot.helperPathIndex = 0;
+      bot.helperWaitMs = 0;
+      bot.arrivalStatus = null;
+      bot.arrivalRoleLabel = null;
+      bot.followsPlayer = false;
     });
     setCameraFacing(0, -1, true);
     setSceneClass("sea");
     const companions = partyNames();
     setMessage(
       companions
-        ? companions + " FÖLJER MED • TRYCK BÅTSTYRNING"
+        ? companions + " HJÄLPER TILL • TRYCK BÅTSTYRNING"
         : "DU ÄR OMBORD • TRYCK BÅTSTYRNING",
       3600
     );
   }
 
   function loadHotel() {
+    state.play = null;
     const correctDoorId = HOTEL_CORRECT_DOOR[state.playMode] || "room-104";
     state.scene = "hotel";
     state.map = buildHotelMap(correctDoorId);
@@ -653,7 +1670,7 @@
       facingX: 0,
       facingY: -1,
     };
-    positionPartyBotsAtStart();
+    deployPartyHelpers();
     setCameraFacing(0, -1, true);
     setSceneClass("hotel");
     setMessage(
@@ -678,6 +1695,7 @@
   }
 
   function loadLobby() {
+    state.play = null;
     state.scene = "lobby";
     state.levelIndex = 0;
     state.map = LOBBY_MAP.slice();
@@ -687,6 +1705,7 @@
     state.lobbyDoors = [];
     state.lobbyBots = [];
     state.partyBots = [];
+    resetPartyAssistance("lobby");
     state.boat = null;
     state.deckPlayer = null;
     state.controlTarget = "player";
@@ -736,6 +1755,7 @@
   }
 
   function loadLevel(index) {
+    state.play = null;
     const level = LEVELS[index];
     state.scene = "maze";
     state.levelIndex = index;
@@ -795,16 +1815,24 @@
       facingX: initialFacing.x,
       facingY: initialFacing.y,
     };
-    positionPartyBotsAtStart();
+    deployPartyHelpers();
     setCameraFacing(initialFacing.x, initialFacing.y, true);
 
-    setMessage(index === 0 ? "SPACE = SÖKPULS" : "NY VÅNING", 1900);
+    setMessage(
+      state.partyBots.length > 0
+        ? partyNames() + ": VI LETAR SJÄLVA • DU KAN GÅ DIN VÄG"
+        : index === 0 ? "SPACE = SÖKPULS" : "NY VÅNING",
+      2300
+    );
   }
 
   function startRun() {
     initAudio();
     hideAllScreens();
     clearHeldInput();
+    victoryEyebrow.textContent = "ALLA TRE VÅNINGAR KLARADE";
+    victoryTitle.textContent = "Du hittade ut!";
+    replayButton.textContent = "SPELA IGEN";
     state.mode = "playing";
     state.playMode = null;
     state.partyBots = [];
@@ -876,6 +1904,9 @@
     state.mode = "victory";
     clearHeldInput();
     createConfetti();
+    victoryEyebrow.textContent = "ALLA TRE VÅNINGAR KLARADE";
+    victoryTitle.textContent = "Du hittade ut!";
+    replayButton.textContent = "SPELA IGEN";
     const totalSeconds = Math.max(1, Math.round(state.elapsedMs / 1000));
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -904,7 +1935,6 @@
     const initialFacing = chooseInitialFacing();
     state.player.facingX = initialFacing.x;
     state.player.facingY = initialFacing.y;
-    positionPartyBotsAtStart();
     setCameraFacing(initialFacing.x, initialFacing.y, true);
     state.shadows.forEach((shadow, index) => {
       shadow.x = shadow.spawnX;
@@ -976,11 +2006,20 @@
     }
 
     state.playMode = door.mode;
-    state.partyBots = createPartyBots(door.mode);
     state.hearts = MAX_HEARTS;
     state.mistakes = 0;
     state.elapsedMs = 0;
     state.mode = "playing";
+    if (door.mode === "play") {
+      state.partyBots = [];
+      loadPlayRoulette();
+      setMessage("PLAY • PILEN VÄLJER MONSTER", 2200);
+      playSound("rightDoor");
+      render();
+      return;
+    }
+    state.play = null;
+    state.partyBots = createPartyBots(door.mode);
     loadSea();
     setMessage(door.label + " VALT • BÖRJA PÅ BÅTEN", 2200);
     playSound("rightDoor");
@@ -1065,13 +2104,11 @@
   }
 
   function commitPlayerStep(targetX, targetY) {
-    const previousPlayer = { x: state.player.x, y: state.player.y };
     state.player.fromX = state.player.x;
     state.player.fromY = state.player.y;
     state.player.x = targetX;
     state.player.y = targetY;
     state.player.moveAnimMs = MOVE_TIME;
-    movePartyBehind(previousPlayer);
     playSound("step");
   }
 
@@ -1085,9 +2122,10 @@
     if (!door.isReal) {
       state.hotel.wrongDoorAttempts += 1;
       const correctDoor = state.doors.find((candidate) => candidate.isReal);
+      const doorHelper = helperForTask("hotel-correct-door");
       setMessage(
-        state.partyBots.length > 0
-          ? state.partyBots[0].name + ": PROVA " + correctDoor.label
+        doorHelper
+          ? doorHelper.name + ": PROVA " + correctDoor.label
           : "NYCKELN PASSAR INTE I " + door.label,
         1800
       );
@@ -1111,6 +2149,10 @@
 
     if (state.scene === "sea") {
       tryMoveSea(dx, dy);
+      return;
+    }
+    if (state.scene === "play") {
+      tryMovePlay(dx, dy);
       return;
     }
 
@@ -1153,9 +2195,11 @@
         state.inventory.hotelKey = true;
         setMapCell(targetX, targetY, ".");
         const correctDoor = state.doors.find((door) => door.isReal);
+        reassignHotelHelpersAfterKey();
+        const doorHelper = helperForTask("hotel-correct-door");
         setMessage(
-          state.partyBots.length > 0
-            ? state.partyBots[0].name + ": NYCKELN PASSAR " + correctDoor.label
+          doorHelper
+            ? doorHelper.name + ": NYCKELN PASSAR " + correctDoor.label
             : "NYCKEL HITTAD • PROVA DÖRRARNA",
           2300
         );
@@ -1425,18 +2469,16 @@
     if (state.player.moveAnimMs > 0) {
       state.player.moveAnimMs = Math.max(0, state.player.moveAnimMs - dt);
     }
-    state.partyBots.forEach((bot) => {
-      if (bot.moveAnimMs > 0) {
-        bot.walkMs += dt;
-        bot.moveAnimMs = Math.max(0, bot.moveAnimMs - dt);
-      }
-    });
     if (state.scene === "lobby") {
       updateLobbyBots(dt);
       return;
     }
 
     state.elapsedMs += dt;
+    if (state.scene === "play") {
+      updatePlay(dt);
+      return;
+    }
     if (state.scene === "sea") {
       if (state.boat && state.boat.moveAnimMs > 0) {
         state.boat.moveAnimMs = Math.max(0, state.boat.moveAnimMs - dt);
@@ -1450,6 +2492,7 @@
       }
       return;
     }
+    updatePartyHelpers(dt);
     if (state.scene === "hotel") {
       return;
     }
@@ -1645,6 +2688,64 @@
       return;
     }
 
+    if (state.scene === "play" && state.play) {
+      const roulette = state.play.phase === "roulette";
+      const activeSurvivors = getActivePlaySurvivors().length;
+      roundedRect(76, 16, 252, 44, 14);
+      ctx.fillStyle = "rgba(72, 20, 35, 0.92)";
+      ctx.fill();
+      ctx.strokeStyle = roulette ? "#ff3e58" : state.play.playerRole === "monster"
+        ? "#ff3e58"
+        : COLORS.cyan;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#ff9aaa";
+      ctx.font = "900 12px Trebuchet MS";
+      ctx.textAlign = "left";
+      ctx.fillText("PLAY • 10 DELTAGARE", 94, 35);
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "1000 14px Trebuchet MS";
+      ctx.fillText(
+        roulette
+          ? state.play.roulette.revealed ? "MONSTRET ÄR VALT" : "PILEN SNURRAR"
+          : state.play.playerRole === "monster" ? "DU ÄR MONSTRET" : "DU ÄR ÖVERLEVARE",
+        94,
+        52
+      );
+
+      roundedRect(383, 19, 388, 38, 13);
+      ctx.fillStyle = "rgba(5, 20, 38, 0.9)";
+      ctx.fill();
+      ctx.strokeStyle = roulette ? "#ff3e58" : state.play.key.collected ? "#ffd45e" : "#55e8ff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "1000 14px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillText(
+        roulette
+          ? state.play.roulette.revealed ? "GÖR ER REDO..." : "VEM BLIR MONSTER?"
+          : state.play.playerRole === "monster"
+            ? "FÅNGA ALLA ÖVERLEVARE"
+            : state.play.key.collected
+              ? state.play.correctDoorKnown ? "NYCKEL + RÄTT DÖRR HITTAD" : "NYCKEL HITTAD • HITTA RÄTT DÖRR"
+              : "HJÄLP BOTTARNA HITTA NYCKELN",
+        577,
+        44
+      );
+
+      ctx.fillStyle = activeSurvivors > 0 ? COLORS.lime : COLORS.red;
+      ctx.font = "1000 15px Trebuchet MS";
+      ctx.textAlign = "right";
+      ctx.fillText(
+        roulette ? "DU + 9 BOTTAR" : "KVAR " + activeSurvivors + " / 9",
+        950,
+        43
+      );
+      ctx.textAlign = "left";
+      return;
+    }
+
     if (state.scene === "sea") {
       roundedRect(76, 16, 270, 44, 14);
       ctx.fillStyle = "rgba(15, 67, 91, 0.88)";
@@ -1655,7 +2756,7 @@
       ctx.fillText("STORT HAV • " + state.playMode.toUpperCase(), 94, 35);
       ctx.fillStyle = COLORS.white;
       ctx.font = "900 14px Trebuchet MS";
-      ctx.fillText(partyNames() || "SOLO PÅ BÅTEN", 94, 52);
+      ctx.fillText(partyNames() ? partyNames() + " • NAVIGERAR" : "SOLO PÅ BÅTEN", 94, 52);
 
       roundedRect(403, 19, 334, 38, 13);
       ctx.fillStyle = state.controlTarget === "boat"
@@ -1870,22 +2971,31 @@
     ctx.textBaseline = "middle";
     ctx.fillText(door.label, x + TILE / 2, y + 19);
 
-    const spacing = 8;
-    const startX = x + TILE / 2 - ((door.players - 1) * spacing) / 2;
-    for (let index = 0; index < door.players; index += 1) {
-      ctx.beginPath();
+    if (door.players >= 10) {
+      roundedRect(x + TILE / 2 - 13, y + 32, 26, 14, 7);
       ctx.fillStyle = door.available ? COLORS.white : "#9da7af";
-      ctx.arc(startX + index * spacing, y + 39, 3.2, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = "#071528";
+      ctx.font = "1000 9px Trebuchet MS";
+      ctx.fillText(String(door.players), x + TILE / 2, y + 39);
+    } else {
+      const spacing = 8;
+      const startX = x + TILE / 2 - ((door.players - 1) * spacing) / 2;
+      for (let index = 0; index < door.players; index += 1) {
+        ctx.beginPath();
+        ctx.fillStyle = door.available ? COLORS.white : "#9da7af";
+        ctx.arc(startX + index * spacing, y + 39, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.textBaseline = "alphabetic";
     ctx.restore();
   }
 
   function drawLobbyRoom() {
-    const roomX = MAP_X + 4 * TILE;
+    const roomX = MAP_X + 3 * TILE;
     const roomY = MAP_Y + 2 * TILE;
-    const roomWidth = 11 * TILE;
+    const roomWidth = 9 * TILE;
     const roomHeight = 7 * TILE;
 
     ctx.save();
@@ -2073,13 +3183,35 @@
         text: LOBBY_DOOR_TYPES[cell].label,
       };
     }
+    if (state.scene === "play" && state.play && (cell === "E" || cell === "F")) {
+      const door = state.doors.find((candidate) => candidate.x === mapX && candidate.y === mapY);
+      if (!door) {
+        return null;
+      }
+      const knownCorrect = state.play.correctDoorKnown && door.isReal;
+      return {
+        color: knownCorrect
+          ? COLORS.lime
+          : state.play.key && state.play.key.collected ? "#ffd45e" : COLORS.red,
+        text: knownCorrect ? "RÄTT DÖRR" : door.label,
+        available: true,
+        mode: "play-door",
+      };
+    }
     if (state.scene === "hotel" && (cell === "E" || cell === "F")) {
       const door = state.doors.find((candidate) => candidate.x === mapX && candidate.y === mapY);
       if (!door) {
         return null;
       }
-      const companionHint =
-        state.inventory.hotelKey && state.partyBots.length > 0 && door.isReal;
+      const doorHelper = helperForTask("hotel-correct-door");
+      const companionHint = Boolean(
+        state.inventory.hotelKey &&
+        door.isReal &&
+        doorHelper &&
+        doorHelper.status === "pointing_door" &&
+        doorHelper.helperTarget &&
+        doorHelper.helperTarget.doorId === door.id
+      );
       return {
         color: companionHint ? COLORS.lime : "#ffd45e",
         text: door.label,
@@ -2090,9 +3222,25 @@
     if (cell === "E" || cell === "F") {
       const revealed = state.sonar.activeMs > 0;
       const isReal = cell === "E";
+      const helperMarkedCorrect = Boolean(
+        isReal &&
+        state.partyAssistance.correctExit &&
+        state.partyAssistance.correctExit.x === mapX &&
+        state.partyAssistance.correctExit.y === mapY
+      );
+      const helperWarnedWrong = Boolean(
+        !isReal &&
+        state.partyAssistance.warnedWrongExit &&
+        state.partyAssistance.warnedWrongExit.x === mapX &&
+        state.partyAssistance.warnedWrongExit.y === mapY
+      );
       return {
-        color: !revealed ? COLORS.red : isReal ? COLORS.lime : COLORS.pink,
-        text: revealed ? (isReal ? "YES" : "NO") : "EXIT",
+        color: revealed
+          ? isReal ? COLORS.lime : COLORS.pink
+          : helperMarkedCorrect ? COLORS.lime : helperWarnedWrong ? COLORS.pink : COLORS.red,
+        text: revealed
+          ? isReal ? "YES" : "NO"
+          : helperMarkedCorrect ? "RÄTT EXIT" : helperWarnedWrong ? "FEL DÖRR" : "EXIT",
         available: true,
         mode: "exit",
       };
@@ -2353,6 +3501,10 @@
     ctx.clip();
 
     const moving = bot.moveAnimMs > 0;
+    const helperStationed = Boolean(
+      bot.helperTask &&
+      ((bot.arrivalStatus && bot.status === bot.arrivalStatus) || bot.status === "key_found")
+    );
     const step = moving ? Math.sin(bot.walkMs / 68) : 0;
     const bob = moving
       ? Math.abs(Math.sin(bot.walkMs / 72)) * Math.min(7, height * 0.04)
@@ -2367,11 +3519,22 @@
 
     ctx.translate(projection.screenX, projection.screenBottom - bob);
     ctx.strokeStyle = bot.color;
-    ctx.lineWidth = Math.max(1.5, height * 0.012);
-    ctx.globalAlpha = bot.status === "arrived" ? 0.72 : 0.46;
+    ctx.shadowColor = helperStationed ? bot.color : "transparent";
+    ctx.shadowBlur = helperStationed ? 12 + Math.sin(state.visualTime / 190) * 3 : 0;
+    ctx.lineWidth = Math.max(1.5, height * (helperStationed ? 0.022 : 0.012));
+    ctx.globalAlpha = helperStationed || bot.status === "arrived" ? 0.82 : 0.46;
     ctx.beginPath();
-    ctx.ellipse(0, 1, height * 0.25, height * 0.065, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      0,
+      1,
+      height * (helperStationed ? 0.34 : 0.25),
+      height * (helperStationed ? 0.085 : 0.065),
+      0,
+      0,
+      Math.PI * 2
+    );
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 
     ctx.save();
@@ -2490,14 +3653,22 @@
     ctx.shadowBlur = 0;
     ctx.restore();
 
-    const labelFontSize = Math.round(Math.max(9, Math.min(13, height * 0.075)));
+    const helperLabel = Boolean(bot.helperTask && state.scene !== "lobby");
+    const labelFontSize = Math.round(
+      helperLabel
+        ? Math.max(14, Math.min(18, height * 0.1))
+        : Math.max(9, Math.min(13, height * 0.075))
+    );
     const labelText = bot.roleLabel
       ? bot.name + " • " + bot.roleLabel
       : bot.status === "arrived"
         ? bot.name + " ✓ " + bot.targetLabel
         : bot.name + " → " + bot.targetLabel;
     ctx.font = "1000 " + labelFontSize + "px Trebuchet MS";
-    const labelWidth = Math.max(60, Math.min(116, ctx.measureText(labelText).width + 18));
+    const labelWidth = Math.max(
+      helperLabel ? 94 : 60,
+      Math.min(helperLabel ? 178 : 116, ctx.measureText(labelText).width + 18)
+    );
     const labelY = -height - labelFontSize - 8;
     roundedRect(-labelWidth / 2, labelY, labelWidth, labelFontSize + 10, 8);
     ctx.fillStyle = "rgba(3, 13, 25, 0.9)";
@@ -2505,7 +3676,7 @@
     ctx.strokeStyle = bot.color;
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = bot.status === "arrived" ? COLORS.white : bot.color;
+    ctx.fillStyle = helperStationed || bot.status === "arrived" ? COLORS.white : bot.color;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(labelText, 0, labelY + (labelFontSize + 10) / 2 + 1);
@@ -2534,7 +3705,7 @@
     }
     state.partyBots
       .map((bot) => {
-        const position = animationPosition(bot, MOVE_TIME);
+        const position = animationPosition(bot, PARTY_HELPER_MOVE_TIME);
         return {
           bot,
           projection: projectWorldSprite(camera, position.x + 0.5, position.y + 0.5),
@@ -2542,6 +3713,107 @@
       })
       .sort((a, b) => b.projection.depth - a.projection.depth)
       .forEach(({ bot, projection }) => drawLobbyBotSprite(bot, projection, zBuffer));
+  }
+
+  function drawThirdPersonPlayBots(camera, zBuffer) {
+    if (state.scene !== "play" || !state.play || state.play.phase !== "hunt") {
+      return;
+    }
+    state.play.bots
+      .filter((bot) => bot.status === "active")
+      .map((bot) => {
+        const duration = bot.role === "monster" ? PLAY_MONSTER_MOVE_TIME : PLAY_BOT_MOVE_TIME;
+        const position = animationPosition(bot, duration);
+        const renderBot = {
+          ...bot,
+          color: bot.role === "monster" ? COLORS.red : bot.color,
+          bodyColor: bot.role === "monster" ? "#4d1525" : bot.bodyColor,
+          helperTask: bot.role === "monster" ? "play-monster" : "play-helper",
+          roleLabel: bot.role === "monster" ? "MONSTER" : bot.roleLabel,
+        };
+        return {
+          bot: renderBot,
+          projection: projectWorldSprite(camera, position.x + 0.5, position.y + 0.5),
+        };
+      })
+      .sort((a, b) => b.projection.depth - a.projection.depth)
+      .forEach(({ bot, projection }) => {
+        drawLobbyBotSprite(bot, projection, zBuffer);
+        if (bot.role === "monster" && projection.depth > 0.12) {
+          const size = Math.max(18, Math.min(72, CAMERA_FOCAL * 0.18 / projection.depth));
+          ctx.save();
+          ctx.translate(projection.screenX, projection.screenBottom - size * 3.4);
+          ctx.fillStyle = COLORS.red;
+          ctx.shadowColor = COLORS.red;
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.moveTo(-size * 0.45, size * 0.2);
+          ctx.lineTo(-size * 0.2, -size * 0.55);
+          ctx.lineTo(0, size * 0.1);
+          ctx.moveTo(size * 0.45, size * 0.2);
+          ctx.lineTo(size * 0.2, -size * 0.55);
+          ctx.lineTo(0, size * 0.1);
+          ctx.fill();
+          ctx.restore();
+        }
+      });
+  }
+
+  function drawThirdPersonPlayKey(camera, zBuffer) {
+    if (
+      state.scene !== "play" ||
+      !state.play ||
+      state.play.phase !== "hunt" ||
+      !state.play.key ||
+      state.play.key.collected
+    ) {
+      return;
+    }
+    const key = state.play.key;
+    const projection = projectWorldSprite(camera, key.x + 0.5, key.y + 0.5);
+    if (
+      projection.depth <= 0.12 ||
+      projection.screenX < -100 ||
+      projection.screenX > LOGICAL_WIDTH + 100
+    ) {
+      return;
+    }
+    const column = Math.max(0, Math.min(LOGICAL_WIDTH - 1, Math.round(projection.screenX)));
+    if (zBuffer[column] < projection.depth - 0.16) {
+      return;
+    }
+    const size = Math.max(42, Math.min(138, CAMERA_FOCAL * 0.36 / projection.depth));
+    const bob = Math.sin(state.visualTime / 170) * Math.min(8, size * 0.08);
+    ctx.save();
+    ctx.translate(projection.screenX, projection.screenBottom - size * 0.55 - bob);
+    ctx.rotate(Math.sin(state.visualTime / 430) * 0.18);
+    ctx.strokeStyle = "#ffe071";
+    ctx.lineWidth = Math.max(5, size * 0.1);
+    ctx.shadowColor = "#ffd45e";
+    ctx.shadowBlur = Math.max(14, size * 0.28);
+    ctx.beginPath();
+    ctx.arc(-size * 0.18, -size * 0.08, size * 0.18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.01, size * 0.02);
+    ctx.lineTo(size * 0.42, size * 0.3);
+    ctx.moveTo(size * 0.24, size * 0.18);
+    ctx.lineTo(size * 0.36, size * 0.04);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.rotate(-Math.sin(state.visualTime / 430) * 0.18);
+    ctx.font = "1000 " + Math.round(Math.max(12, size * 0.16)) + "px Trebuchet MS";
+    roundedRect(-48, -size * 0.66, 96, 28, 9);
+    ctx.fillStyle = "rgba(35, 22, 12, 0.94)";
+    ctx.fill();
+    ctx.strokeStyle = "#ffd45e";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#fff8d2";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("NYCKEL", 0, -size * 0.66 + 14);
+    ctx.restore();
   }
 
   function drawThirdPersonHotelKey(camera, zBuffer) {
@@ -2583,8 +3855,9 @@
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.rotate(-Math.sin(state.visualTime / 620) * 0.13);
-    const label = state.partyBots.length > 0
-      ? state.partyBots[0].name + ": NYCKEL!"
+    const keyHelper = helperForTask("hotel-key");
+    const label = keyHelper && keyHelper.status === "pointing_key"
+      ? keyHelper.name + ": NYCKEL!"
       : "NYCKEL";
     ctx.font = "1000 " + Math.round(Math.max(11, size * 0.16)) + "px Trebuchet MS";
     const width = Math.max(70, ctx.measureText(label).width + 22);
@@ -2906,6 +4179,39 @@
     roundedRect(nearArmX + (nearArmX < 0 ? -2 : 8), -75, 17, 25, 6);
     ctx.fill();
     ctx.shadowBlur = 0;
+    if (state.scene === "play" && state.play && state.play.phase === "hunt") {
+      const monsterPlayer = state.play.playerRole === "monster";
+      const caughtPlayer = state.player.status === "caught";
+      ctx.shadowColor = monsterPlayer ? COLORS.red : caughtPlayer ? "#9aa9b3" : COLORS.cyan;
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = monsterPlayer ? COLORS.red : caughtPlayer ? "#9aa9b3" : COLORS.cyan;
+      ctx.lineWidth = 5;
+      roundedRect(-70, -220, 140, 34, 11);
+      ctx.fillStyle = "rgba(4, 10, 20, 0.92)";
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = COLORS.white;
+      ctx.font = "1000 16px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        monsterPlayer ? "DU • MONSTER" : caughtPlayer ? "DU • TAGEN" : "DU • ÖVERLEVARE",
+        0,
+        -203
+      );
+      if (monsterPlayer) {
+        ctx.fillStyle = COLORS.red;
+        ctx.beginPath();
+        ctx.moveTo(-30, -189);
+        ctx.lineTo(-13, -236);
+        ctx.lineTo(0, -190);
+        ctx.moveTo(30, -189);
+        ctx.lineTo(13, -236);
+        ctx.lineTo(0, -190);
+        ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
@@ -3301,6 +4607,167 @@
     drawSeaBoat();
   }
 
+  function drawPlayRouletteWorld() {
+    const play = state.play;
+    const roulette = play.roulette;
+    const centerX = LOGICAL_WIDTH / 2;
+    const centerY = 390;
+
+    const room = ctx.createLinearGradient(0, VIEW_TOP, 0, LOGICAL_HEIGHT);
+    room.addColorStop(0, "#271124");
+    room.addColorStop(0.45, "#10233b");
+    room.addColorStop(1, "#050914");
+    ctx.fillStyle = room;
+    ctx.fillRect(0, VIEW_TOP, LOGICAL_WIDTH, LOGICAL_HEIGHT - VIEW_TOP);
+
+    ctx.strokeStyle = "rgba(255, 62, 88, 0.2)";
+    ctx.lineWidth = 2;
+    for (let lane = -7; lane <= 7; lane += 1) {
+      ctx.beginPath();
+      ctx.moveTo(centerX + lane * 34, 315);
+      ctx.lineTo(centerX + lane * 98, LOGICAL_HEIGHT);
+      ctx.stroke();
+    }
+    for (let ring = 0; ring < 7; ring += 1) {
+      const y = 330 + ring * ring * 8.2;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(LOGICAL_WIDTH, y);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.shadowColor = "#ff3e58";
+    ctx.shadowBlur = 34;
+    ctx.fillStyle = "rgba(42, 9, 24, 0.92)";
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, 272, 126, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = "#7c2038";
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY - 7, 238, 96, 0, 0, Math.PI * 2);
+    const tableGlow = ctx.createRadialGradient(centerX, centerY - 12, 20, centerX, centerY, 248);
+    tableGlow.addColorStop(0, "#53213a");
+    tableGlow.addColorStop(1, "#160a19");
+    ctx.fillStyle = tableGlow;
+    ctx.fill();
+    ctx.restore();
+
+    const actors = getPlayActors()
+      .map((actor) => {
+        const seat = actor.id === "player" ? 0 : actor.rouletteSeat;
+        const angle = Math.PI / 2 + seat * Math.PI * 2 / 10;
+        return {
+          actor,
+          angle,
+          x: centerX + Math.cos(angle) * 350,
+          y: centerY + Math.sin(angle) * 205,
+        };
+      })
+      .sort((a, b) => a.y - b.y);
+
+    actors.forEach(({ actor, angle, x, y }) => {
+      const frontness = (Math.sin(angle) + 1) / 2;
+      const scale = 0.72 + frontness * 0.5;
+      const selected = roulette.revealed && actor.id === play.monsterId;
+      const color = selected ? COLORS.red : actor.color;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = selected ? 30 : 10;
+      ctx.fillStyle = selected ? "#4d1322" : actor.bodyColor;
+      roundedRect(-31, -52, 62, 64, 18);
+      ctx.fill();
+      ctx.lineWidth = selected ? 6 : 3;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = actor.id === "player" ? "#f1b26b" : "#d9edf2";
+      if (actor.id === "player") {
+        ctx.beginPath();
+        ctx.arc(0, -76, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#17283b";
+        ctx.beginPath();
+        ctx.arc(-8, -79, 3, 0, Math.PI * 2);
+        ctx.arc(8, -79, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        roundedRect(-27, -103, 54, 39, 12);
+        ctx.fill();
+        ctx.fillStyle = "#10263c";
+        roundedRect(-20, -96, 40, 24, 7);
+        ctx.fill();
+        ctx.fillStyle = selected ? "#fff4c2" : "#9ff6ff";
+        ctx.beginPath();
+        ctx.arc(-8, -84, 3.5, 0, Math.PI * 2);
+        ctx.arc(8, -84, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (selected) {
+        ctx.fillStyle = COLORS.red;
+        ctx.beginPath();
+        ctx.moveTo(-22, -100);
+        ctx.lineTo(-9, -130);
+        ctx.lineTo(0, -99);
+        ctx.moveTo(22, -100);
+        ctx.lineTo(9, -130);
+        ctx.lineTo(0, -99);
+        ctx.fill();
+      }
+      ctx.font = "1000 15px Trebuchet MS";
+      const label = selected ? actor.name + " • MONSTER" : actor.name;
+      const labelWidth = Math.max(68, ctx.measureText(label).width + 20);
+      roundedRect(-labelWidth / 2, 20, labelWidth, 28, 9);
+      ctx.fillStyle = "rgba(3, 11, 24, 0.94)";
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = selected ? "#fff4f6" : color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 0, 34);
+      ctx.restore();
+    });
+
+    ctx.save();
+    ctx.translate(centerX, centerY - 8);
+    ctx.rotate(roulette.arrowAngle);
+    ctx.shadowColor = COLORS.red;
+    ctx.shadowBlur = 24;
+    ctx.fillStyle = COLORS.red;
+    ctx.beginPath();
+    ctx.moveTo(205, 0);
+    ctx.lineTo(150, -25);
+    ctx.lineTo(161, -7);
+    ctx.lineTo(-35, -7);
+    ctx.lineTo(-35, 7);
+    ctx.lineTo(161, 7);
+    ctx.lineTo(150, 25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#fff4f6";
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = roulette.revealed ? COLORS.red : "#ffb2be";
+    ctx.font = "1000 24px Trebuchet MS";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      roulette.revealed ? "MONSTRET ÄR VALT!" : "DEN RÖDA PILEN SNURRAR...",
+      centerX,
+      120
+    );
+  }
+
   function drawThirdPersonWorld() {
     if (!state.player) {
       return;
@@ -3315,6 +4782,8 @@
     const world = drawRaycastWalls(camera);
     drawThirdPersonShadows(camera, world.zBuffer);
     drawThirdPersonLobbyBots(camera, world.zBuffer);
+    drawThirdPersonPlayKey(camera, world.zBuffer);
+    drawThirdPersonPlayBots(camera, world.zBuffer);
     drawThirdPersonHotelKey(camera, world.zBuffer);
     drawThirdPersonPartyBots(camera, world.zBuffer);
     drawThirdPersonFlashlight(camera);
@@ -3555,14 +5024,20 @@
   }
 
   function drawMessage() {
-    if (state.messageMs <= 0 || !state.message) {
+    const persistentHelperMessage =
+      state.partyBots.length > 0 && (state.scene === "hotel" || state.scene === "maze")
+        ? state.partyBots.map((bot) => bot.name + ": " + bot.roleLabel).join("  •  ")
+        : "";
+    const transientMessage = state.messageMs > 0 && state.message ? state.message : "";
+    const message = transientMessage || persistentHelperMessage;
+    if (!message) {
       return;
     }
-    const alpha = Math.min(1, state.messageMs / 260);
+    const alpha = transientMessage ? Math.min(1, state.messageMs / 260) : 0.92;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = "1000 16px Trebuchet MS";
-    const width = Math.min(520, ctx.measureText(state.message).width + 54);
+    ctx.font = "1000 " + (transientMessage ? 16 : 18) + "px Trebuchet MS";
+    const width = Math.min(transientMessage ? 520 : 680, ctx.measureText(message).width + 54);
     const x = (LOGICAL_WIDTH - width) / 2;
     roundedRect(x, 84, width, 34, 12);
     ctx.fillStyle = "rgba(4, 15, 29, 0.9)";
@@ -3572,7 +5047,7 @@
     ctx.stroke();
     ctx.fillStyle = COLORS.white;
     ctx.textAlign = "center";
-    ctx.fillText(state.message, LOGICAL_WIDTH / 2, 107);
+    ctx.fillText(message, LOGICAL_WIDTH / 2, 107);
     ctx.restore();
   }
 
@@ -3657,6 +5132,8 @@
     ctx.translate(shakeAmount + bumpAmount, -shakeAmount * 0.35);
     if (state.scene === "sea") {
       drawSeaWorld();
+    } else if (state.scene === "play" && state.play && state.play.phase === "roulette") {
+      drawPlayRouletteWorld();
     } else {
       drawThirdPersonWorld();
     }
@@ -3664,10 +5141,15 @@
     ctx.restore();
 
     drawVignette();
-    if (state.scene !== "sea") {
+    if (
+      state.scene !== "sea" &&
+      !(state.scene === "play" && state.play && state.play.phase === "roulette")
+    ) {
       drawThirdPersonAvatar();
     }
-    drawMessage();
+    if (!(state.scene === "play" && state.play && state.play.phase === "roulette")) {
+      drawMessage();
+    }
     drawLevelBanner();
     drawTransition();
 
@@ -3941,6 +5423,16 @@
     const movementBasis = cameraMovementBasis();
     const objective = state.scene === "lobby"
       ? "chooseMode"
+      : state.scene === "play"
+        ? !state.play || state.play.phase === "roulette"
+          ? "waitForArrow"
+          : state.play.phase === "result"
+            ? state.play.result + "Won"
+            : state.play.playerRole === "monster"
+              ? "catchAllSurvivors"
+              : state.play.key && state.play.key.collected
+                ? "unlockCorrectPlayDoor"
+                : "findPlayKey"
       : state.scene === "sea"
         ? "sailToHotelIsland"
         : state.scene === "hotel"
@@ -3981,6 +5473,8 @@
       level: state.scene === "maze" ? state.levelIndex + 1 : null,
       levelName: state.scene === "maze"
         ? LEVELS[state.levelIndex].name
+        : state.scene === "play"
+          ? "PLAY"
         : state.scene === "sea"
           ? "STORT HAV"
           : state.scene === "hotel"
@@ -3993,6 +5487,8 @@
             y: state.player.y,
             facingX: state.player.facingX,
             facingY: state.player.facingY,
+            role: state.scene === "play" ? state.player.role : null,
+            status: state.scene === "play" ? state.player.status : "active",
             invulnerableMs: Math.round(state.invulnerableMs),
           }
         : null,
@@ -4012,11 +5508,27 @@
         isReal: door.isReal,
         id: door.id || null,
         label: door.label || "EXIT",
-        locked: state.scene === "hotel" ? !state.inventory.hotelKey : false,
+        locked: state.scene === "hotel"
+          ? !state.inventory.hotelKey
+          : state.scene === "play" && state.play
+            ? !state.play.key || !state.play.key.collected
+            : false,
         opened: Boolean(door.opened),
-        visibleLabel: state.scene === "hotel"
+        visibleLabel: state.scene === "play" && state.play
+          ? state.play.correctDoorKnown && door.isReal ? "RÄTT DÖRR" : door.label
+          : state.scene === "hotel"
           ? door.label
-          : sonarActive ? (door.isReal ? "YES" : "NO") : "EXIT",
+          : sonarActive
+            ? door.isReal ? "YES" : "NO"
+            : state.partyAssistance.correctExit &&
+                state.partyAssistance.correctExit.x === door.x &&
+                state.partyAssistance.correctExit.y === door.y
+              ? "RÄTT EXIT"
+              : state.partyAssistance.warnedWrongExit &&
+                  state.partyAssistance.warnedWrongExit.x === door.x &&
+                  state.partyAssistance.warnedWrongExit.y === door.y
+                ? "FEL DÖRR"
+                : "EXIT",
       })),
       lobbyDoors: state.lobbyDoors.map((door) => ({
         x: door.x,
@@ -4050,12 +5562,22 @@
         waitRemainingMs: Math.round(bot.waitMs),
       })),
       party: {
+        behavior: state.partyBots.length > 0 ? "independentHelpers" : "solo",
+        followsPlayer: false,
         expectedSize: 1 + state.partyBots.length,
         memberIds: ["player", ...state.partyBots.map((bot) => bot.id)],
+        assistance: { ...state.partyAssistance },
         companions: state.partyBots.map((bot) => ({
           id: bot.id,
           name: bot.name,
           status: bot.status,
+          roleLabel: bot.roleLabel,
+          helperTask: bot.helperTask,
+          helperTarget: bot.helperTarget ? { ...bot.helperTarget } : null,
+          helperStation: bot.helperStation ? { ...bot.helperStation } : null,
+          pathRemaining: Math.max(0, bot.helperPath.length - bot.helperPathIndex),
+          arrived: Boolean(bot.arrivalStatus && bot.status === bot.arrivalStatus),
+          followsPlayer: false,
           x: Math.round(bot.x * 100) / 100,
           y: Math.round(bot.y * 100) / 100,
           facingX: Math.round(bot.facingX * 100) / 100,
@@ -4109,6 +5631,72 @@
             })),
           }
         : null,
+      play: state.play
+        ? {
+            phase: state.play.phase,
+            arrowAngleDeg: state.play.roulette
+              ? Math.round(
+                  (((state.play.roulette.arrowAngle * 180 / Math.PI) % 360) + 360) % 360
+                )
+              : null,
+            arrowSpinning: Boolean(
+              state.play.phase === "roulette" && !state.play.roulette.revealed
+            ),
+            table: { x: 9, y: 5 },
+            monsterId: state.play.monsterId,
+            playerRole: state.play.playerRole,
+            participants: getPlayActors().map((actor) => ({
+              id: actor.id,
+              name: actor.name,
+              x: Math.round(actor.x * 100) / 100,
+              y: Math.round(actor.y * 100) / 100,
+              role: state.play.monsterId ? actor.role : "unknown",
+              status: actor.status,
+              helperTask: actor.role === "survivor" ? actor.task : null,
+              helperTarget: actor.task === "find-key" && state.play.key
+                ? { type: "key", x: state.play.key.x, y: state.play.key.y }
+                : actor.task === "find-door" || actor.task === "unlock-door"
+                  ? {
+                      type: "door",
+                      id: state.play.correctDoorId,
+                    }
+                  : null,
+              followsPlayer: false,
+            })),
+            key: state.play.key
+              ? {
+                  x: state.play.key.x,
+                  y: state.play.key.y,
+                  holderId: state.play.key.collectedById,
+                  collected: state.play.key.collected,
+                }
+              : {
+                  x: null,
+                  y: null,
+                  holderId: null,
+                  collected: false,
+                },
+            correctDoorId: state.play.correctDoorId,
+            correctDoorKnown: state.play.correctDoorKnown,
+            doors: state.doors.map((door) => ({
+              id: door.id,
+              x: door.x,
+              y: door.y,
+              isCorrect: door.isReal,
+              locked: !state.play.key || !state.play.key.collected,
+              opened: Boolean(door.opened),
+            })),
+            survivors: {
+              activeIds: state.play.phase === "roulette"
+                ? []
+                : getActivePlaySurvivors().map((actor) => actor.id),
+              caughtIds: state.play.caughtIds.slice(),
+            },
+            monsterFrozen: state.play.monsterFrozen,
+            monsterReleaseMs: Math.round(state.play.monsterReleaseMs),
+            result: state.play.result,
+          }
+        : null,
       adventure: { ...state.adventure },
       shadows: state.shadows.map((shadow) => ({
         x: shadow.x,
@@ -4121,6 +5709,101 @@
       message: state.messageMs > 0 ? state.message : "",
     };
     return JSON.stringify(payload);
+  }
+
+  function forcePlayMonsterForTest(id) {
+    const validIds = ["player", ...PLAY_BOT_ROSTER.map((bot) => bot.id)];
+    if (!validIds.includes(id)) {
+      return false;
+    }
+    forcedPlayMonsterId = id;
+    if (state.scene === "play" && state.play && state.play.phase === "roulette") {
+      configurePlayRouletteTarget(id);
+    }
+    return true;
+  }
+
+  function startPlayHuntForTest() {
+    if (!state.play || state.scene !== "play") {
+      return false;
+    }
+    if (state.play.phase === "roulette" && !state.play.monsterId) {
+      revealPlayMonster();
+    }
+    const started = beginPlayHunt();
+    render();
+    return started;
+  }
+
+  function setPlayPositionsForTest(specification) {
+    if (!state.play || state.play.phase !== "hunt" || !specification) {
+      return false;
+    }
+    const moveDirectly = (actor, position) => {
+      if (!actor || !position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+        return;
+      }
+      actor.x = position.x;
+      actor.y = position.y;
+      actor.fromX = position.x;
+      actor.fromY = position.y;
+      actor.moveAnimMs = 0;
+    };
+
+    moveDirectly(state.player, specification.player);
+    if (specification.bots && typeof specification.bots === "object") {
+      Object.entries(specification.bots).forEach(([id, position]) => {
+        moveDirectly(getPlayActor(id), position);
+      });
+    }
+    if (Array.isArray(specification.participants)) {
+      specification.participants.forEach((position) => {
+        moveDirectly(getPlayActor(position.id), position);
+      });
+    }
+    if (specification.monster) {
+      moveDirectly(getPlayMonster(), specification.monster);
+    }
+    if (
+      specification.key &&
+      Number.isFinite(specification.key.x) &&
+      Number.isFinite(specification.key.y) &&
+      state.play.key
+    ) {
+      if (!state.play.key.collected) {
+        const oldCell = cellAt(state.play.key.x, state.play.key.y);
+        if (oldCell === "K") {
+          setMapCell(state.play.key.x, state.play.key.y, ".");
+        }
+        state.play.key.x = specification.key.x;
+        state.play.key.y = specification.key.y;
+        const targetCell = cellAt(state.play.key.x, state.play.key.y);
+        if (targetCell !== "#" && targetCell !== "E" && targetCell !== "F") {
+          setMapCell(state.play.key.x, state.play.key.y, "K");
+        }
+      }
+    }
+    getActivePlaySurvivors().forEach((survivor) => {
+      if (
+        state.play.key &&
+        !state.play.key.collected &&
+        survivor.x === state.play.key.x &&
+        survivor.y === state.play.key.y
+      ) {
+        collectPlayKey(survivor);
+      }
+    });
+    checkPlayCatches();
+    render();
+    return true;
+  }
+
+  function setMonsterFrozenForTest(frozen) {
+    if (!state.play) {
+      return false;
+    }
+    state.play.monsterFrozen = Boolean(frozen);
+    return state.play.monsterFrozen;
   }
 
   function gameLoop(now) {
@@ -4182,6 +5865,12 @@
       update(stepMs);
     }
     render();
+  };
+  window.__whereIsExitTest = {
+    forcePlayMonster: forcePlayMonsterForTest,
+    startPlayHunt: startPlayHuntForTest,
+    setPlayPositions: setPlayPositionsForTest,
+    setMonsterFrozen: setMonsterFrozenForTest,
   };
 
   requestAnimationFrame(gameLoop);

@@ -116,14 +116,14 @@ Original prompt: Jag vill ha ett spel som heter Where is Exit.
   och touch från start-rummet till Solo fungerar med kamerarelativa rutter.
 - Inga kända fel eller lösa TODO:er återstår för den kamerarelativa styrningen.
 
-## Båtresan, hotellet och följeslagare
+## Båtresan, hotellet och hjälpbottar
 
 - Ny önskan: Duo ska ta med botten vid Duo, Team ska ta med de två Team-bottarna,
   alla lägen ska börja på en styrbar båt och därefter fortsätta till ett hotell med
   en enda nyckel och flera dörrar.
 - Namnändring: Team-botten heter TEO; Team består av TEO och TOTO.
 - Implementerat: Solo, Duo och Team är spelbara. Duo väljer DUBI, Team väljer TEO
-  och TOTO, och valda bottar visas ombord samt följer spelaren i hotellet/labyrinten.
+  och TOTO, och valda bottar visas ombord samt hjälper i hotellet/labyrinten.
 - Implementerat: separat tredjepersonsvy över ett stort hav med vågor, öar, havskarta,
   neonbåt och växling mellan PERSONSTYRNING och BÅTSTYRNING med knapp eller B.
 - Implementerat: rätt brygga leder till Ö-HOTELLET. Där finns fyra hotellrum men
@@ -135,3 +135,55 @@ Original prompt: Jag vill ha ett spel som heter Where is Exit.
   hållen input vid scenbyte samt iPhone 393×852 och iPad 1024×1366.
 - Havs-, hotell-, nyckel-, labyrint-, seger- och mobilbilder är visuellt granskade.
 - Inga kända fel eller lösa TODO:er återstår för båt- och hotellresan.
+
+## Självständiga hjälpbottar
+
+- Ny önskan: bottarna ska hjälpa till, inte gå efter spelaren.
+- Implementerat: spelarens steg flyttar aldrig bottarna. DUBI, TEO och TOTO får i
+  stället egna rutter och går självständigt till en hjälpstation.
+- Hotellet: första botten letar upp och markerar nyckeln. I Team kontrollerar den
+  andra botten rätt hotellrum; i Duo byter DUBI uppdrag till rätt rum efter nyckeln.
+- Labyrinten: första botten markerar rätt EXIT. I Team kontrollerar den andra botten
+  en falsk EXIT och varnar tydligt att dörren är fel.
+- Hjälpuppdrag, mål, återstående rutt och `followsPlayer: false` redovisas i
+  `render_game_to_text`. Visuellt visas rollerna med större etiketter, lysande
+  hjälpstationer och en beständig hjälprad i hotell och labyrint.
+- Fokuserad E2E är grön: Duo går nyckel → rätt rum → rätt EXIT; Team delar på
+  nyckel/rätt rum och rätt/fel EXIT. Fyra spelarsteg i varje scen flyttar inte en
+  färdig hjälpare från stationen, och alla helpers rapporterar `followsPlayer: false`.
+- Officiella Playwright-klienten verifierar Team ombord med aktiv navigation. Separat
+  iPad-test 1024×1366 verifierar touchmål på minst 44 px, ingen scroll och läsbara
+  hjälpetiketter. Inga konsol- eller sidfel hittades.
+- Inga kända fel eller lösa TODO:er återstår för de självständiga hjälpbottarna.
+
+## PLAY-dörr och monsterlek
+
+- Ny önskan: startrummet ska ha fyra dörrar. PLAY leder till en lek där spelaren
+  och nio bottar står runt ett bord medan en röd pil väljer ett monster.
+- Vinstregler: spelarna vinner när de hittar nyckeln och öppnar rätt dörr.
+  Monstret vinner först när alla andra deltagare har blivit tagna.
+- Påbörjat: fjärde PLAY-dörren, tio stabila deltagar-id:n, arena med en nyckel
+  och fyra dörrar samt separata tidsvärden för roulette och bot-AI.
+- Påbörjat: starttexten beskriver PLAY. Touchkontrollerna döljs under rouletten
+  och SÖK-knappen döljs under jakten för att undvika blinkande UI på iPad.
+- Klart: PLAY går direkt till en bordsscen med spelaren och nio namngivna bottar.
+  Den röda pilen snurrar, stannar exakt på en deltagare och avslöjar monstret.
+- Klart: både spelaren och en bot kan bli monster. Övriga bottar arbetar
+  självständigt med nyckel, dörrkontroll, upplåsning och flykt; ingen följer spelaren.
+- Klart: en gemensam nyckel, fyra dörrar, fel-dörrrespons, rätt upplåsning,
+  överlevarseger och monsterseger först efter alla nio fångster.
+- Klart: eget PLAY-HUD, monsterlook, synlig nyckel, uppdragsnamn, fångsträknare,
+  resultatpaneler, full `render_game_to_text.play` och deterministiska testhooks.
+- Mobilpolering: `KVAR 9 / 9` flyttades från kontrollknapparna, tio spelare visas
+  som en kompakt badge på PLAY-dörren, iPadens startmenyflimmer är avstängt och
+  cacheversionen är `20260725-14` så iPad hämtar den nya koden.
+- Slutlig E2E är grön för fyra lobbydörrar, exakt tio deltagare, rörlig/stannad pil,
+  båda monsterrollerna, alla nio fångster, låst/fel/rätt dörr, båda vinnarna och replay.
+- iPad 1024×768 är visuellt granskad: touchmål minst 44 px, ingen scroll,
+  styrkors synligt under jakt, SÖK dold och inga konsol- eller sidfel.
+- Separat mobilgranskning är grön på iPad 1024×1366 och iPhone 393×852:
+  roulette döljer touchlagret, jaktklassen förblir stabil utan blinkande loop,
+  dokumentet är exakt viewport-stort och inga request-, konsol- eller sidfel uppstår.
+- Regression: Solo, Duo och Team går fortfarande till båten med 0, 1 respektive
+  2 självständiga hjälpbottar och utan webbläsarfel.
+- Inga kända fel eller lösa TODO:er återstår för PLAY-läget.
