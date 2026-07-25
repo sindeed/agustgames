@@ -36,6 +36,9 @@ Original prompt: Bygg Paint War som ett förstapersonsspel för dator, iPad och 
 - Simulerad iPad: joysticken flyttade spelaren 1,66 enheter, dragblick ändrade vinkeln 0,54 radianer och skjutknappen skapade bestående färg.
 - QA-resultat: `output/paint-war-qa/results.json`.
 
-## Kvar
+## Slutstatus
 
-- Publicera den verifierade versionen på GitHub Pages och kontrollera liveadressen på iPad-storlek.
+- Publicerad på GitHub Pages i commit `8b809fd5c8954f8cae95af269aad4307394477a1`.
+- Live-HTML och `game.js` svarar med HTTP 200 och rätt filstorlekar.
+- Den publicerade Team-versionen är provspelad direkt från liveadressen utan konsol- eller sidfel.
+- Nästa steg är bara Agusts egen provspelning och eventuella nya idéer eller balansändringar.
