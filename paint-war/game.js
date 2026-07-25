@@ -35,6 +35,14 @@
   const touchActions = Object.create(null);
   const pointerState = { move: null, look: null };
 
+  function capturePointerSafely(element, pointerId) {
+    try {
+      element.setPointerCapture?.(pointerId);
+    } catch {
+      // Ett syntetiskt eller redan avslutat pektryck saknar ibland aktiv capture.
+    }
+  }
+
   function loadSave() {
     try {
       const saved = JSON.parse(localStorage.getItem("paintWarSave") || "{}");
@@ -995,6 +1003,9 @@
   }
 
   function render() {
+    // Det nya WebGL-lagret sköter bilden när det har startat. Den gamla
+    // raycastern ligger kvar som en säker reserv för enheter utan WebGL.
+    if (window.PaintWar3DActive) return;
     if (state.phase === "playing" || state.phase === "end") renderWorld();
     else renderMenuBackdrop();
     if (state.player && state.player.outroom && state.phase === "playing") {
@@ -1158,7 +1169,7 @@
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      button.setPointerCapture?.(event.pointerId);
+      capturePointerSafely(button, event.pointerId);
       button.classList.add("active");
       handleAction(action, true);
     });
@@ -1232,7 +1243,7 @@
   canvas.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch" || state.phase !== "playing") return;
     event.preventDefault();
-    canvas.setPointerCapture?.(event.pointerId);
+    capturePointerSafely(canvas, event.pointerId);
     if (event.clientX < window.innerWidth * 0.43 && !pointerState.move) {
       pointerState.move = {
         id: event.pointerId,
@@ -1274,7 +1285,7 @@
       if (state.phase !== "playing") return;
       event.preventDefault();
       event.stopPropagation();
-      joystick.setPointerCapture?.(event.pointerId);
+      capturePointerSafely(joystick, event.pointerId);
       const rect = joystick.getBoundingClientRect();
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
@@ -1329,6 +1340,7 @@
     const stats = p ? weaponStats(p) : WEAPONS[state.weapon];
     return JSON.stringify({
       coordinateSystem: "origin northwest; x increases east/right, z increases south/down; angles are radians, 0=east",
+      graphics: state.graphics3d ? "real-time WebGL 3D" : "canvas raycaster fallback",
       phase: state.phase,
       mode: state.mode,
       timeSeconds: Number(state.time.toFixed(2)),
@@ -1370,6 +1382,7 @@
       arena: {
         size: "64x64 world units plus sealed Outroom",
         houses: 9,
+        characters: state.graphics3d ? "animated 3D people" : "2D fallback people",
         windowsAreShootThrough: true,
         paintPersistsUntilMatchEnd: true,
       },
@@ -1394,6 +1407,13 @@
     openShop,
     buyUpgrade,
     getState: () => state,
+    getArena: () => ({
+      width: MAP_W,
+      height: MAP_H,
+      cells: grid,
+      wallThemes: wallTheme,
+      houses: HOUSE_FLOORS,
+    }),
   };
 
   let previous = performance.now();
