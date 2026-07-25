@@ -58,4 +58,7 @@ Original prompt: Bygg Paint War som ett förstapersonsspel för dator, iPad och 
 - Three.js 0.185.1 laddas från samma jsDelivr-upplägg som repoets andra 3D-spel; om nätverket eller WebGL saknas fortsätter den gamla raycastern som reserv.
 - WebGL-reserven är testad med `--disable-webgl`: endast reservcanvasen finns kvar, dess opacitet är 1 och inga sidfel uppstår.
 - Slutlig CDN-version är testad i både Chromium och WebKit/Safari utan konsol- eller sidfel.
-- Nästa steg: publicering och liveprov direkt från GitHub Pages.
+- Publicerad på `main` i fjärrcommit `e171255d22168f9829f7407899a4380c5476db79`.
+- GitHub Pages levererar nya `index.html` och `graphics3d.js` med HTTP 200.
+- Den publicerade Team-versionen är provspelad med rörelse, vridning och skott utan fel; ett separat liveprov i WebKit/Safari rapporterar `real-time WebGL 3D` och `ready: true`.
+- Direktlänk: `https://sindeed.github.io/agustgames/paint-war/?v=20260725-paintwar-3d-v2b`.
