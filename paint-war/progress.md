@@ -42,3 +42,20 @@ Original prompt: Bygg Paint War som ett förstapersonsspel för dator, iPad och 
 - Live-HTML och `game.js` svarar med HTTP 200 och rätt filstorlekar.
 - Den publicerade Team-versionen är provspelad direkt från liveadressen utan konsol- eller sidfel.
 - Nästa steg är bara Agusts egen provspelning och eventuella nya idéer eller balansändringar.
+
+## Grafikuppgradering – ny begäran
+
+- Ny användarbegäran: gör grafiken mycket bättre, med riktiga 3D-människor och en vy som tydligt förändras när spelaren går runt.
+- Diagnosen visade att den gamla versionen faktiskt flyttade kameran, men den statiska himlen, den symmetriska startvägen, de enfärgade ytorna, 480×270-upplösningen och orörliga botsprites fick den att kännas som en stillbild.
+- Ett nytt WebGL/Three.js-lager är byggt ovanpå den befintliga och testade spelmotorn. Den gamla raycastern är kvar som reserv om WebGL saknas.
+- Nytt 3D-lager innehåller belysta och skuggade hus, riktiga fönsterramar, tak, vägar, trottoarer, träd, gatlyktor, färgtunnor, moln, Outroom, animerade 3D-människor, 3D-vapen, kameragung, sprint-FOV, färgdekaler och laserliknande färgspår.
+- Den obligatoriska Playwright-loopen har körts flera gånger efter meningsfulla ändringar; senaste bildprovet gav `real-time WebGL 3D` utan konsol- eller sidfel.
+- Full QA passerar: rörelse 3,05 enheter, tydlig 0,92-radianers kameravridning, Solo 10×1, Duo 5×2, Team 2×5, korrekt 30/5-skada, båda uppgraderingarna, 90-räckvidd med sikte och Outroom.
+- Simulerad iPad passerar utan fel: joystick 2,51 enheter, dragblick 0,72 radianer och skjutknappen skapade en ny bestående färgfläck.
+- WebKit/Safari laddade och renderade WebGL-versionen korrekt.
+- Skuggkastare optimerades efter första provet; renderanrop sjönk från 1026 till 691 samtidigt som vägg-, tak-, träd- och människoskuggor behölls.
+- Visuellt godkända skärmbilder: `output/paint-war-3d-qa/ipad-start.png`, `ipad-after-move-turn.png`, `ipad-after-shot.png`, `ipad-webkit.png` och `desktop-after-turn.png`.
+- Three.js 0.185.1 laddas från samma jsDelivr-upplägg som repoets andra 3D-spel; om nätverket eller WebGL saknas fortsätter den gamla raycastern som reserv.
+- WebGL-reserven är testad med `--disable-webgl`: endast reservcanvasen finns kvar, dess opacitet är 1 och inga sidfel uppstår.
+- Slutlig CDN-version är testad i både Chromium och WebKit/Safari utan konsol- eller sidfel.
+- Nästa steg: publicering och liveprov direkt från GitHub Pages.
