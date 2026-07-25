@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#171632">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Paint War · Agust Games</title>
+    <link rel="icon" href="../favicon.ico">
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css?v=20260725-paintwar-v1">
+  </head>
+  <body>
+    <main class="game-shell" id="game-shell">
+      <canvas
+        id="game"
+        width="960"
+        height="540"
+        tabindex="0"
+        aria-label="Paint War, färgglatt förstapersonsspel"
+      >
+        Din webbläsare behöver stöd för canvas för att spela Paint War.
+      </canvas>
+
+      <div class="paint-corner paint-corner-blue" aria-hidden="true"></div>
+      <div class="paint-corner paint-corner-pink" aria-hidden="true"></div>
+
+      <div class="top-controls">
+        <button class="icon-button" id="home-btn" type="button" aria-label="Till huvudmenyn" title="Huvudmeny">
+          <span aria-hidden="true">⌂</span>
+          <small>MENY</small>
+        </button>
+        <button class="icon-button" id="fullscreen-btn" type="button" aria-label="Växla helskärm" title="Helskärm (F)">
+          <span aria-hidden="true">⛶</span>
+          <small>HELSKÄRM</small>
+        </button>
+      </div>
+
+      <section class="top-hud" id="hud" aria-label="Matchinformation" hidden>
+        <div class="hud-chip health-chip">
+          <span class="hud-icon" aria-hidden="true">♥</span>
+          <div class="health-track" aria-label="Liv">
+            <span class="health-fill" id="health-fill"></span>
+          </div>
+          <strong id="health-value">100</strong>
+        </div>
+
+        <div class="hud-chip mode-chip">
+          <span id="mode-label">SOLO</span>
+          <strong><span id="alive-count">10</span> KVAR</strong>
+        </div>
+
+        <div class="hud-chip weapon-chip">
+          <span class="weapon-symbol" id="weapon-symbol" aria-hidden="true">▰</span>
+          <span>
+            <small>VAPEN</small>
+            <strong id="weapon-label">HANDPISTOL</strong>
+          </span>
+        </div>
+      </section>
+
+      <div class="team-badge" id="team-badge" hidden>
+        <span class="team-dot"></span>
+        <strong id="team-label">BLÅ LAGET</strong>
+      </div>
+
+      <div class="status-banner" id="status-banner" role="status" aria-live="polite" hidden></div>
+      <div class="hit-marker" id="hit-marker" aria-hidden="true"></div>
+      <div class="crosshair" id="crosshair" aria-hidden="true" hidden>
+        <i></i><i></i><i></i><i></i>
+      </div>
+      <div class="scope-view" id="scope-overlay" aria-hidden="true" hidden>
+        <span class="scope-horizontal"></span>
+        <span class="scope-vertical"></span>
+        <span class="scope-center"></span>
+      </div>
+      <div class="damage-flash" id="damage-flash" aria-hidden="true"></div>
+
+      <section class="screen-overlay menu-screen" id="main-menu" aria-labelledby="game-title">
+        <div class="menu-paint menu-paint-one" aria-hidden="true"></div>
+        <div class="menu-paint menu-paint-two" aria-hidden="true"></div>
+
+        <div class="menu-content">
+          <header class="title-lockup">
+            <p class="eyebrow">AGUST GAMES PRESENTERAR</p>
+            <h1 id="game-title">
+              <span class="title-paint">PAINT</span>
+              <span class="title-war">WAR</span>
+            </h1>
+            <p class="tagline">Måla motståndarna. Bli sist kvar.</p>
+          </header>
+
+          <nav class="mode-grid" aria-label="Välj spelläge">
+            <button class="mode-button solo-button" id="solo-btn" type="button" data-mode="solo">
+              <span class="mode-icon" aria-hidden="true">●</span>
+              <span class="mode-copy">
+                <strong>SOLO</strong>
+                <small>DU MOT 9 BOTTAR</small>
+              </span>
+              <span class="mode-arrow" aria-hidden="true">▶</span>
+            </button>
+
+            <button class="mode-button duo-button" id="duo-btn" type="button" data-mode="duo">
+              <span class="mode-icon mode-icon-pair" aria-hidden="true">●●</span>
+              <span class="mode-copy">
+                <strong>DUO</strong>
+                <small>5 LAG · 2 I VARJE</small>
+              </span>
+              <span class="mode-arrow" aria-hidden="true">▶</span>
+            </button>
+
+            <button class="mode-button team-button" id="team-btn" type="button" data-mode="team">
+              <span class="mode-icon" aria-hidden="true">◆</span>
+              <span class="mode-copy">
+                <strong>TEAM</strong>
+                <small>2 LAG · 5 I VARJE</small>
+              </span>
+              <span class="mode-arrow" aria-hidden="true">▶</span>
+            </button>
+          </nav>
+
+          <button class="shop-button" id="shop-btn" type="button">
+            <span class="shop-bag" aria-hidden="true">★</span>
+            <span>
+              <strong>SHOP</strong>
+              <small>UPPGRADERA DINA VAPEN</small>
+            </span>
+            <span class="shop-arrow" aria-hidden="true">›</span>
+          </button>
+
+          <aside class="desktop-help" id="desktop-help" aria-label="Datorkontroller">
+            <span><kbd>WASD</kbd> GÅ</span>
+            <span><kbd>MUS</kbd> SIKTA</span>
+            <span><kbd>KLICK</kbd> SKJUT</span>
+            <span><kbd>SPACE</kbd> HOPPA</span>
+            <span><kbd>SHIFT</kbd> SPRING</span>
+            <span><kbd>1</kbd><kbd>2</kbd> BYT VAPEN</span>
+          </aside>
+
+          <p class="touch-help">Spela i liggande läge · styr vänster · sikta genom att dra höger</p>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="shop-overlay" aria-labelledby="shop-title" hidden>
+        <div class="dialog shop-dialog">
+          <header class="dialog-header">
+            <div>
+              <p class="eyebrow">VAPENVERKSTAD</p>
+              <h2 id="shop-title">SHOP</h2>
+            </div>
+            <button class="close-button" id="close-shop-btn" type="button" aria-label="Stäng shoppen">×</button>
+          </header>
+
+          <div class="shop-wallet">
+            <span aria-hidden="true">✦</span>
+            <strong id="shop-coins">0</strong>
+            <small>PAINT-POÄNG</small>
+          </div>
+
+          <div class="upgrade-grid">
+            <article class="upgrade-card handgun-card" data-upgrade="handgun">
+              <div class="upgrade-ribbon">UPPGRADERING</div>
+              <div class="weapon-art handgun-art" aria-hidden="true">
+                <span class="weapon-barrel"></span>
+                <span class="weapon-body"></span>
+                <span class="weapon-handle"></span>
+                <span class="weapon-splash"></span>
+              </div>
+              <div class="upgrade-copy">
+                <p class="weapon-type">HANDPISTOL</p>
+                <h3>SUPERPISTOL</h3>
+                <p>Behåller <strong>30 skada</strong> och skjuter nu supersnabbt.</p>
+                <dl class="weapon-stats">
+                  <div><dt>SKADA</dt><dd><span class="stat-bar stat-full"></span>30</dd></div>
+                  <div><dt>FART</dt><dd><span class="stat-bar stat-fast"></span>1 ms</dd></div>
+                </dl>
+              </div>
+              <button class="buy-button" id="buy-handgun-btn" type="button" data-buy="handgun">
+                <span>KÖP UPPGRADERING</span>
+                <small id="handgun-price">✦ 150</small>
+              </button>
+            </article>
+
+            <article class="upgrade-card longgun-card" data-upgrade="longgun">
+              <div class="upgrade-ribbon">UPPGRADERING</div>
+              <div class="weapon-art longgun-art" aria-hidden="true">
+                <span class="weapon-barrel"></span>
+                <span class="weapon-scope"></span>
+                <span class="weapon-body"></span>
+                <span class="weapon-handle"></span>
+                <span class="weapon-stock"></span>
+                <span class="weapon-splash"></span>
+              </div>
+              <div class="upgrade-copy">
+                <p class="weapon-type">LÅNGPISTOL</p>
+                <h3>SUPERSIKTE</h3>
+                <p>Får ett skarpt sikte för <strong>superduperlångt håll</strong>.</p>
+                <dl class="weapon-stats">
+                  <div><dt>SKADA</dt><dd><span class="stat-bar stat-low"></span>5</dd></div>
+                  <div><dt>RÄCKVIDD</dt><dd><span class="stat-bar stat-full"></span>MAX</dd></div>
+                </dl>
+              </div>
+              <button class="buy-button" id="buy-longgun-btn" type="button" data-buy="longgun">
+                <span>KÖP UPPGRADERING</span>
+                <small id="longgun-price">✦ 100</small>
+              </button>
+            </article>
+          </div>
+
+          <p class="shop-message" id="shop-message" role="status" aria-live="polite">
+            Spela matcher och samla Paint-poäng.
+          </p>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="outroom-overlay" aria-labelledby="outroom-title" hidden>
+        <div class="dialog compact-dialog outroom-dialog">
+          <p class="eyebrow">DU BLEV HELT MÅLAD</p>
+          <h2 id="outroom-title">OUTROOM</h2>
+          <div class="outroom-icon" aria-hidden="true">☁</div>
+          <p>Här väntar alla spelare och bottar som har åkt ut.</p>
+          <div class="eliminated-list" id="eliminated-list" aria-label="Utslagna spelare"></div>
+          <p class="spectating-label">MATCHEN FORTSÄTTER · <span id="spectating-count">9</span> KVAR</p>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="match-end-overlay" aria-labelledby="match-end-title" hidden>
+        <div class="dialog compact-dialog result-dialog">
+          <div class="result-burst" aria-hidden="true">★</div>
+          <p class="eyebrow" id="match-end-kicker">MATCHEN ÄR SLUT</p>
+          <h2 id="match-end-title">VINNARE!</h2>
+          <p id="match-end-message">Du blev sist kvar i Paint War.</p>
+          <div class="result-stats" id="match-end-stats">
+            <div><strong id="result-hits">0</strong><small>TRÄFFAR</small></div>
+            <div><strong id="result-ko">0</strong><small>UTSLAGNA</small></div>
+            <div><strong id="result-points">0</strong><small>POÄNG</small></div>
+          </div>
+          <div class="result-actions">
+            <button class="primary-button" id="play-again-btn" type="button">SPELA IGEN</button>
+            <button class="secondary-button" id="back-to-menu-btn" type="button">TILL MENYN</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="touch-controls" id="touch-controls" aria-label="Pekkontroller" hidden>
+        <div class="joystick-zone" id="move-joystick" aria-label="Styrspak">
+          <span class="joystick-ring"></span>
+          <span class="joystick-knob" id="move-knob"></span>
+        </div>
+
+        <div class="touch-actions">
+          <button class="touch-button shoot-touch" id="shoot-btn" type="button" data-action="shoot" aria-label="Skjut">
+            <span aria-hidden="true">●</span>
+            <small>SKJUT</small>
+          </button>
+          <button class="touch-button jump-touch" id="jump-btn" type="button" data-action="jump" aria-label="Hoppa">
+            <span aria-hidden="true">↑</span>
+            <small>HOPPA</small>
+          </button>
+          <button class="touch-button sprint-touch" id="sprint-btn" type="button" data-action="sprint" aria-label="Spring">
+            <span aria-hidden="true">»</span>
+            <small>SPRING</small>
+          </button>
+          <button class="touch-button switch-touch" id="switch-btn" type="button" data-action="switch" aria-label="Byt vapen">
+            <span aria-hidden="true">⇄</span>
+            <small>BYT</small>
+          </button>
+          <button class="touch-button scope-touch" id="scope-btn" type="button" data-action="scope" aria-label="Använd sikte">
+            <span aria-hidden="true">⌖</span>
+            <small>SIKTE</small>
+          </button>
+        </div>
+      </section>
+
+      <div class="rotate-hint" id="rotate-hint" role="status">
+        <div class="rotate-phone" aria-hidden="true">▯</div>
+        <strong>VÄND SKÄRMEN</strong>
+        <span>Paint War spelas i liggande läge</span>
+      </div>
+
+      <p class="sr-only" id="game-status" aria-live="polite"></p>
+    </main>
+
+    <noscript>
+      <p class="noscript-message">JavaScript behövs för att spela Paint War.</p>
+    </noscript>
+    <script src="game.js?v=20260725-paintwar-v1" defer></script>
+  </body>
+</html>
