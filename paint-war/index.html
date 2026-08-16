@@ -10,11 +10,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Paint War · Agust Games</title>
+    <title>Paint War 2 Deluxe · Agust Games</title>
     <link rel="icon" href="../favicon.ico">
     <link rel="apple-touch-icon" href="../apple-touch-icon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="stylesheet" href="style.css?v=20260725-paintwar-v2">
+    <link rel="stylesheet" href="style.css?v=20260816-paintwar-2-deluxe">
   </head>
   <body>
     <main class="game-shell" id="game-shell">
@@ -23,7 +23,7 @@
         width="960"
         height="540"
         tabindex="0"
-        aria-label="Paint War, färgglatt förstapersonsspel"
+        aria-label="Paint War 2 Deluxe, färgglatt tredjepersonsspel"
       >
         Din webbläsare behöver stöd för canvas för att spela Paint War.
       </canvas>
@@ -96,8 +96,9 @@
             <h1 id="game-title">
               <span class="title-paint">PAINT</span>
               <span class="title-war">WAR</span>
+              <span class="title-deluxe">2 DELUXE</span>
             </h1>
-            <p class="tagline">Måla motståndarna. Bli sist kvar.</p>
+            <p class="tagline">5× STÖRRE ARENA · Måla motståndarna · Bli sist kvar</p>
           </header>
 
           <nav class="mode-grid" aria-label="Välj spelläge">
@@ -127,6 +128,15 @@
               </span>
               <span class="mode-arrow" aria-hidden="true">▶</span>
             </button>
+
+            <button class="mode-button waves-button" id="waves-btn" type="button" data-mode="waves">
+              <span class="mode-icon" aria-hidden="true">≋</span>
+              <span class="mode-copy">
+                <strong>WAVES</strong>
+                <small>7 VÅGOR · OÄNDLIGT HUS</small>
+              </span>
+              <span class="mode-arrow" aria-hidden="true">▶</span>
+            </button>
           </nav>
 
           <button class="shop-button" id="shop-btn" type="button">
@@ -140,14 +150,51 @@
 
           <aside class="desktop-help" id="desktop-help" aria-label="Datorkontroller">
             <span><kbd>WASD</kbd> GÅ</span>
-            <span><kbd>MUS</kbd> SIKTA</span>
             <span><kbd>KLICK</kbd> SKJUT</span>
+            <span>SKOTT SÖKER NÄRMASTE BOT AUTOMATISKT · DU BEHÖVER INTE SIKTA</span>
             <span><kbd>SPACE</kbd> HOPPA</span>
             <span><kbd>SHIFT</kbd> SPRING</span>
+            <span><kbd>C</kbd> DUCKA</span>
+            <span><kbd>W</kbd> GRÖN VÄGG</span>
             <span><kbd>1</kbd><kbd>2</kbd> BYT VAPEN</span>
           </aside>
 
-          <p class="touch-help">Spela i liggande läge · styr vänster · sikta genom att dra höger</p>
+          <p class="touch-help">Liggande läge · styr vänster · skott söker närmaste bot automatiskt · du behöver inte sikta</p>
+        </div>
+      </section>
+
+      <section
+        class="screen-overlay dialog-overlay"
+        id="map-select-overlay"
+        aria-labelledby="map-select-title"
+        hidden
+      >
+        <div class="dialog map-select-dialog">
+          <header class="map-select-header">
+            <p class="eyebrow">VÄLJ SPELPLATS</p>
+            <h2 id="map-select-title">VILKEN KARTA?</h2>
+            <p>Välj var matchen ska spelas.</p>
+          </header>
+
+          <div class="map-choice-grid" role="group" aria-label="Välj karta">
+            <button class="map-choice-button house-map-button" type="button" data-map="house">
+              <span class="map-choice-icon" aria-hidden="true">⌂</span>
+              <strong>HUSET</strong>
+              <small>STORA RUM · FLYTTBARA BORD</small>
+            </button>
+            <button class="map-choice-button yard-map-button" type="button" data-map="yard">
+              <span class="map-choice-icon" aria-hidden="true">✿</span>
+              <strong>GÅRDEN</strong>
+              <small>ÖPPET · SKYDD OCH HINDER</small>
+            </button>
+            <button class="map-choice-button village-map-button" type="button" data-map="village">
+              <span class="map-choice-icon" aria-hidden="true">▲</span>
+              <strong>BYN</strong>
+              <small>HUS · GRÄNDER OCH TORG</small>
+            </button>
+          </div>
+
+          <button class="secondary-button map-select-back" id="map-select-back" type="button">TILLBAKA</button>
         </div>
       </section>
 
@@ -180,6 +227,7 @@
                 <p class="weapon-type">HANDPISTOL</p>
                 <h3>SUPERPISTOL</h3>
                 <p>Behåller <strong>30 skada</strong> och skjuter nu supersnabbt.</p>
+                <p class="upgrade-duration"><strong>HÅLLER I 3 MATCHER</strong> · därefter köper du den igen</p>
                 <dl class="weapon-stats">
                   <div><dt>SKADA</dt><dd><span class="stat-bar stat-full"></span>30</dd></div>
                   <div><dt>FART</dt><dd><span class="stat-bar stat-fast"></span>1 ms</dd></div>
@@ -205,6 +253,7 @@
                 <p class="weapon-type">LÅNGPISTOL</p>
                 <h3>SUPERSIKTE</h3>
                 <p>Får ett skarpt sikte för <strong>superduperlångt håll</strong>.</p>
+                <p class="upgrade-duration"><strong>HÅLLER I 3 MATCHER</strong> · därefter köper du det igen</p>
                 <dl class="weapon-stats">
                   <div><dt>SKADA</dt><dd><span class="stat-bar stat-low"></span>5</dd></div>
                   <div><dt>RÄCKVIDD</dt><dd><span class="stat-bar stat-full"></span>MAX</dd></div>
@@ -275,9 +324,13 @@
             <span aria-hidden="true">⇄</span>
             <small>BYT</small>
           </button>
-          <button class="touch-button scope-touch" id="scope-btn" type="button" data-action="scope" aria-label="Använd sikte">
-            <span aria-hidden="true">⌖</span>
-            <small>SIKTE</small>
+          <button class="touch-button move-table-touch" id="move-table-btn" type="button" data-action="move-table" aria-label="Flytta bord">
+            <span aria-hidden="true">↔</span>
+            <small>FLYTTA BORD</small>
+          </button>
+          <button class="touch-button crouch-touch" id="crouch-btn" type="button" data-action="crouch" aria-label="Ducka">
+            <span aria-hidden="true">▼</span>
+            <small>DUCKA</small>
           </button>
         </div>
       </section>
@@ -294,7 +347,7 @@
     <noscript>
       <p class="noscript-message">JavaScript behövs för att spela Paint War.</p>
     </noscript>
-    <script src="game.js?v=20260725-paintwar-v2" defer></script>
-    <script type="module" src="graphics3d.js?v=20260725-paintwar-v2"></script>
+    <script src="game.js?v=20260816-paintwar-2-deluxe" defer></script>
+    <script type="module" src="graphics3d.js?v=20260816-paintwar-2-deluxe"></script>
   </body>
 </html>

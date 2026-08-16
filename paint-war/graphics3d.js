@@ -5,7 +5,7 @@ const shell = document.getElementById("game-shell");
 const badge = document.getElementById("graphics-badge");
 const touchDevice = matchMedia("(pointer: coarse)").matches;
 
-const HOUSE_DEFS = [
+const FALLBACK_HOUSE_DEFS = [
   { x: 3, z: 3, w: 10, d: 9, theme: 1, floor: 0xd9b776 },
   { x: 22, z: 3, w: 11, d: 10, theme: 2, floor: 0xc5d8df },
   { x: 46, z: 3, w: 11, d: 10, theme: 3, floor: 0xdfc5a2 },
@@ -20,6 +20,8 @@ const HOUSE_DEFS = [
 const WALL_COLORS = [0x796d68, 0xef745f, 0xe2b74c, 0x55a7b7, 0x8d73c8, 0x75818d];
 const ROOF_COLORS = [0x34465b, 0x7e3546, 0x3c6083, 0x276a68, 0x614383, 0x4d5968];
 const actorModels = new Map();
+const furnitureModels = new Map();
+const cameraOccluders = [];
 const decalMeshes = [];
 const tracerPool = [];
 const splatMaterials = new Map();
@@ -37,6 +39,10 @@ let worldRoot;
 let characterRoot;
 let decalRoot;
 let tracerRoot;
+let hemisphereLight;
+let sunLight;
+let fillLight;
+let skyMesh;
 let weaponRoot;
 let handgunView;
 let longgunView;
@@ -46,7 +52,13 @@ let lastPlayerX = 0;
 let lastPlayerZ = 0;
 let playerSpeed = 0;
 let cameraBob = 0;
+let playerCrouch = 0;
 let resizeObserver;
+let renderedArenaKey = "";
+let thirdPersonReady = false;
+const thirdPersonDesired = new THREE.Vector3();
+const thirdPersonLook = new THREE.Vector3();
+const thirdPersonTarget = new THREE.Vector3();
 
 function waitForGame(attempt = 0) {
   if (window.PaintWar?.getState && window.PaintWar?.getArena) {
@@ -63,6 +75,7 @@ function start3D() {
     arena = api.getArena();
     initRenderer();
     initScene();
+    prepareSharedAssets();
     buildWorld();
     buildFirstPersonWeapons();
     buildTracerPool();
@@ -83,7 +96,9 @@ function start3D() {
         calls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
         actors: actorModels.size,
+        furniture: furnitureModels.size,
         decals: decalMeshes.length,
+        arena: arena?.kind || "village",
       }),
     };
     requestAnimationFrame(frame);
@@ -123,32 +138,32 @@ function initScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x85d9ff);
   scene.fog = new THREE.Fog(0xa8dded, 42, 105);
-  camera = new THREE.PerspectiveCamera(73, 16 / 9, 0.035, 150);
+  camera = new THREE.PerspectiveCamera(73, 16 / 9, 0.035, 260);
   camera.rotation.order = "YXZ";
   scene.add(camera);
 
-  const hemisphere = new THREE.HemisphereLight(0xc8efff, 0x405b34, 1.85);
-  scene.add(hemisphere);
-  const sun = new THREE.DirectionalLight(0xffefd1, 2.65);
-  sun.position.set(-30, 48, -26);
-  sun.castShadow = true;
+  hemisphereLight = new THREE.HemisphereLight(0xc8efff, 0x405b34, 1.85);
+  scene.add(hemisphereLight);
+  sunLight = new THREE.DirectionalLight(0xffefd1, 2.65);
+  sunLight.position.set(-30, 48, -26);
+  sunLight.castShadow = true;
   const shadowSize = touchDevice ? 1024 : 1536;
-  sun.shadow.mapSize.set(shadowSize, shadowSize);
-  sun.shadow.camera.left = -42;
-  sun.shadow.camera.right = 42;
-  sun.shadow.camera.top = 42;
-  sun.shadow.camera.bottom = -42;
-  sun.shadow.camera.near = 5;
-  sun.shadow.camera.far = 120;
-  sun.shadow.bias = -0.00035;
-  scene.add(sun);
-  scene.add(sun.target);
+  sunLight.shadow.mapSize.set(shadowSize, shadowSize);
+  sunLight.shadow.camera.left = -42;
+  sunLight.shadow.camera.right = 42;
+  sunLight.shadow.camera.top = 42;
+  sunLight.shadow.camera.bottom = -42;
+  sunLight.shadow.camera.near = 5;
+  sunLight.shadow.camera.far = 120;
+  sunLight.shadow.bias = -0.00035;
+  scene.add(sunLight);
+  scene.add(sunLight.target);
 
-  const fill = new THREE.DirectionalLight(0x78bfff, 0.55);
-  fill.position.set(30, 18, 42);
-  scene.add(fill);
+  fillLight = new THREE.DirectionalLight(0x78bfff, 0.55);
+  fillLight.position.set(30, 18, 42);
+  scene.add(fillLight);
 
-  const sky = new THREE.Mesh(
+  skyMesh = new THREE.Mesh(
     new THREE.SphereGeometry(125, 32, 16),
     new THREE.ShaderMaterial({
       side: THREE.BackSide,
@@ -182,8 +197,8 @@ function initScene() {
       `,
     }),
   );
-  sky.frustumCulled = false;
-  scene.add(sky);
+  skyMesh.frustumCulled = false;
+  scene.add(skyMesh);
 
   worldRoot = new THREE.Group();
   characterRoot = new THREE.Group();
@@ -214,6 +229,7 @@ function pseudoRandom(seed) {
 }
 
 function prepareSharedAssets() {
+  if (shared.grassMaterial) return;
   const randomGrass = pseudoRandom(1439);
   shared.grassTexture = canvasTexture(256, (c, size) => {
     c.fillStyle = "#5f9852";
@@ -237,6 +253,25 @@ function prepareSharedAssets() {
       c.fillRect(randomRoad() * size, randomRoad() * size, 1.3, 1.3);
     }
   }, 3, 14);
+
+  const randomFloor = pseudoRandom(5317);
+  shared.indoorFloorTexture = canvasTexture(192, (c, size) => {
+    c.fillStyle = "#d5b985";
+    c.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 24) {
+      c.fillStyle = y % 48 ? "rgba(117,70,35,.13)" : "rgba(255,246,214,.1)";
+      c.fillRect(0, y, size, 2);
+      for (let x = (y / 24) % 2 ? -18 : 0; x < size; x += 48) {
+        c.fillStyle = "rgba(95,58,32,.12)";
+        c.fillRect(x, y, 2, 24);
+      }
+    }
+    for (let i = 0; i < 520; i += 1) {
+      const shade = 88 + Math.floor(randomFloor() * 65);
+      c.fillStyle = `rgba(${shade},${Math.floor(shade * 0.72)},${Math.floor(shade * 0.45)},.08)`;
+      c.fillRect(randomFloor() * size, randomFloor() * size, 1 + randomFloor() * 3, 1);
+    }
+  }, 24, 24);
 
   shared.splatTexture = canvasTexture(128, (c, size) => {
     c.clearRect(0, 0, size, size);
@@ -271,6 +306,17 @@ function prepareSharedAssets() {
     color: 0xffffff,
     roughness: 0.9,
   });
+  shared.indoorFloorMaterial = new THREE.MeshStandardMaterial({
+    map: shared.indoorFloorTexture,
+    color: 0xffffff,
+    roughness: 0.83,
+  });
+  shared.indoorCeilingMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf0eadf,
+    roughness: 0.94,
+    side: THREE.DoubleSide,
+  });
+  shared.yardPavingMaterial = new THREE.MeshStandardMaterial({ color: 0xd7bd91, roughness: 0.9 });
   shared.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0xb9c2c1, roughness: 0.9 });
   shared.lineMaterial = new THREE.MeshStandardMaterial({ color: 0xffdc5f, roughness: 0.65 });
   shared.crosswalkMaterial = new THREE.MeshStandardMaterial({ color: 0xf3f6eb, roughness: 0.75 });
@@ -302,6 +348,16 @@ function prepareSharedAssets() {
     emissiveIntensity: 3.8,
     roughness: 0.2,
   });
+  shared.wallRun = new THREE.MeshStandardMaterial({
+    color: 0x8dff43,
+    emissive: 0x35d51f,
+    emissiveIntensity: 2.1,
+    roughness: 0.28,
+  });
+  shared.indoorWallMaterials = [0xf5dfca, 0xcce4f1, 0xe9d3f2, 0xd9edcf, 0xf4d4dc, 0xd8dce9]
+    .map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));
+  shared.indoorTrimMaterials = [0xe95c68, 0x379ad1, 0xb46bd5, 0x54ad67, 0xe8943f, 0x6574c7]
+    .map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.62 }));
 }
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0) {
@@ -315,24 +371,305 @@ function box(width, height, depth, material, x = 0, y = 0, z = 0) {
   return mesh;
 }
 
+function arenaKey(value = arena) {
+  if (!value) return "missing:0";
+  return `${value.id || "arena"}:${value.kind || "village"}:${value.revision || 0}`;
+}
+
+function arenaBounds() {
+  const bounds = arena?.bounds || {};
+  const minX = Number.isFinite(bounds.minX) ? bounds.minX : 0;
+  const minZ = Number.isFinite(bounds.minZ) ? bounds.minZ : 0;
+  const width = Number.isFinite(bounds.width)
+    ? bounds.width
+    : (Number.isFinite(bounds.maxX) ? bounds.maxX - minX : (arena?.width || 64));
+  const height = Number.isFinite(bounds.height)
+    ? bounds.height
+    : (Number.isFinite(bounds.maxZ) ? bounds.maxZ - minZ : (arena?.height || 64));
+  return {
+    minX,
+    minZ,
+    width: Math.max(1, width),
+    height: Math.max(1, height),
+  };
+}
+
+function wallThemeAt(index) {
+  const value = Number(arena?.wallThemes?.[index]) || 0;
+  return Math.abs(Math.trunc(value)) % WALL_COLORS.length;
+}
+
+function sharedResourceSet() {
+  const resources = new Set();
+  Object.values(shared).forEach((value) => {
+    if (Array.isArray(value)) value.forEach((entry) => resources.add(entry));
+    else resources.add(value);
+  });
+  return resources;
+}
+
+function clearWorld() {
+  const sharedResources = sharedResourceSet();
+  const disposedGeometry = new Set();
+  const disposedMaterial = new Set();
+  const disposedTexture = new Set();
+  worldRoot.traverse((object) => {
+    if (object.geometry && !disposedGeometry.has(object.geometry)) {
+      disposedGeometry.add(object.geometry);
+      object.geometry.dispose?.();
+    }
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.filter(Boolean).forEach((material) => {
+      if (sharedResources.has(material) || disposedMaterial.has(material)) return;
+      disposedMaterial.add(material);
+      Object.values(material).forEach((value) => {
+        if (!value?.isTexture || sharedResources.has(value) || disposedTexture.has(value)) return;
+        disposedTexture.add(value);
+        value.dispose?.();
+      });
+      material.dispose?.();
+    });
+  });
+  worldRoot.clear();
+  furnitureModels.clear();
+  cameraOccluders.length = 0;
+  animatedClouds.length = 0;
+}
+
+function applyEnvironment(kind) {
+  const indoor = kind === "house" || kind === "endless-house";
+  skyMesh.visible = !indoor;
+  sunLight.visible = !indoor;
+  fillLight.visible = true;
+  if (indoor) {
+    scene.background.set(0x28263a);
+    scene.fog = new THREE.Fog(0x343143, 22, 78);
+    hemisphereLight.color.set(0xfff3dc);
+    hemisphereLight.groundColor.set(0x4d4962);
+    hemisphereLight.intensity = 2.15;
+    fillLight.color.set(0xb9c9ff);
+    fillLight.intensity = 0.42;
+    renderer.toneMappingExposure = 1.16;
+  } else {
+    scene.background.set(0x85d9ff);
+    scene.fog = new THREE.Fog(0xa8dded, 42, 105);
+    hemisphereLight.color.set(0xc8efff);
+    hemisphereLight.groundColor.set(0x405b34);
+    hemisphereLight.intensity = 1.85;
+    fillLight.color.set(0x78bfff);
+    fillLight.intensity = 0.55;
+    renderer.toneMappingExposure = 1.08;
+  }
+}
+
+function syncArenaWorld() {
+  const nextArena = api.getArena();
+  if (!nextArena) return;
+  const nextKey = arenaKey(nextArena);
+  arena = nextArena;
+  if (nextKey === renderedArenaKey) return;
+  buildWorld();
+  if (state.player) {
+    lastPlayerX = state.player.x;
+    lastPlayerZ = state.player.z;
+  }
+}
+
 function buildWorld() {
-  prepareSharedAssets();
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(66, 66), shared.grassMaterial);
+  clearWorld();
+  const kind = arena?.kind || "village";
+  applyEnvironment(kind);
+  if (kind === "yard") buildYardWorld();
+  else if (kind === "house" || kind === "endless-house") buildIndoorWorld(kind);
+  else buildVillageWorld();
+  renderedArenaKey = arenaKey();
+}
+
+function buildVillageWorld() {
+  const bounds = arenaBounds();
+  const tiles = arena.tiles?.length
+    ? arena.tiles
+    : [{ x: bounds.minX, z: bounds.minZ, width: bounds.width, height: bounds.height }];
+  tiles.forEach((tile) => {
+    const tileWidth = tile.width || tile.w || 64.2;
+    const tileHeight = tile.height || tile.h || 64.2;
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(tileWidth, tileHeight), shared.grassMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(tile.x + tileWidth / 2, -0.03, tile.z + tileHeight / 2);
+    ground.receiveShadow = true;
+    worldRoot.add(ground);
+
+    addRoad(tile.x + 17, tile.z + 32, 4.2, 64);
+    addRoad(tile.x + 39.5, tile.z + 32, 5.3, 64);
+    addRoad(tile.x + 32, tile.z + 17.5, 64, 5.2);
+    addRoad(tile.x + 32, tile.z + 39, 64, 6.2);
+    addRoadMarkings(tile.x, tile.z);
+  });
+  buildWalls();
+  buildWallRunMarkers();
+  buildHouses();
+  buildFurniture();
+  if (arena.outroom) buildOutroom();
+  tiles.forEach((tile, index) => buildStreetProps(tile.x, tile.z, index === 0));
+  buildClouds();
+}
+
+function buildYardWorld() {
+  const bounds = arenaBounds();
+  const centerX = bounds.minX + bounds.width / 2;
+  const centerZ = bounds.minZ + bounds.height / 2;
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(bounds.width + 0.4, bounds.height + 0.4),
+    shared.grassMaterial,
+  );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(32, -0.03, 32);
+  ground.position.set(centerX, -0.03, centerZ);
   ground.receiveShadow = true;
   worldRoot.add(ground);
 
-  addRoad(17, 32, 4.2, 64);
-  addRoad(39.5, 32, 5.3, 64);
-  addRoad(32, 17.5, 64, 5.2);
-  addRoad(32, 39, 64, 6.2);
-  addRoadMarkings();
+  const pathWidth = Math.max(2.8, Math.min(5.5, bounds.width * 0.09));
+  const pathDepth = Math.max(2.8, Math.min(5.5, bounds.height * 0.09));
+  worldRoot.add(
+    box(pathWidth, 0.055, bounds.height * 0.76, shared.yardPavingMaterial, centerX, 0.012, centerZ),
+    box(bounds.width * 0.76, 0.056, pathDepth, shared.yardPavingMaterial, centerX, 0.014, centerZ),
+  );
+
+  const paintColors = [0x20a4ff, 0xff466d, 0xffd43b, 0x5ee06f, 0xbd63ff];
+  paintColors.forEach((color, index) => {
+    const patch = new THREE.Mesh(
+      new THREE.CircleGeometry(1.35 + (index % 2) * 0.45, 20),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.72 }),
+    );
+    const angle = index / paintColors.length * Math.PI * 2;
+    patch.rotation.x = -Math.PI / 2;
+    patch.rotation.z = angle * 1.7;
+    patch.position.set(
+      centerX + Math.cos(angle) * Math.min(bounds.width * 0.3, 13),
+      0.023,
+      centerZ + Math.sin(angle) * Math.min(bounds.height * 0.3, 13),
+    );
+    patch.receiveShadow = true;
+    worldRoot.add(patch);
+  });
+
   buildWalls();
-  buildHouses();
-  buildOutroom();
-  buildStreetProps();
+  buildWallRunMarkers();
+  buildFurniture();
+  if (arena.outroom) buildOutroom();
   buildClouds();
+}
+
+function buildIndoorWorld(kind) {
+  const bounds = arenaBounds();
+  const centerX = bounds.minX + bounds.width / 2;
+  const centerZ = bounds.minZ + bounds.height / 2;
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(bounds.width + 0.1, bounds.height + 0.1),
+    shared.indoorFloorMaterial,
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(centerX, -0.025, centerZ);
+  floor.receiveShadow = true;
+  worldRoot.add(floor);
+
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(bounds.width + 0.15, bounds.height + 0.15),
+    shared.indoorCeilingMaterial,
+  );
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.set(centerX, 3.18, centerZ);
+  ceiling.receiveShadow = true;
+  ceiling.userData.cameraOccluder = true;
+  cameraOccluders.push(ceiling);
+  worldRoot.add(ceiling);
+
+  buildIndoorWalls();
+  buildWallRunMarkers();
+  buildFurniture();
+  buildIndoorLights(bounds, kind === "endless-house");
+  if (arena.outroom) buildOutroom();
+}
+
+function buildIndoorWalls() {
+  if (!arena.cells) return;
+  const wallGeometry = new THREE.BoxGeometry(0.98, 3.08, 0.98);
+  const trimGeometry = new THREE.BoxGeometry(1.015, 0.14, 1.015);
+  const matrix = new THREE.Matrix4();
+  for (let theme = 0; theme < shared.indoorWallMaterials.length; theme += 1) {
+    const positions = [];
+    for (let z = 0; z < arena.height; z += 1) {
+      for (let x = 0; x < arena.width; x += 1) {
+        const index = z * arena.width + x;
+        if (arena.cells[index] === 1 && wallThemeAt(index) === theme) {
+          positions.push([x + 0.5, z + 0.5]);
+        }
+      }
+    }
+    if (!positions.length) continue;
+    const walls = new THREE.InstancedMesh(
+      wallGeometry,
+      shared.indoorWallMaterials[theme],
+      positions.length,
+    );
+    const lowerTrim = new THREE.InstancedMesh(
+      trimGeometry,
+      shared.indoorTrimMaterials[theme],
+      positions.length,
+    );
+    const upperTrim = new THREE.InstancedMesh(
+      trimGeometry,
+      shared.indoorTrimMaterials[theme],
+      positions.length,
+    );
+    positions.forEach(([x, z], index) => {
+      matrix.makeTranslation(x, 1.54, z);
+      walls.setMatrixAt(index, matrix);
+      matrix.makeTranslation(x, 0.16, z);
+      lowerTrim.setMatrixAt(index, matrix);
+      matrix.makeTranslation(x, 2.95, z);
+      upperTrim.setMatrixAt(index, matrix);
+    });
+    walls.castShadow = walls.receiveShadow = true;
+    lowerTrim.receiveShadow = upperTrim.receiveShadow = true;
+    walls.instanceMatrix.needsUpdate = true;
+    lowerTrim.instanceMatrix.needsUpdate = true;
+    upperTrim.instanceMatrix.needsUpdate = true;
+    worldRoot.add(walls, lowerTrim, upperTrim);
+  }
+
+  for (let z = 0; z < arena.height; z += 1) {
+    for (let x = 0; x < arena.width; x += 1) {
+      const index = z * arena.width + x;
+      if (arena.cells[index] !== 2) continue;
+      const leftRight = Number(arena.cells[index - 1] > 0) + Number(arena.cells[index + 1] > 0);
+      const upDown = Number(arena.cells[index - arena.width] > 0)
+        + Number(arena.cells[index + arena.width] > 0);
+      addWindow(x + 0.5, z + 0.5, leftRight >= upDown, wallThemeAt(index));
+    }
+  }
+}
+
+function buildIndoorLights(bounds, endless) {
+  if (!arena.cells) return;
+  const fixtures = [];
+  const stepX = endless ? 9 : 8;
+  const stepZ = endless ? 9 : 8;
+  for (let z = Math.max(2, Math.floor(bounds.minZ + 3)); z < bounds.minZ + bounds.height - 2; z += stepZ) {
+    for (let x = Math.max(2, Math.floor(bounds.minX + 3)); x < bounds.minX + bounds.width - 2; x += stepX) {
+      if (arena.cells[Math.floor(z) * arena.width + Math.floor(x)] === 0) fixtures.push([x + 0.5, z + 0.5]);
+      if (fixtures.length >= 36) break;
+    }
+    if (fixtures.length >= 36) break;
+  }
+  fixtures.forEach(([x, z], index) => {
+    worldRoot.add(box(1.6, 0.055, 0.38, shared.lampGlow, x, 3.105, z));
+    if (index < 5 || index % 8 === 0 && index < 24) {
+      const light = new THREE.PointLight(index % 2 ? 0xffdfaa : 0xb8ddff, 3.2, 12, 1.65);
+      light.position.set(x, 2.72, z);
+      light.castShadow = false;
+      worldRoot.add(light);
+    }
+  });
 }
 
 function addRoad(x, z, width, depth) {
@@ -352,20 +689,28 @@ function addRoad(x, z, width, depth) {
   }
 }
 
-function addRoadMarkings() {
+function addRoadMarkings(offsetX = 0, offsetZ = 0) {
   for (const x of [17, 39.5]) {
     for (let z = 1.6; z < 64; z += 3.1) {
-      worldRoot.add(box(0.12, 0.035, 1.45, shared.lineMaterial, x, 0.075, z));
+      worldRoot.add(box(0.12, 0.035, 1.45, shared.lineMaterial, offsetX + x, 0.075, offsetZ + z));
     }
   }
   for (const z of [17.5, 39]) {
     for (let x = 1.6; x < 64; x += 3.1) {
-      worldRoot.add(box(1.45, 0.035, 0.12, shared.lineMaterial, x, 0.076, z));
+      worldRoot.add(box(1.45, 0.035, 0.12, shared.lineMaterial, offsetX + x, 0.076, offsetZ + z));
     }
   }
   for (const [x, z] of [[17, 17.5], [39.5, 17.5], [17, 39], [39.5, 39]]) {
     for (let i = -3; i <= 3; i += 1) {
-      worldRoot.add(box(0.28, 0.04, 2.8, shared.crosswalkMaterial, x + i * 0.5, 0.09, z));
+      worldRoot.add(box(
+        0.28,
+        0.04,
+        2.8,
+        shared.crosswalkMaterial,
+        offsetX + x + i * 0.5,
+        0.09,
+        offsetZ + z,
+      ));
     }
   }
 }
@@ -399,14 +744,15 @@ function wallTexture(color, seed) {
 }
 
 function buildWalls() {
+  if (!arena.cells) return;
   const boxGeometry = new THREE.BoxGeometry(0.98, 2.95, 0.98);
   const capGeometry = new THREE.BoxGeometry(1.01, 0.12, 1.01);
   for (let theme = 0; theme < WALL_COLORS.length; theme += 1) {
     const positions = [];
-    for (let z = 0; z <= 64; z += 1) {
-      for (let x = 0; x <= 64; x += 1) {
+    for (let z = 0; z < arena.height; z += 1) {
+      for (let x = 0; x < arena.width; x += 1) {
         const index = z * arena.width + x;
-        if (arena.cells[index] === 1 && (arena.wallThemes[index] || 0) === theme) positions.push([x + 0.5, z + 0.5]);
+        if (arena.cells[index] === 1 && wallThemeAt(index) === theme) positions.push([x + 0.5, z + 0.5]);
       }
     }
     if (!positions.length) continue;
@@ -433,18 +779,69 @@ function buildWalls() {
     worldRoot.add(walls, caps);
   }
 
-  for (let z = 0; z <= 64; z += 1) {
-    for (let x = 0; x <= 64; x += 1) {
+  for (let z = 0; z < arena.height; z += 1) {
+    for (let x = 0; x < arena.width; x += 1) {
       const index = z * arena.width + x;
       if (arena.cells[index] !== 2) continue;
       const leftRight = Number(arena.cells[index - 1] > 0) + Number(arena.cells[index + 1] > 0);
       const upDown = Number(arena.cells[index - arena.width] > 0) + Number(arena.cells[index + arena.width] > 0);
-      addWindow(x + 0.5, z + 0.5, leftRight >= upDown, arena.wallThemes[index] || 0);
+      addWindow(x + 0.5, z + 0.5, leftRight >= upDown, wallThemeAt(index));
     }
   }
 }
 
+function buildWallRunMarkers() {
+  const positions = [];
+  if (!arena.climbableWalls) return;
+  for (let z = 0; z < arena.height; z += 1) {
+    for (let x = 0; x < arena.width; x += 1) {
+      if (arena.climbableWalls[z * arena.width + x]) positions.push([x + 0.5, z + 0.5]);
+    }
+  }
+  if (!positions.length) return;
+
+  const matrix = new THREE.Matrix4();
+  const topPads = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.78, 0.07, 0.78),
+    shared.wallRun,
+    positions.length,
+  );
+  positions.forEach(([x, z], index) => {
+    matrix.makeTranslation(x, 3.09, z);
+    topPads.setMatrixAt(index, matrix);
+  });
+  topPads.castShadow = false;
+  topPads.receiveShadow = false;
+  topPads.instanceMatrix.needsUpdate = true;
+  worldRoot.add(topPads);
+
+  const rungGeometry = new THREE.BoxGeometry(0.54, 0.055, 0.035);
+  const rungs = new THREE.InstancedMesh(rungGeometry, shared.wallRun, positions.length * 12);
+  let rungIndex = 0;
+  const faces = [
+    [0, -0.505, 0],
+    [0, 0.505, Math.PI],
+    [-0.505, 0, Math.PI / 2],
+    [0.505, 0, -Math.PI / 2],
+  ];
+  positions.forEach(([x, z]) => {
+    faces.forEach(([offsetX, offsetZ, rotation]) => {
+      [0.68, 1.38, 2.08].forEach((y) => {
+        matrix.makeRotationY(rotation);
+        matrix.setPosition(x + offsetX, y, z + offsetZ);
+        rungs.setMatrixAt(rungIndex, matrix);
+        rungIndex += 1;
+      });
+    });
+  });
+  rungs.castShadow = false;
+  rungs.receiveShadow = false;
+  rungs.instanceMatrix.needsUpdate = true;
+  worldRoot.add(rungs);
+}
+
 function addWindow(x, z, horizontal, theme) {
+  theme = Math.abs(Math.trunc(Number(theme) || 0)) % WALL_COLORS.length;
   const wallMaterial = new THREE.MeshStandardMaterial({
     color: WALL_COLORS[theme],
     roughness: 0.8,
@@ -473,7 +870,9 @@ function addWindow(x, z, horizontal, theme) {
 }
 
 function buildHouses() {
-  HOUSE_DEFS.forEach((house, index) => {
+  const houses = arena.houseDefs || FALLBACK_HOUSE_DEFS;
+  houses.forEach((house, index) => {
+    const theme = Math.abs(Math.trunc(Number(house.theme) || 0)) % ROOF_COLORS.length;
     const floorMaterial = new THREE.MeshStandardMaterial({ color: house.floor, roughness: 0.82 });
     const floor = box(house.w - 1.8, 0.08, house.d - 1.8, floorMaterial,
       house.x + house.w / 2, 0.015, house.z + house.d / 2);
@@ -481,11 +880,11 @@ function buildHouses() {
     worldRoot.add(floor);
 
     const roofMaterial = new THREE.MeshStandardMaterial({
-      color: ROOF_COLORS[house.theme],
+      color: ROOF_COLORS[theme],
       roughness: 0.68,
       metalness: 0.08,
     });
-    worldRoot.add(box(
+    const roofSlab = box(
       house.w + 0.35,
       0.18,
       house.d + 0.35,
@@ -493,12 +892,17 @@ function buildHouses() {
       house.x + house.w / 2,
       3.12,
       house.z + house.d / 2,
-    ));
+    );
+    roofSlab.userData.cameraOccluder = true;
+    cameraOccluders.push(roofSlab);
+    worldRoot.add(roofSlab);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(1, 1.45, 4), roofMaterial);
     roof.position.set(house.x + house.w / 2, 3.9, house.z + house.d / 2);
     roof.rotation.y = Math.PI / 4;
     roof.scale.set(house.w * 0.72, 1, house.d * 0.72);
     roof.castShadow = roof.receiveShadow = true;
+    roof.userData.cameraOccluder = true;
+    cameraOccluders.push(roof);
     worldRoot.add(roof);
 
     const doorX = house.x + Math.floor(house.w / 2);
@@ -512,6 +916,104 @@ function buildHouses() {
       box(doorWidth + 0.5, 0.08, 0.78, shared.sidewalkMaterial, doorX, 0.04, doorZ + 0.55),
     );
     worldRoot.add(createHouseNumber(index + 1, house.floor, doorX, 2.78, doorZ + 0.54));
+  });
+}
+
+function buildFurniture() {
+  (arena.furniture || []).forEach((item, index) => createFurnitureModel(item, index));
+}
+
+function furnitureKey(item, index = 0) {
+  return String(item.id ?? `furniture-${index}`);
+}
+
+function createFurnitureModel(item, index = 0) {
+    const width = Math.max(0.3, Number(item.width) || 1.45);
+    const depth = Math.max(0.3, Number(item.depth) || 0.78);
+    const height = Math.max(0.3, Number(item.height) || 0.86);
+    const kind = item.kind || "table";
+    const root = new THREE.Group();
+    root.position.set(Number(item.x) || 0, 0, Number(item.z) || 0);
+    root.rotation.y = Number(item.angle ?? item.rotation) || 0;
+    root.userData.furnitureId = furnitureKey(item, index);
+    const mainColor = new THREE.Color(item.color || "#d48a43");
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: mainColor,
+      roughness: kind === "crate" ? 0.82 : 0.68,
+      metalness: kind === "cabinet" ? 0.12 : 0.02,
+    });
+    const topMaterial = new THREE.MeshStandardMaterial({
+      color: mainColor.clone().offsetHSL(0, 0.03, 0.12),
+      roughness: 0.58,
+    });
+    if (kind === "table") {
+      const tabletop = box(width, 0.16, depth, topMaterial, 0, height - 0.08, 0);
+      tabletop.castShadow = tabletop.receiveShadow = true;
+      root.add(tabletop);
+      const legWidth = Math.min(0.14, width * 0.12);
+      const legDepth = Math.min(0.14, depth * 0.18);
+      const legX = Math.max(0.08, width / 2 - legWidth * 0.85);
+      const legZ = Math.max(0.08, depth / 2 - legDepth * 0.85);
+      for (const x of [-legX, legX]) {
+        for (const z of [-legZ, legZ]) {
+          root.add(box(legWidth, height - 0.12, legDepth, bodyMaterial, x, (height - 0.12) / 2, z));
+        }
+      }
+      root.add(box(width * 0.78, 0.08, 0.08, bodyMaterial, 0, height * 0.55, 0));
+    } else {
+      const body = box(width, height, depth, bodyMaterial, 0, height / 2, 0);
+      body.castShadow = body.receiveShadow = true;
+      root.add(body);
+      root.add(box(width + 0.06, 0.075, depth + 0.06, topMaterial, 0, height + 0.035, 0));
+    }
+
+    if (kind === "cabinet") {
+      root.add(
+        box(0.045, height * 0.72, depth + 0.018, shared.dark, 0, height * 0.48, 0),
+        box(0.12, 0.055, 0.035, shared.metal, -0.17, height * 0.61, -depth / 2 - 0.025),
+        box(0.12, 0.055, 0.035, shared.metal, 0.17, height * 0.61, -depth / 2 - 0.025),
+      );
+    } else if (kind === "sofa") {
+      root.add(
+        box(width * 0.78, 0.08, 0.035, topMaterial, 0, height * 0.55, -depth / 2 - 0.025),
+        box(0.08, height * 0.7, depth + 0.05, topMaterial, -width / 2 - 0.025, height * 0.45, 0),
+        box(0.08, height * 0.7, depth + 0.05, topMaterial, width / 2 + 0.025, height * 0.45, 0),
+      );
+    } else if (kind === "bench") {
+      root.add(
+        box(width * 0.82, 0.07, 0.04, shared.dark, 0, height * 0.38, -depth / 2 - 0.025),
+        box(width * 0.82, 0.07, 0.04, shared.dark, 0, height * 0.68, -depth / 2 - 0.025),
+      );
+    } else if (kind !== "table") {
+      root.add(
+        box(width + 0.04, 0.075, 0.08, shared.dark, 0, height * 0.28, -depth / 2 - 0.025),
+        box(width + 0.04, 0.075, 0.08, shared.dark, 0, height * 0.72, -depth / 2 - 0.025),
+        box(0.08, height + 0.04, depth + 0.04, shared.dark, 0, height / 2, 0),
+      );
+    }
+    root.traverse((child) => {
+      if (!child.isMesh) return;
+      child.receiveShadow = true;
+    });
+    worldRoot.add(root);
+    furnitureModels.set(root.userData.furnitureId, root);
+    return root;
+}
+
+function syncFurnitureModels() {
+  const liveKeys = new Set();
+  (arena.furniture || []).forEach((item, index) => {
+    const key = furnitureKey(item, index);
+    liveKeys.add(key);
+    let root = furnitureModels.get(key);
+    if (!root) root = createFurnitureModel(item, index);
+    root.visible = item.visible !== false && item.active !== false;
+    root.position.x = Number(item.x) || 0;
+    root.position.z = Number(item.z) || 0;
+    root.rotation.y = Number(item.angle ?? item.rotation) || 0;
+  });
+  furnitureModels.forEach((root, key) => {
+    if (!liveKeys.has(key)) root.visible = false;
   });
 }
 
@@ -548,12 +1050,19 @@ function createHouseNumber(number, color, x, y, z) {
 }
 
 function buildOutroom() {
+  const room = arena.outroom || { x: 70.5, z: 70.5, minX: 68, maxX: 73, minZ: 68, maxZ: 73 };
+  const centerX = room.x;
+  const centerZ = room.z;
+  const left = room.minX - 0.5;
+  const right = room.maxX + 0.5;
+  const front = room.minZ - 0.5;
+  const back = room.maxZ + 0.5;
   const floorMaterial = new THREE.MeshStandardMaterial({
     color: 0x294862,
     roughness: 0.55,
     metalness: 0.18,
   });
-  worldRoot.add(box(5, 0.12, 5, floorMaterial, 70.5, 0, 70.5));
+  worldRoot.add(box(5, 0.12, 5, floorMaterial, centerX, 0, centerZ));
   const wallMaterial = new THREE.MeshStandardMaterial({
     color: 0x34465a,
     roughness: 0.58,
@@ -566,47 +1075,49 @@ function buildOutroom() {
     roughness: 0.25,
   });
   worldRoot.add(
-    box(1, 3.1, 7, wallMaterial, 67.5, 1.55, 70.5),
-    box(1, 3.1, 7, wallMaterial, 73.5, 1.55, 70.5),
-    box(7, 3.1, 1, wallMaterial, 70.5, 1.55, 67.5),
-    box(7, 3.1, 1, wallMaterial, 70.5, 1.55, 73.5),
-    box(5, 0.15, 5, wallMaterial, 70.5, 3.08, 70.5),
-    box(3.8, 0.07, 0.07, neonMaterial, 70.5, 2.62, 68.04),
-    box(0.07, 1.9, 0.07, neonMaterial, 68.12, 1.52, 70.5),
-    box(0.07, 1.9, 0.07, neonMaterial, 72.88, 1.52, 70.5),
+    box(1, 3.1, 7, wallMaterial, left, 1.55, centerZ),
+    box(1, 3.1, 7, wallMaterial, right, 1.55, centerZ),
+    box(7, 3.1, 1, wallMaterial, centerX, 1.55, front),
+    box(7, 3.1, 1, wallMaterial, centerX, 1.55, back),
+    box(5, 0.15, 5, wallMaterial, centerX, 3.08, centerZ),
+    box(3.8, 0.07, 0.07, neonMaterial, centerX, 2.62, front + 0.54),
+    box(0.07, 1.9, 0.07, neonMaterial, left + 0.62, 1.52, centerZ),
+    box(0.07, 1.9, 0.07, neonMaterial, right - 0.62, 1.52, centerZ),
   );
   const sign = createTextSprite("OUTROOM", "#ff77c8", "rgba(14,20,49,.92)");
-  sign.position.set(70.5, 2.05, 68.02);
+  sign.position.set(centerX, 2.05, front + 0.52);
   sign.scale.set(2.4, 0.8, 1);
   worldRoot.add(sign);
   const light = new THREE.PointLight(0x68dfff, 8.5, 10, 1.5);
-  light.position.set(70.5, 2.55, 70.5);
+  light.position.set(centerX, 2.55, centerZ);
   worldRoot.add(light);
   worldRoot.add(
-    box(1.8, 0.18, 0.48, shared.windowFrame, 70.5, 0.48, 72.55),
-    box(0.18, 0.45, 0.4, shared.windowFrame, 69.8, 0.23, 72.55),
-    box(0.18, 0.45, 0.4, shared.windowFrame, 71.2, 0.23, 72.55),
+    box(1.8, 0.18, 0.48, shared.windowFrame, centerX, 0.48, back - 0.95),
+    box(0.18, 0.45, 0.4, shared.windowFrame, centerX - 0.7, 0.23, back - 0.95),
+    box(0.18, 0.45, 0.4, shared.windowFrame, centerX + 0.7, 0.23, back - 0.95),
   );
 }
 
-function buildStreetProps() {
+function buildStreetProps(offsetX = 0, offsetZ = 0, full = true) {
   const treeSpots = [
     [1.7, 14], [7, 15], [13.2, 14], [21, 15], [29, 15], [35, 13.5],
     [44, 14], [59, 15], [62, 22], [58, 35], [44, 35], [35, 35],
     [21, 35], [8, 36], [2, 41], [13, 43], [21, 43], [35, 44],
     [43, 43], [59, 43], [62, 59], [35, 60], [20, 59], [2, 59],
   ];
-  treeSpots.forEach(([x, z], i) => addTree(x, z, 0.85 + (i % 4) * 0.08));
+  treeSpots
+    .filter((_, index) => full || index % 3 === 0)
+    .forEach(([x, z], i) => addTree(offsetX + x, offsetZ + z, 0.85 + (i % 4) * 0.08));
 
   const lampSpots = [
     [14.4, 9], [20.1, 9], [36.4, 9], [43, 9],
     [14.4, 28], [20.1, 28], [36.4, 28], [43, 28],
     [14.4, 50], [20.1, 50], [36.4, 50], [43, 50],
   ];
-  lampSpots.forEach(([x, z], i) => addStreetLamp(x, z, i % 2 ? 1 : -1));
+  lampSpots.forEach(([x, z], i) => addStreetLamp(offsetX + x, offsetZ + z, i % 2 ? 1 : -1));
 
   [[20.8, 21.5, 0x20a4ff], [35.4, 21.5, 0xff466d], [43.5, 35, 0xffd43b], [21, 43.7, 0x5ee06f]]
-    .forEach(([x, z, color]) => addPaintBarrels(x, z, color));
+    .forEach(([x, z, color]) => addPaintBarrels(offsetX + x, offsetZ + z, color));
 }
 
 function addTree(x, z, scale = 1) {
@@ -876,7 +1387,10 @@ function syncActors(dt) {
     let model = actorModels.get(actor.id);
     if (!model) model = createActorModel(actor);
     const data = model.userData;
-    model.visible = actor !== state.player;
+    const localPlayer = actor === state.player;
+    const localPlayerVisible = state.phase === "playing" || state.phase === "end";
+    const visibleWeapon = localPlayer ? state.weapon : actor.weapon;
+    model.visible = !localPlayer || localPlayerVisible;
     model.position.set(actor.x, actor.y, actor.z);
     model.rotation.y = -actor.angle - Math.PI / 2;
     const moved = Math.hypot(actor.x - data.lastX, actor.z - data.lastZ);
@@ -887,7 +1401,7 @@ function syncActors(dt) {
     const swing = pace ? Math.sin(state.time * pace + actor.id * 0.7) * Math.min(0.72, speed * 0.2) : 0;
     data.legs[0].rotation.x = swing;
     data.legs[1].rotation.x = -swing;
-    if (actor.weapon === 0) {
+    if (visibleWeapon === 0) {
       data.arms[0].rotation.x = -1.15 + swing * 0.14;
       data.arms[0].rotation.z = -0.12;
       data.arms[1].rotation.x = -swing * 0.65;
@@ -898,12 +1412,12 @@ function syncActors(dt) {
       data.arms[1].rotation.z = 0.18;
     }
     data.torso.position.y = 1.35 + (pace ? Math.abs(Math.sin(state.time * pace)) * 0.035 : 0);
-    data.handgun.visible = actor.weapon === 0;
-    data.longgun.visible = actor.weapon === 1;
+    data.handgun.visible = visibleWeapon === 0;
+    data.longgun.visible = visibleWeapon === 1;
     if (firingIds.has(actor.id)) data.muzzleTimer = 0.07;
     data.muzzleTimer = Math.max(0, data.muzzleTimer - dt);
-    data.handgunMuzzle.visible = actor.weapon === 0 && data.muzzleTimer > 0;
-    data.longgunMuzzle.visible = actor.weapon === 1 && data.muzzleTimer > 0;
+    data.handgunMuzzle.visible = visibleWeapon === 0 && data.muzzleTimer > 0;
+    data.longgunMuzzle.visible = visibleWeapon === 1 && data.muzzleTimer > 0;
     data.shirt.color.set(actor.color);
     data.paintGlow.color.set(actor.color);
     data.paintGlow.emissive.set(actor.color);
@@ -912,7 +1426,7 @@ function syncActors(dt) {
       mark.visible = Boolean(paint);
       if (paint) mark.material.color.set(paint.color);
     });
-    data.health.visible = actor.alive;
+    data.health.visible = actor.alive && !localPlayer;
     updateHealthSprite(data.health, actor);
   });
 }
@@ -1056,6 +1570,15 @@ function syncDecals() {
     if (decal.floor) {
       mesh.position.set(decal.x, 0.055, decal.z);
       mesh.rotation.set(-Math.PI / 2, 0, ((index * 47) % 360) * Math.PI / 180);
+    } else if (decal.surface === "furniture") {
+      const y = Number.isFinite(decal.y) ? decal.y : 0.62;
+      if (Math.abs(decal.normalX) > 0.5) {
+        mesh.position.set(decal.x + decal.normalX * 0.008, y, decal.z);
+        mesh.rotation.set(0, decal.normalX > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+      } else {
+        mesh.position.set(decal.x, y, decal.z + decal.normalZ * 0.008);
+        mesh.rotation.set(0, decal.normalZ > 0 ? 0 : Math.PI, 0);
+      }
     } else {
       const cellX = Math.floor(decal.x);
       const cellZ = Math.floor(decal.z);
@@ -1063,7 +1586,9 @@ function syncDecals() {
       const centerZ = cellZ + 0.5;
       const dx = decal.x - centerX;
       const dz = decal.z - centerZ;
-      const y = 0.85 + ((index * 37) % 125) / 100;
+      const y = Number.isFinite(decal.y)
+        ? Math.max(0.12, Math.min(2.92, decal.y))
+        : 0.85 + ((index * 37) % 125) / 100;
       if (Math.abs(dx) > Math.abs(dz)) {
         const side = Math.sign(dx) || 1;
         mesh.position.set(centerX + side * 0.502, y, decal.z);
@@ -1083,8 +1608,8 @@ function syncTracers() {
     line.visible = Boolean(tracer);
     if (!tracer) return;
     const positions = line.geometry.attributes.position;
-    positions.setXYZ(0, tracer.x1, 1.42, tracer.z1);
-    positions.setXYZ(1, tracer.x2, tracer.floor ? 0.08 : 1.18, tracer.z2);
+    positions.setXYZ(0, tracer.x1, Number.isFinite(tracer.y1) ? tracer.y1 : 1.42, tracer.z1);
+    positions.setXYZ(1, tracer.x2, Number.isFinite(tracer.y2) ? tracer.y2 : 1.18, tracer.z2);
     positions.needsUpdate = true;
     line.material.color.set(tracer.color);
     line.material.opacity = Math.min(1, tracer.life * 16);
@@ -1095,6 +1620,8 @@ function updateCameraAndWeapon(dt) {
   const playing = state.phase === "playing" || state.phase === "end";
   const p = state.player;
   if (!playing || !p) {
+    thirdPersonReady = false;
+    cameraOccluders.forEach((object) => { object.visible = true; });
     const t = performance.now() * 0.00008;
     camera.position.set(17 + Math.sin(t) * 3.2, 4.6, 8.5 + Math.cos(t) * 2.3);
     camera.lookAt(17, 1.45, 18.5);
@@ -1109,34 +1636,51 @@ function updateCameraAndWeapon(dt) {
   playerSpeed += (rawSpeed - playerSpeed) * Math.min(1, dt * 9);
   lastPlayerX = p.x;
   lastPlayerZ = p.z;
-  cameraBob = playerSpeed > 0.08 ? Math.sin(state.time * (playerSpeed > 3.4 ? 13 : 9)) * Math.min(0.065, playerSpeed * 0.015) : cameraBob * 0.82;
-  const sideBob = playerSpeed > 0.08 ? Math.cos(state.time * 6.5) * Math.min(0.024, playerSpeed * 0.006) : 0;
-  camera.position.set(p.x, 1.62 + p.y + Math.abs(cameraBob) * 0.45, p.z);
-  camera.rotation.set(
-    -state.pitch - state.recoil * 0.22,
-    -p.angle - Math.PI / 2,
-    sideBob * 0.5,
+  const crouchTarget = state.crouching ? 1 : 0;
+  playerCrouch += (crouchTarget - playerCrouch) * Math.min(1, dt * 13);
+  cameraBob = playerSpeed > 0.08
+    ? Math.sin(state.time * (playerSpeed > 3.4 ? 12 : 8)) * Math.min(0.08, playerSpeed * 0.014)
+    : cameraBob * 0.82;
+
+  // Paint War spelas i tredje person. Kameran ligger bakdiagonalt på spelarens
+  // högra sida och tittar ned mot överkroppen, så både riktning och vapen syns.
+  const forwardX = Math.cos(p.angle);
+  const forwardZ = Math.sin(p.angle);
+  const rightX = -forwardZ;
+  const rightZ = forwardX;
+  const followDistance = 6.2;
+  const sideOffset = 1.15;
+  thirdPersonDesired.set(
+    p.x - forwardX * followDistance + rightX * sideOffset,
+    p.y + 4.65 - playerCrouch * 0.22 + Math.abs(cameraBob) * 0.18,
+    p.z - forwardZ * followDistance + rightZ * sideOffset,
   );
+  const pitch = Math.max(-0.48, Math.min(0.48, Number(state.pitch) || 0));
+  thirdPersonTarget.set(
+    p.x + forwardX * 1.25,
+    p.y + 1.28 - playerCrouch * 0.45 - Math.tan(pitch) * 1.15,
+    p.z + forwardZ * 1.25,
+  );
+  if (!thirdPersonReady || camera.position.distanceToSquared(thirdPersonDesired) > 625) {
+    camera.position.copy(thirdPersonDesired);
+    thirdPersonLook.copy(thirdPersonTarget);
+    thirdPersonReady = true;
+  } else {
+    const positionBlend = 1 - Math.exp(-dt * 7.5);
+    const lookBlend = 1 - Math.exp(-dt * 10.5);
+    camera.position.lerp(thirdPersonDesired, positionBlend);
+    thirdPersonLook.lerp(thirdPersonTarget, lookBlend);
+  }
+  camera.lookAt(thirdPersonLook);
+  camera.near = 0.08;
+  cameraOccluders.forEach((object) => { object.visible = false; });
+
   const scoped = state.scoped && state.weapon === 1 && state.upgrades.longgun;
-  const targetFov = scoped ? 24 : playerSpeed > 3.4 ? 78 : 73;
+  const targetFov = scoped ? 46 : playerSpeed > 3.4 ? 70 : 64;
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 11);
   camera.updateProjectionMatrix();
 
-  weaponRoot.visible = state.phase === "playing" && p.alive;
-  handgunView.visible = state.weapon === 0;
-  longgunView.visible = state.weapon === 1;
-  longgunView.children.forEach((child) => {
-    if (child.userData.scopePart) child.visible = state.upgrades.longgun;
-  });
-  weaponRoot.userData.paintMaterial.color.set(p.color);
-  weaponRoot.userData.paintMaterial.emissive.set(p.color);
-  const bobX = Math.sin(state.time * 7.4) * Math.min(0.035, playerSpeed * 0.009);
-  const bobY = Math.abs(Math.cos(state.time * 7.4)) * Math.min(0.035, playerSpeed * 0.008);
-  const scopedOffset = scoped ? -0.19 : 0;
-  weaponRoot.position.set(0.3 + bobX + scopedOffset, -0.32 - bobY, -0.6 + state.recoil * 0.18);
-  weaponRoot.rotation.set(-0.05 - state.recoil * 0.8, -0.08 + bobX * 0.8, -0.04 + sideBob);
-  handgunView.userData.flash.visible = state.muzzleFlash > 0 && state.weapon === 0;
-  longgunView.userData.flash.visible = state.muzzleFlash > 0 && state.weapon === 1;
+  weaponRoot.visible = false;
 }
 
 function resize() {
@@ -1153,6 +1697,8 @@ function frame(now) {
   const dt = Math.min(0.05, Math.max(0.001, (now - lastFrame) / 1000));
   lastFrame = now;
   state = api.getState();
+  syncArenaWorld();
+  syncFurnitureModels();
   if (badge) badge.hidden = state.phase !== "menu";
   syncActors(dt);
   syncDecals();

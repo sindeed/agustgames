@@ -62,3 +62,47 @@ Original prompt: Bygg Paint War som ett förstapersonsspel för dator, iPad och 
 - GitHub Pages levererar nya `index.html` och `graphics3d.js` med HTTP 200.
 - Den publicerade Team-versionen är provspelad med rörelse, vridning och skott utan fel; ett separat liveprov i WebKit/Safari rapporterar `real-time WebGL 3D` och `ready: true`.
 - Direktlänk: `https://sindeed.github.io/agustgames/paint-war/?v=20260725-paintwar-3d-v2b`.
+
+## Botuppgraderingar – ny begäran
+
+- Ny användarbegäran: bottar får aldrig använda uppgraderade vapen; bara spelaren får uppgraderingar.
+- Vapenkontrollen är nu låst till exakt `state.player` i stället för att anta att alla med `bot: false` är spelaren.
+- `render_game_to_text` visar den uttryckliga regeln `playerOnly: true`, `botsCanUpgrade: false` samt varje närliggande deltagares vapen, uppgraderingsstatus, eldhastighet och räckvidd.
+- Exakt QA passerar när spelaren äger båda uppgraderingarna: spelarens handpistol får 1 ms och långpistolen räckvidd 90 med sikte; botarnas handpistol stannar på 500 ms/räckvidd 34 och långpistolen på sin vanliga 1 ms/räckvidd 42. Båda rapporterar `weaponUpgraded: false`.
+- Visuell Playwright-kontroll passerar i 3D utan konsol- eller sidfel: `output/paint-war-player-only-upgrades/shot-0.png`.
+- Nästa steg: publicera och liveverifiera iPad-versionen.
+
+## Väggspringning, duckning, möbler och tillfälliga uppgraderingar
+
+- Nya användarbegäranden: spelaren ska automatiskt kunna springa uppför fristående väggar och stå/skjuta ovanpå dem; husväggar och bottar får inte vara klätterbara.
+- De 20 cellerna i arenans tre fristående väggar är nu särskilt markerade. Spelaren klättrar när hen fortsätter gå in i en sådan vägg, stannar stabilt på toppen och kan hoppa/gå ned. 3D-världen visar gröna lysande grepp och toppmarkeringar.
+- Duckning är tillagd med C/Ctrl på dator och en växlande DUCKA-knapp på iPad/iPhone. Duckning sänker kamera, skottursprung, träffyta och gånghastighet.
+- 15 fysiska småmöbler är tillagda: exakt en i vart och ett av nio hus, tre direkt utanför hus och tre ute i den öppna arenan. Samma data styr 3D-mesh, rörelsekollision och skottblockering.
+- Möbler kan få bestående färgträffar. Skottstrålar och färgdekaler använder nu verklig höjd, även när spelaren skjuter ned från en vägg.
+- Köpta uppgraderingar håller nu i tre färdigspelade matcher. Räknaren sparas, visas i Shoppen och uppgraderingen måste köpas igen efter match tre.
+- Botar använder fortfarande endast grundvapen och kan varken klättra eller ducka.
+- Syntax- och diffkontroll passerar. Nästa steg: deterministisk gameplay-QA, visuell desktop/iPad-kontroll och därefter publicering.
+
+## Waves, kartval och förenklade mobilkontroller – ny begäran
+
+- Ny användarbegäran: lämna Godot och fortsätt i webbläsarspelet.
+- Waves ska ha sju vågor i ett hus som upplevs fortsätta utan slut; bottarna använder endast handpistol.
+- Solo och Duo ska alltid öppna kartvalet Huset, Gården eller Byn före matchstart.
+- Spelaren ska inte sikta manuellt. Skjutknappen vrider automatiskt mot närmaste levande fiende; väggar och bord stoppar fortfarande skott.
+- Mobilkontrollerna ska vara Skjut, Hoppa, Spring, Byt vapen, Flytta bord och Ducka.
+- Duckad spelare kan krypa under bord, där bordsskivan fungerar som riktigt skottskydd.
+- Kartprofiler, sjuvågslogik, automatisk målsökning, flyttbara bord och bordsskydd är nu under implementation i `game.js`.
+- Nästa steg: färdigställ meny/3D-kartväxling, kör Playwright-QA och skapa en riktig iPad-skärmbild.
+
+### Färdig implementation och QA
+
+- Tredjepersonskameran följer spelaren bakifrån, snett ovanifrån; den egna gubben och vapnet syns och förstapersonsvapnet är borttaget.
+- Waves använder det oändliga inomhushuset med 32 flyttbara bord och sju verifierade vågor: 2, 3, 4, 5, 6, 7 och 9 bottar.
+- Alla Wave-bottar är låsta till vanlig handpistol.
+- Solo öppnar verifierat kartval och startar rätt faktisk karta; samma koppling används av Duo.
+- Automatisk skjutning verifierad: närmaste bot gick från 100 till 70 HP utan manuell siktning.
+- Bordsskydd verifierat: duckad spelare registrerades under ett bord; flyttknappen flyttade bordets riktiga speldata och 3D-modell.
+- Simulerad iPad Pro 11 i liggande läge visar alla sex knappar utan fel: Skjut, Hoppa, Spring, Byt, Flytta bord och Ducka.
+- Full iPad-QA gav inga konsol- eller sidfel. Resultat: `output/paint-war-ipad-final/results.json`.
+- Verifierad riktig iPad-bild: `output/paint-war-ipad-final/ipad-waves-gameplay.png`.
+- Nästa steg: publicera de fem Paint War-filerna till Agust Games och liveverifiera sidan.

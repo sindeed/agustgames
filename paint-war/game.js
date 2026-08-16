@@ -15,10 +15,27 @@
 
   const W = view.width;
   const H = view.height;
-  const MAP_W = 74;
-  const MAP_H = 74;
+  const DISTRICT_SIZE = 64;
+  const ARENA_TILES = [
+    { x: 0, z: 0, name: "Västra färgstaden" },
+    { x: 64, z: 0, name: "Centrala färgstaden" },
+    { x: 128, z: 0, name: "Östra färgstaden" },
+    { x: 0, z: 64, name: "Södra väststaden" },
+    { x: 64, z: 64, name: "Södra färgstaden" },
+  ];
+  const ARENA_AREA_MULTIPLIER = ARENA_TILES.length;
+  const MAP_W = 200;
+  const MAP_H = 138;
+  const OUTROOM = { x: 194.5, z: 132.5, minX: 192, maxX: 197, minZ: 130, maxZ: 135 };
   const PLAYER_RADIUS = 0.23;
   const CAMERA_HEIGHT = 0.56;
+  const SHOT_CAMERA_HEIGHT = 1.62;
+  const CROUCHED_SHOT_CAMERA_HEIGHT = 0.82;
+  const STANDING_TARGET_CENTER = 1.18;
+  const CROUCHED_TARGET_CENTER = 0.58;
+  const WALL_TOP_HEIGHT = 3.08;
+  const WALL_CLIMB_SECONDS = 0.64;
+  const UPGRADE_MATCH_LIFETIME = 3;
   const TEAM_COLORS = ["#20a4ff", "#ff466d", "#ffd43b", "#5ee06f", "#bd63ff"];
   const SOLO_COLORS = [
     "#20a4ff", "#ff466d", "#ffd43b", "#5ee06f", "#bd63ff",
@@ -29,8 +46,150 @@
     { key: "longgun", name: "Långpistol", damage: 5, interval: 1, range: 42 },
   ];
   const UPGRADE_COST = { handgun: 150, longgun: 100 };
+  const WAVE_BOT_COUNTS = [2, 3, 4, 5, 6, 7, 9];
+  const MAP_LABELS = {
+    house: "HUSET",
+    yard: "GÅRDEN",
+    village: "BYN",
+    "endless-house": "OÄNDLIGA HUSET",
+  };
+  const BASE_HOUSES = [
+    { x: 3, z: 3, w: 10, h: 9, theme: 1, floor: "#d9b776" },
+    { x: 22, z: 3, w: 11, h: 10, theme: 2, floor: "#c5d8df" },
+    { x: 46, z: 3, w: 11, h: 10, theme: 3, floor: "#dfc5a2" },
+    { x: 3, z: 23, w: 11, h: 10, theme: 4, floor: "#c8d8b5" },
+    { x: 22, z: 23, w: 12, h: 10, theme: 1, floor: "#d7b5c9" },
+    { x: 46, z: 23, w: 11, h: 10, theme: 2, floor: "#c8d4e6" },
+    { x: 3, z: 45, w: 12, h: 11, theme: 3, floor: "#dec48f" },
+    { x: 23, z: 45, w: 11, h: 11, theme: 4, floor: "#bed9d6" },
+    { x: 44, z: 45, w: 13, h: 11, theme: 1, floor: "#d9bdce" },
+  ];
+  const HOUSE_DEFS = ARENA_TILES.flatMap((tile, tileIndex) => BASE_HOUSES.map((house, baseIndex) => ({
+    ...house,
+    x: house.x + tile.x,
+    z: house.z + tile.z,
+    d: house.h,
+    tileIndex,
+    baseIndex,
+  })));
+  const HOUSE_FLOORS = HOUSE_DEFS.map((house) => [
+    house.x,
+    house.z,
+    house.w,
+    house.h,
+    house.floor,
+  ]);
+  const HOUSE_FURNITURE_STYLES = [
+    ["cabinet", 1.55, 0.72, 0.98, "#ff8a34"],
+    ["sofa", 1.65, 0.82, 0.94, "#20a4ff"],
+    ["cabinet", 1.5, 0.7, 1.02, "#ffd43b"],
+    ["sofa", 1.7, 0.82, 0.92, "#5ee06f"],
+    ["cabinet", 1.55, 0.72, 1, "#f45bd1"],
+    ["sofa", 1.65, 0.82, 0.94, "#7f8cff"],
+    ["cabinet", 1.6, 0.72, 1.02, "#ff466d"],
+    ["sofa", 1.7, 0.82, 0.93, "#25e0d0"],
+    ["cabinet", 1.55, 0.72, 1, "#bd63ff"],
+  ];
+  const FURNITURE = HOUSE_DEFS.map((house, index) => {
+    const [kind, width, depth, height, color] = HOUSE_FURNITURE_STYLES[house.baseIndex];
+    return {
+      id: `house-${index + 1}`,
+      zone: "house",
+      house: index + 1,
+      kind,
+      x: house.x + 2.4,
+      z: house.z + 2.3,
+      width,
+      depth,
+      height,
+      color,
+    };
+  });
+  const EXTRA_FURNITURE = [
+    ["outside-1", "outside-house", "bench", 14.2, 7.5, 1.65, 0.62, 0.9, "#e6a54c"],
+    ["outside-2", "outside-house", "bench", 15.2, 27, 1.65, 0.62, 0.9, "#55a7b7"],
+    ["outside-3", "outside-house", "bench", 35.5, 48, 1.65, 0.62, 0.9, "#8d73c8"],
+    ["arena-1", "arena", "crate", 18, 29, 1.2, 1.2, 1.05, "#20a4ff"],
+    ["arena-2", "arena", "crate", 39.5, 34.3, 1.2, 1.2, 1.05, "#ff466d"],
+    ["arena-3", "arena", "crate", 30, 40.3, 1.2, 1.2, 1.05, "#ffd43b"],
+  ];
+  ARENA_TILES.forEach((tile, tileIndex) => {
+    EXTRA_FURNITURE.forEach(([id, zone, kind, x, z, width, depth, height, color]) => {
+      FURNITURE.push({
+        id: `${id}-district-${tileIndex + 1}`,
+        zone,
+        kind,
+        x: x + tile.x,
+        z: z + tile.z,
+        width,
+        depth,
+        height,
+        color,
+      });
+    });
+  });
+  function gameTable(id, x, z, color = "#e6a54c", width = 1.8, depth = 1.05) {
+    return {
+      id,
+      zone: "map",
+      kind: "table",
+      x,
+      z,
+      width,
+      depth,
+      height: 0.96,
+      color,
+      movable: true,
+    };
+  }
+  const YARD_FURNITURE = [
+    gameTable("yard-table-1", 15, 15, "#ff8a34"),
+    gameTable("yard-table-2", 31, 14, "#20a4ff"),
+    gameTable("yard-table-3", 47, 15, "#ffd43b"),
+    gameTable("yard-table-4", 16, 32, "#5ee06f"),
+    gameTable("yard-table-5", 47, 32, "#bd63ff"),
+    gameTable("yard-table-6", 16, 48, "#f45bd1"),
+    gameTable("yard-table-7", 32, 48, "#25e0d0"),
+    gameTable("yard-table-8", 48, 48, "#ff466d"),
+  ];
+  const HOUSE_MAP_FURNITURE = [
+    gameTable("house-table-1", 11.5, 11.5, "#ff8a34"),
+    gameTable("house-table-2", 23.5, 11.5, "#20a4ff"),
+    gameTable("house-table-3", 35.5, 11.5, "#ffd43b"),
+    gameTable("house-table-4", 47.5, 11.5, "#5ee06f"),
+    gameTable("house-table-5", 11.5, 27.5, "#bd63ff"),
+    gameTable("house-table-6", 27.5, 27.5, "#f45bd1"),
+    gameTable("house-table-7", 43.5, 27.5, "#25e0d0"),
+    gameTable("house-table-8", 11.5, 43.5, "#ff466d"),
+    gameTable("house-table-9", 27.5, 47.5, "#7f8cff"),
+    gameTable("house-table-10", 47.5, 47.5, "#e6a54c"),
+  ];
+  const ENDLESS_HOUSE_FURNITURE = [];
+  for (let z = 6; z <= 62; z += 8) {
+    for (let x = 6; x <= 62; x += 8) {
+      if ((x + z) % 16 === 12) {
+        ENDLESS_HOUSE_FURNITURE.push(gameTable(
+          `endless-table-${x}-${z}`,
+          x + 0.5,
+          z + 0.5,
+          SOLO_COLORS[(x + z) % SOLO_COLORS.length],
+          1.65,
+          1.0,
+        ));
+      }
+    }
+  }
   const grid = new Uint8Array(MAP_W * MAP_H);
   const wallTheme = new Uint8Array(MAP_W * MAP_H);
+  const climbableWalls = new Uint8Array(MAP_W * MAP_H);
+  let activeMapId = "village";
+  let activeMapKind = "village";
+  let arenaRevision = 1;
+  let activeFurniture = FURNITURE;
+  let activeHouseDefs = HOUSE_DEFS;
+  let activeHouseFloors = HOUSE_FLOORS;
+  let activeTiles = ARENA_TILES;
+  let activeBounds = { minX: 0, minZ: 0, maxX: 192, maxZ: 128, width: 192, height: 128 };
   const keys = Object.create(null);
   const touchActions = Object.create(null);
   const pointerState = { move: null, look: null };
@@ -46,15 +205,35 @@
   function loadSave() {
     try {
       const saved = JSON.parse(localStorage.getItem("paintWarSave") || "{}");
+      const savedUpgrades = {
+        handgun: Boolean(saved.upgrades && saved.upgrades.handgun),
+        longgun: Boolean(saved.upgrades && saved.upgrades.longgun),
+      };
+      const remainingMatches = (key) => {
+        if (!savedUpgrades[key]) return 0;
+        const stored = Number(saved.upgradeMatches && saved.upgradeMatches[key]);
+        return Number.isFinite(stored)
+          ? Math.max(0, Math.min(UPGRADE_MATCH_LIFETIME, Math.floor(stored)))
+          : UPGRADE_MATCH_LIFETIME;
+      };
+      const upgradeMatches = {
+        handgun: remainingMatches("handgun"),
+        longgun: remainingMatches("longgun"),
+      };
       return {
         coins: Number.isFinite(saved.coins) ? saved.coins : 300,
         upgrades: {
-          handgun: Boolean(saved.upgrades && saved.upgrades.handgun),
-          longgun: Boolean(saved.upgrades && saved.upgrades.longgun),
+          handgun: upgradeMatches.handgun > 0,
+          longgun: upgradeMatches.longgun > 0,
         },
+        upgradeMatches,
       };
     } catch {
-      return { coins: 300, upgrades: { handgun: false, longgun: false } };
+      return {
+        coins: 300,
+        upgrades: { handgun: false, longgun: false },
+        upgradeMatches: { handgun: 0, longgun: 0 },
+      };
     }
   }
 
@@ -62,6 +241,11 @@
   const state = {
     phase: "menu",
     mode: null,
+    mapId: "village",
+    pendingMode: null,
+    wave: 0,
+    waveDelay: 0,
+    arenaRevision: 1,
     players: [],
     player: null,
     decals: [],
@@ -77,6 +261,8 @@
     firing: false,
     jumping: false,
     sprinting: false,
+    crouching: false,
+    crouchToggle: false,
     pitch: 0,
     recoil: 0,
     hitmarker: 0,
@@ -86,9 +272,16 @@
     messageTime: 0,
     coins: save.coins,
     upgrades: save.upgrades,
+    upgradeMatches: save.upgradeMatches,
     stats: { hits: 0, ko: 0, points: 0 },
     seed: 123456789,
     testClock: false,
+    onWall: false,
+    wallClimb: null,
+    wallContactTime: 0,
+    wallDismountReady: false,
+    movingTableId: null,
+    underTableId: null,
   };
 
   function saveProgress() {
@@ -96,6 +289,7 @@
       localStorage.setItem("paintWarSave", JSON.stringify({
         coins: state.coins,
         upgrades: state.upgrades,
+        upgradeMatches: state.upgradeMatches,
       }));
     } catch {
       // Spelet fungerar även när privat surfning blockerar localStorage.
@@ -114,6 +308,11 @@
     const i = cellIndex(x, z);
     grid[i] = value;
     wallTheme[i] = theme;
+  }
+
+  function setClimbableWall(x, z, theme) {
+    setCell(x, z, 1, theme);
+    climbableWalls[cellIndex(x, z)] = 1;
   }
 
   function drawHouse(x, z, w, h, theme) {
@@ -138,67 +337,204 @@
     }
   }
 
-  function buildArena() {
-    grid.fill(0);
-    wallTheme.fill(0);
-    for (let x = 0; x <= 64; x += 1) {
-      setCell(x, 0, 1, 0);
-      setCell(x, 64, 1, 0);
+  function buildVillageArena() {
+    grid.fill(4);
+    wallTheme.fill(5);
+    climbableWalls.fill(0);
+    ARENA_TILES.forEach((tile) => {
+      for (let localZ = 0; localZ <= DISTRICT_SIZE; localZ += 1) {
+        for (let localX = 0; localX <= DISTRICT_SIZE; localX += 1) {
+          const boundary = localX === 0 || localZ === 0
+            || localX === DISTRICT_SIZE || localZ === DISTRICT_SIZE;
+          setCell(tile.x + localX, tile.z + localZ, boundary ? 1 : 0, 0);
+        }
+      }
+    });
+
+    const hasTile = (x, z) => ARENA_TILES.some((tile) => tile.x === x && tile.z === z);
+    ARENA_TILES.forEach((tile) => {
+      if (hasTile(tile.x + DISTRICT_SIZE, tile.z)) {
+        for (const [start, end] of [[15, 20], [36, 42]]) {
+          for (let localZ = start; localZ <= end; localZ += 1) {
+            setCell(tile.x + DISTRICT_SIZE, tile.z + localZ, 0);
+          }
+        }
+      }
+      if (hasTile(tile.x, tile.z + DISTRICT_SIZE)) {
+        for (const [start, end] of [[15, 19], [37, 42]]) {
+          for (let localX = start; localX <= end; localX += 1) {
+            setCell(tile.x + localX, tile.z + DISTRICT_SIZE, 0);
+          }
+        }
+      }
+    });
+
+    HOUSE_DEFS.forEach((house) => drawHouse(
+      house.x,
+      house.z,
+      house.w,
+      house.h,
+      house.theme,
+    ));
+    ARENA_TILES.forEach((tile) => {
+      for (let x = 8; x <= 14; x += 1) setClimbableWall(tile.x + x, tile.z + 40, 4);
+      for (let z = 18; z <= 23; z += 1) setClimbableWall(tile.x + 39, tile.z + z, 2);
+      for (let x = 40; x <= 46; x += 1) setClimbableWall(tile.x + x, tile.z + 39, 3);
+    });
+    for (let z = OUTROOM.minZ; z <= OUTROOM.maxZ; z += 1) {
+      for (let x = OUTROOM.minX; x <= OUTROOM.maxX; x += 1) setCell(x, z, 0, 5);
     }
-    for (let z = 0; z <= 64; z += 1) {
-      setCell(0, z, 1, 0);
-      setCell(64, z, 1, 0);
-    }
-    for (let z = 0; z < MAP_H; z += 1) {
-      for (let x = 65; x < MAP_W; x += 1) setCell(x, z, 1, 5);
-    }
-    for (let z = 65; z < MAP_H; z += 1) {
-      for (let x = 0; x < MAP_W; x += 1) setCell(x, z, 1, 5);
-    }
-    for (let z = 68; z <= 72; z += 1) {
-      for (let x = 68; x <= 72; x += 1) setCell(x, z, 0, 5);
-    }
-    drawHouse(3, 3, 10, 9, 1);
-    drawHouse(22, 3, 11, 10, 2);
-    drawHouse(46, 3, 11, 10, 3);
-    drawHouse(3, 23, 11, 10, 4);
-    drawHouse(22, 23, 12, 10, 1);
-    drawHouse(46, 23, 11, 10, 2);
-    drawHouse(3, 45, 12, 11, 3);
-    drawHouse(23, 45, 11, 11, 4);
-    drawHouse(44, 45, 13, 11, 1);
-    for (let x = 8; x <= 14; x += 1) setCell(x, 40, 1, 4);
-    for (let z = 18; z <= 23; z += 1) setCell(39, z, 1, 2);
-    for (let x = 40; x <= 46; x += 1) setCell(x, 39, 1, 3);
+    activeMapId = "village";
+    activeMapKind = "village";
+    activeFurniture = FURNITURE;
+    activeHouseDefs = HOUSE_DEFS;
+    activeHouseFloors = HOUSE_FLOORS;
+    activeTiles = ARENA_TILES;
+    activeBounds = { minX: 0, minZ: 0, maxX: 192, maxZ: 128, width: 192, height: 128 };
   }
-  buildArena();
+
+  function clearArena(theme = 0) {
+    grid.fill(4);
+    wallTheme.fill(theme);
+    climbableWalls.fill(0);
+  }
+
+  function buildBoundary(minX, minZ, maxX, maxZ, theme) {
+    for (let x = minX; x <= maxX; x += 1) {
+      setCell(x, minZ, 1, theme);
+      setCell(x, maxZ, 1, theme);
+    }
+    for (let z = minZ; z <= maxZ; z += 1) {
+      setCell(minX, z, 1, theme);
+      setCell(maxX, z, 1, theme);
+    }
+  }
+
+  function buildYardArena() {
+    clearArena(3);
+    for (let z = 4; z <= 60; z += 1) {
+      for (let x = 4; x <= 60; x += 1) setCell(x, z, 0, 3);
+    }
+    buildBoundary(4, 4, 60, 60, 3);
+    const covers = [
+      [20, 20, 6, 2, 1], [39, 20, 6, 2, 2], [29, 31, 6, 2, 4],
+      [13, 40, 5, 2, 2], [46, 41, 5, 2, 1], [29, 52, 6, 2, 4],
+    ];
+    covers.forEach(([x, z, w, d, theme]) => {
+      for (let zz = z; zz < z + d; zz += 1) {
+        for (let xx = x; xx < x + w; xx += 1) setCell(xx, zz, 1, theme);
+      }
+    });
+    activeMapId = "yard";
+    activeMapKind = "yard";
+    activeFurniture = YARD_FURNITURE;
+    activeHouseDefs = [];
+    activeHouseFloors = [];
+    activeTiles = [];
+    activeBounds = { minX: 4, minZ: 4, maxX: 60, maxZ: 60, width: 56, height: 56 };
+  }
+
+  function buildHouseArena() {
+    clearArena(2);
+    for (let z = 4; z <= 60; z += 1) {
+      for (let x = 4; x <= 60; x += 1) setCell(x, z, 0, 2);
+    }
+    buildBoundary(4, 4, 60, 60, 2);
+    for (const wallX of [16, 32, 48]) {
+      for (let z = 5; z < 60; z += 1) {
+        if (z % 16 < 6 || z % 16 > 9) setCell(wallX, z, 1, 2);
+      }
+    }
+    for (const wallZ of [16, 32, 48]) {
+      for (let x = 5; x < 60; x += 1) {
+        if (x % 16 < 6 || x % 16 > 9) setCell(x, wallZ, 1, 2);
+      }
+    }
+    activeMapId = "house";
+    activeMapKind = "house";
+    activeFurniture = HOUSE_MAP_FURNITURE;
+    activeHouseDefs = [];
+    activeHouseFloors = [[4, 4, 57, 57, "#d6ad72"]];
+    activeTiles = [];
+    activeBounds = { minX: 4, minZ: 4, maxX: 60, maxZ: 60, width: 56, height: 56 };
+  }
+
+  function buildEndlessHouseArena() {
+    clearArena(4);
+    for (let z = 0; z < 68; z += 1) {
+      for (let x = 0; x < 68; x += 1) {
+        const verticalWall = x % 8 === 0 && ![3, 4].includes(z % 8);
+        const horizontalWall = z % 8 === 0 && ![3, 4].includes(x % 8);
+        setCell(x, z, verticalWall || horizontalWall ? 1 : 0, 4);
+      }
+    }
+    activeMapId = "endless-house";
+    activeMapKind = "endless-house";
+    activeFurniture = ENDLESS_HOUSE_FURNITURE;
+    activeHouseDefs = [];
+    activeHouseFloors = [[0, 0, 68, 68, "#b58ec7"]];
+    activeTiles = [];
+    activeBounds = { minX: 0, minZ: 0, maxX: 68, maxZ: 68, width: 68, height: 68 };
+  }
+
+  function activateMap(mapId) {
+    if (mapId === "house") buildHouseArena();
+    else if (mapId === "yard") buildYardArena();
+    else if (mapId === "endless-house") buildEndlessHouseArena();
+    else buildVillageArena();
+    arenaRevision += 1;
+    state.mapId = activeMapId;
+    state.arenaRevision = arenaRevision;
+  }
+
+  buildVillageArena();
+
+  function arenaTileAt(x, z) {
+    return activeTiles.find((tile) => (
+      x >= tile.x && x <= tile.x + DISTRICT_SIZE
+      && z >= tile.z && z <= tile.z + DISTRICT_SIZE
+    ));
+  }
 
   function isRoad(x, z) {
-    return (x >= 15 && x <= 19) || (x >= 37 && x <= 42)
-      || (z >= 15 && z <= 20) || (z >= 36 && z <= 42);
+    const tile = arenaTileAt(x, z);
+    if (!tile) return false;
+    const localX = x - tile.x;
+    const localZ = z - tile.z;
+    return (localX >= 15 && localX <= 19) || (localX >= 37 && localX <= 42)
+      || (localZ >= 15 && localZ <= 20) || (localZ >= 36 && localZ <= 42);
   }
 
-  const HOUSE_FLOORS = [
-    [3, 3, 10, 9, "#d9b776"], [22, 3, 11, 10, "#c5d8df"], [46, 3, 11, 10, "#dfc5a2"],
-    [3, 23, 11, 10, "#c8d8b5"], [22, 23, 12, 10, "#d7b5c9"], [46, 23, 11, 10, "#c8d4e6"],
-    [3, 45, 12, 11, "#dec48f"], [23, 45, 11, 11, "#bed9d6"], [44, 45, 13, 11, "#d9bdce"],
-  ];
-
   function floorColor(x, z) {
-    if (x >= 68 && x <= 73 && z >= 68 && z <= 73) {
+    if (activeMapKind === "yard") {
+      return (Math.floor(x) + Math.floor(z)) % 2 ? "#6ea64d" : "#78b657";
+    }
+    if (activeMapKind === "house" || activeMapKind === "endless-house") {
+      const colors = activeMapKind === "endless-house"
+        ? ["#b88fc7", "#caa7d4"]
+        : ["#c99863", "#ddb77d"];
+      return colors[(Math.floor(x / 4) + Math.floor(z / 4)) % 2];
+    }
+    if (
+      x >= OUTROOM.minX && x <= OUTROOM.maxX
+      && z >= OUTROOM.minZ && z <= OUTROOM.maxZ
+    ) {
       return (Math.floor(x) + Math.floor(z)) % 2 ? "#33465a" : "#405a70";
     }
-    for (const [hx, hz, hw, hh, color] of HOUSE_FLOORS) {
+    for (const [hx, hz, hw, hh, color] of activeHouseFloors) {
       if (x > hx && x < hx + hw - 1 && z > hz && z < hz + hh - 1) {
         return (Math.floor(x * 2) + Math.floor(z * 2)) % 2 ? color : shade(color, 0.92);
       }
     }
     if (isRoad(x, z)) {
-      const horizontal = (z >= 15 && z <= 20) || (z >= 36 && z <= 42);
+      const tile = arenaTileAt(x, z);
+      const localX = x - tile.x;
+      const localZ = z - tile.z;
+      const horizontal = (localZ >= 15 && localZ <= 20) || (localZ >= 36 && localZ <= 42);
       const center = horizontal
-        ? (Math.abs(z - 17.5) < 0.11 || Math.abs(z - 39) < 0.11)
-        : (Math.abs(x - 17) < 0.11 || Math.abs(x - 39.5) < 0.11);
-      const dashAxis = horizontal ? x : z;
+        ? (Math.abs(localZ - 17.5) < 0.11 || Math.abs(localZ - 39) < 0.11)
+        : (Math.abs(localX - 17) < 0.11 || Math.abs(localX - 39.5) < 0.11);
+      const dashAxis = horizontal ? localX : localZ;
       if (center && Math.floor(dashAxis * 0.55) % 2 === 0) return "#f3cf55";
       return (Math.floor(x) + Math.floor(z)) % 2 ? "#59636b" : "#626d75";
     }
@@ -216,10 +552,17 @@
     return a;
   }
 
-  function collides(x, z) {
+  function collides(x, z, actor = null) {
     for (let i = 0; i < 8; i += 1) {
       const a = i * Math.PI / 4;
       if (getCell(x + Math.cos(a) * PLAYER_RADIUS, z + Math.sin(a) * PLAYER_RADIUS) !== 0) return true;
+    }
+    for (const item of activeFurniture) {
+      if (actor === state.player && state.movingTableId === item.id) continue;
+      if (actor === state.player && state.crouching && item.kind === "table") continue;
+      const nearestX = Math.max(item.x - item.width / 2, Math.min(x, item.x + item.width / 2));
+      const nearestZ = Math.max(item.z - item.depth / 2, Math.min(z, item.z + item.depth / 2));
+      if (Math.hypot(x - nearestX, z - nearestZ) < PLAYER_RADIUS) return true;
     }
     return false;
   }
@@ -227,38 +570,137 @@
   function moveActor(actor, dx, dz) {
     const nx = actor.x + dx;
     const nz = actor.z + dz;
-    if (!collides(nx, actor.z)) actor.x = nx;
-    if (!collides(actor.x, nz)) actor.z = nz;
+    if (!collides(nx, actor.z, actor)) actor.x = nx;
+    if (!collides(actor.x, nz, actor)) actor.z = nz;
+  }
+
+  function nearestMovableTable(maxDistance = 2.4) {
+    if (!state.player) return null;
+    let nearest = null;
+    let nearestDistance = maxDistance;
+    for (const item of activeFurniture) {
+      if (!item.movable || item.kind !== "table") continue;
+      const distance = Math.hypot(item.x - state.player.x, item.z - state.player.z);
+      if (distance < nearestDistance) {
+        nearest = item;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function tableCanStandAt(item, x, z) {
+    const marginX = item.width / 2 + 0.08;
+    const marginZ = item.depth / 2 + 0.08;
+    for (const [px, pz] of [
+      [x - marginX, z - marginZ], [x + marginX, z - marginZ],
+      [x - marginX, z + marginZ], [x + marginX, z + marginZ],
+    ]) {
+      if (getCell(px, pz) !== 0) return false;
+    }
+    return !activeFurniture.some((other) => other !== item
+      && Math.abs(other.x - x) < (other.width + item.width) * 0.45
+      && Math.abs(other.z - z) < (other.depth + item.depth) * 0.45);
+  }
+
+  function toggleMoveTable() {
+    if (!state.player?.alive) return;
+    if (state.movingTableId) {
+      state.movingTableId = null;
+      state.message = "Bordet står kvar där!";
+      state.messageTime = 1.2;
+      return;
+    }
+    const table = nearestMovableTable();
+    if (!table) {
+      state.message = "Gå närmare ett bord först.";
+      state.messageTime = 1.5;
+      return;
+    }
+    state.crouchToggle = false;
+    state.crouching = false;
+    state.movingTableId = table.id;
+    state.message = "Du flyttar bordet · tryck igen för att släppa!";
+    state.messageTime = 1.8;
+  }
+
+  function updateMovingTable() {
+    if (!state.movingTableId || !state.player?.alive) return;
+    const table = activeFurniture.find((item) => item.id === state.movingTableId);
+    if (!table) {
+      state.movingTableId = null;
+      return;
+    }
+    const distance = 1.35;
+    const targetX = state.player.x + Math.cos(state.player.angle) * distance;
+    const targetZ = state.player.z + Math.sin(state.player.angle) * distance;
+    if (tableCanStandAt(table, targetX, targetZ)) {
+      table.x = targetX;
+      table.z = targetZ;
+    }
+  }
+
+  function updateTableCover() {
+    state.underTableId = null;
+    if (!state.crouching || !state.player?.alive) return;
+    const p = state.player;
+    const table = activeFurniture.find((item) => item.kind === "table"
+      && Math.abs(item.x - p.x) <= item.width * 0.42
+      && Math.abs(item.z - p.z) <= item.depth * 0.42);
+    if (table) state.underTableId = table.id;
   }
 
   function teamFor(mode, i) {
     if (mode === "solo") return i;
+    if (mode === "waves") return i === 0 ? 0 : 1;
     if (mode === "duo") return Math.floor(i / 2);
     return i < 5 ? 0 : 1;
   }
 
   const SPAWNS = [
-    [17.5, 2.5], [39.5, 2.5], [61.5, 10.5], [16.5, 22],
-    [43.5, 22], [61, 30], [16.5, 43.5], [39.5, 43.5],
-    [61, 52], [38, 61],
+    [17.5, 2.5], [39.5, 2.5],
+    [81.5, 2.5], [103.5, 22],
+    [145.5, 2.5], [167.5, 22],
+    [16.5, 86], [39.5, 107.5],
+    [80.5, 86], [103.5, 107.5],
   ];
+  const YARD_SPAWNS = [
+    [9.5, 9.5], [23.5, 9.5], [39.5, 9.5], [54.5, 10.5], [10.5, 27.5],
+    [53.5, 27.5], [10.5, 53.5], [25.5, 54.5], [40.5, 54.5], [54.5, 53.5],
+  ];
+  const HOUSE_SPAWNS = [
+    [8.5, 8.5], [24.5, 8.5], [40.5, 8.5], [55.5, 8.5], [8.5, 24.5],
+    [24.5, 24.5], [40.5, 24.5], [55.5, 40.5], [24.5, 55.5], [55.5, 55.5],
+  ];
+  const ENDLESS_SPAWNS = [
+    [12.5, 12.5], [20.5, 12.5], [28.5, 12.5], [36.5, 12.5], [44.5, 12.5],
+    [52.5, 20.5], [12.5, 36.5], [28.5, 44.5], [44.5, 52.5], [52.5, 52.5],
+  ];
+
+  function activeSpawns() {
+    if (activeMapId === "yard") return YARD_SPAWNS;
+    if (activeMapId === "house") return HOUSE_SPAWNS;
+    if (activeMapId === "endless-house") return ENDLESS_SPAWNS;
+    return SPAWNS;
+  }
 
   function createActor(i, mode) {
     const team = teamFor(mode, i);
-    const spawn = SPAWNS[i];
+    const spawns = activeSpawns();
+    const spawn = spawns[i % spawns.length];
     return {
       id: i,
       name: i === 0 ? "Du" : `Bot ${i}`,
       bot: i !== 0,
       team,
-      color: mode === "solo" ? SOLO_COLORS[i] : TEAM_COLORS[team],
+      color: mode === "solo" || mode === "waves" ? SOLO_COLORS[i % SOLO_COLORS.length] : TEAM_COLORS[team],
       x: spawn[0],
       z: spawn[1],
       angle: i === 0 ? Math.PI / 2 : seededRandom() * Math.PI * 2,
       health: 100,
       alive: true,
       outroom: false,
-      weapon: i % 3 === 0 ? 0 : 1,
+      weapon: mode === "waves" && i !== 0 ? 0 : (i % 3 === 0 ? 0 : 1),
       cooldown: i === 0 ? 0 : 500 + seededRandom() * 700,
       think: seededRandom() * 0.4,
       target: null,
@@ -272,6 +714,7 @@
   function setScreen(name) {
     const screens = {
       menu: document.getElementById("main-menu"),
+      "map-select": document.getElementById("map-select-overlay"),
       shop: document.getElementById("shop-overlay"),
       "match-end": document.getElementById("match-end-overlay"),
     };
@@ -308,16 +751,62 @@
     state.firing = false;
     state.jumping = false;
     state.sprinting = false;
+    state.crouching = false;
+    state.crouchToggle = false;
+    state.movingTableId = null;
+    state.underTableId = null;
     const knob = document.getElementById("move-knob");
     if (knob) knob.style.transform = "translate(-50%, -50%)";
     document.querySelectorAll("[data-action].active").forEach((button) => button.classList.remove("active"));
   }
 
-  function startMatch(mode) {
+  function chooseMode(mode) {
+    if (mode === "solo" || mode === "duo") {
+      state.pendingMode = mode;
+      state.phase = "map-select";
+      setScreen("map-select");
+      return;
+    }
+    startMatch(mode, mode === "waves" ? "endless-house" : "village");
+  }
+
+  function startWave(number) {
+    state.wave = number;
+    state.waveDelay = 0;
+    const player = state.player;
+    const spawn = ENDLESS_SPAWNS[0];
+    player.x = spawn[0];
+    player.z = spawn[1];
+    player.y = 0;
+    player.vy = 0;
+    player.health = 100;
+    player.alive = true;
+    player.outroom = false;
+    player.paint.length = 0;
+    const count = WAVE_BOT_COUNTS[number - 1];
+    const bots = Array.from({ length: count }, (_, slot) => {
+      const enemy = createActor(slot + 1, "waves");
+      enemy.id = number * 100 + slot + 1;
+      enemy.name = `Wavebot ${slot + 1}`;
+      enemy.team = 1;
+      enemy.weapon = 0;
+      return enemy;
+    });
+    state.players = [player, ...bots];
+    state.message = `WAVE ${number} AV 7 · ${count} PISTOLBOTTAR`;
+    state.messageTime = 2.6;
+  }
+
+  function startMatch(mode, mapId = "village") {
+    const chosenMap = mode === "waves" ? "endless-house" : mapId;
+    activateMap(chosenMap);
     state.phase = "playing";
     state.mode = mode;
-    state.seed = 1977 + ["solo", "duo", "team"].indexOf(mode) * 911;
-    state.players = Array.from({ length: 10 }, (_, i) => createActor(i, mode));
+    state.pendingMode = null;
+    state.seed = 1977 + ["solo", "duo", "team", "waves"].indexOf(mode) * 911;
+    state.players = mode === "waves"
+      ? [createActor(0, "waves")]
+      : Array.from({ length: 10 }, (_, i) => createActor(i, mode));
     state.player = state.players[0];
     state.decals.length = 0;
     state.tracers.length = 0;
@@ -330,8 +819,19 @@
     state.weapon = 0;
     state.scoped = false;
     state.pitch = 0;
+    state.onWall = false;
+    state.wallClimb = null;
+    state.wallContactTime = 0;
+    state.wallDismountReady = false;
+    state.movingTableId = null;
+    state.underTableId = null;
+    state.wave = mode === "waves" ? 1 : 0;
+    state.waveDelay = 0;
     state.stats = { hits: 0, ko: 0, points: 0 };
-    state.message = mode === "solo" ? "Alla mot alla!" : "Håll ihop med ditt lag!";
+    if (mode === "waves") startWave(1);
+    else state.message = mode === "solo"
+      ? `Alla mot alla i ${MAP_LABELS[chosenMap]}!`
+      : `Håll ihop med ditt lag i ${MAP_LABELS[chosenMap]}!`;
     state.messageTime = 2.5;
     resetControls();
     setScreen(null);
@@ -366,14 +866,21 @@
     }
     state.coins -= cost;
     state.upgrades[key] = true;
+    state.upgradeMatches[key] = UPGRADE_MATCH_LIFETIME;
     saveProgress();
     updateShop();
     updateHud();
   }
 
   function weaponStats(actor) {
-    const base = WEAPONS[actor.bot ? actor.weapon : state.weapon];
-    const upgraded = !actor.bot && state.upgrades[base.key];
+    const isPlayer = actor === state.player;
+    const weaponIndex = state.mode === "waves" && actor.bot
+      ? 0
+      : (isPlayer ? state.weapon : actor.weapon);
+    const base = WEAPONS[weaponIndex];
+    // Bara den lokala spelaren får använda köpta uppgraderingar.
+    // Bottarnas vapen använder alltid vapnets vanliga värden.
+    const upgraded = isPlayer && state.upgrades[base.key];
     return {
       ...base,
       upgraded,
@@ -385,23 +892,133 @@
   function traceWall(x, z, angle, maxDistance, ignoreWindows = true) {
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
+    const startCellX = Math.floor(x);
+    const startCellZ = Math.floor(z);
+    const startedInsideWall = getCell(x, z) !== 0;
     for (let d = 0.08; d <= maxDistance; d += 0.08) {
       const px = x + dx * d;
       const pz = z + dz * d;
+      if (
+        startedInsideWall
+        && Math.floor(px) === startCellX
+        && Math.floor(pz) === startCellZ
+      ) continue;
       const cell = getCell(px, pz);
-      if (cell === 1 || (cell === 2 && !ignoreWindows)) {
-        return { distance: d, x: px, z: pz, cell };
+      if (cell === 1 || cell === 4 || (cell === 2 && !ignoreWindows)) {
+        return { distance: d, x: px, z: pz, cell, surface: "wall" };
       }
     }
-    return { distance: maxDistance, x: x + dx * maxDistance, z: z + dz * maxDistance, cell: 0 };
+    return {
+      distance: maxDistance,
+      x: x + dx * maxDistance,
+      z: z + dz * maxDistance,
+      cell: 0,
+      surface: "none",
+    };
+  }
+
+  function rayFurnitureDistance(x, z, dx, dz, item) {
+    const minX = item.x - item.width / 2;
+    const maxX = item.x + item.width / 2;
+    const minZ = item.z - item.depth / 2;
+    const maxZ = item.z + item.depth / 2;
+    let near = -Infinity;
+    let far = Infinity;
+    let normalX = 0;
+    let normalZ = 0;
+
+    if (Math.abs(dx) < 1e-8) {
+      if (x < minX || x > maxX) return null;
+    } else {
+      const first = (minX - x) / dx;
+      const second = (maxX - x) / dx;
+      const axisNear = Math.min(first, second);
+      const axisFar = Math.max(first, second);
+      if (axisNear > near) {
+        near = axisNear;
+        normalX = first < second ? -1 : 1;
+        normalZ = 0;
+      }
+      far = Math.min(far, axisFar);
+    }
+
+    if (Math.abs(dz) < 1e-8) {
+      if (z < minZ || z > maxZ) return null;
+    } else {
+      const first = (minZ - z) / dz;
+      const second = (maxZ - z) / dz;
+      const axisNear = Math.min(first, second);
+      const axisFar = Math.max(first, second);
+      if (axisNear > near) {
+        near = axisNear;
+        normalX = 0;
+        normalZ = first < second ? -1 : 1;
+      }
+      far = Math.min(far, axisFar);
+    }
+    if (far < near || far < 0) return null;
+    return { distance: near >= 0 ? near : far, normalX, normalZ };
+  }
+
+  function traceFurniture(x, z, angle, maxDistance, originHeight, aimPitch) {
+    const dx = Math.cos(angle);
+    const dz = Math.sin(angle);
+    let best = null;
+    for (const item of activeFurniture) {
+      const hit = rayFurnitureDistance(x, z, dx, dz, item);
+      if (!hit || hit.distance < 0.03 || hit.distance >= maxDistance) continue;
+      const y = originHeight - Math.tan(aimPitch) * hit.distance;
+      if (y < 0.04 || y > item.height) continue;
+      if (!best || hit.distance < best.distance) {
+        best = {
+          distance: hit.distance,
+          x: x + dx * hit.distance,
+          z: z + dz * hit.distance,
+          y,
+          cell: 3,
+          surface: "furniture",
+          furnitureId: item.id,
+          normalX: hit.normalX,
+          normalZ: hit.normalZ,
+        };
+      }
+    }
+    return best;
+  }
+
+  function actorShotOrigin(actor) {
+    return actor.y + (
+      actor === state.player && state.crouching
+        ? CROUCHED_SHOT_CAMERA_HEIGHT
+        : SHOT_CAMERA_HEIGHT
+    );
+  }
+
+  function actorTargetShape(actor) {
+    const crouched = actor === state.player && state.crouching;
+    return {
+      center: actor.y + (crouched ? CROUCHED_TARGET_CENTER : STANDING_TARGET_CENTER),
+      radius: crouched ? 0.38 : 0.62,
+    };
   }
 
   function nearestTargetOnRay(actor, angle, range, aimPitch = 0) {
     const wallHit = traceWall(actor.x, actor.z, angle, range, true);
+    const originHeight = actorShotOrigin(actor);
+    wallHit.y = Math.max(0.06, originHeight - Math.tan(aimPitch) * wallHit.distance);
+    const furnitureHit = traceFurniture(
+      actor.x,
+      actor.z,
+      angle,
+      wallHit.distance,
+      originHeight,
+      aimPitch,
+    );
+    const worldHit = furnitureHit || wallHit;
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
     let best = null;
-    let bestAlong = wallHit.distance;
+    let bestAlong = worldHit.distance;
     for (const target of state.players) {
       if (!target.alive || target.id === actor.id || target.team === actor.team) continue;
       const tx = target.x - actor.x;
@@ -409,14 +1026,14 @@
       const along = tx * dx + tz * dz;
       if (along <= 0 || along >= bestAlong) continue;
       const side = Math.abs(tx * dz - tz * dx);
-      const rayHeight = actor.y + CAMERA_HEIGHT - Math.tan(aimPitch) * along;
-      const targetCenter = target.y + 0.5;
-      if (side < 0.34 && Math.abs(rayHeight - targetCenter) < 0.52) {
+      const rayHeight = originHeight - Math.tan(aimPitch) * along;
+      const targetShape = actorTargetShape(target);
+      if (side < 0.34 && Math.abs(rayHeight - targetShape.center) < targetShape.radius) {
         best = target;
         bestAlong = along;
       }
     }
-    return { target: best, wallHit, distance: bestAlong };
+    return { target: best, wallHit: worldHit, distance: bestAlong };
   }
 
   function addDecal(hit, color, floor = false) {
@@ -430,8 +1047,13 @@
     state.decals.push({
       x: hit.x,
       z: hit.z,
+      y: Number.isFinite(hit.y) ? hit.y : undefined,
       color,
       floor,
+      surface: floor ? "floor" : (hit.surface || "wall"),
+      furnitureId: hit.furnitureId || null,
+      normalX: hit.normalX || 0,
+      normalZ: hit.normalZ || 0,
       size: 0.14 + seededRandom() * 0.12,
     });
   }
@@ -440,11 +1062,31 @@
     if (!target.alive) return;
     target.alive = false;
     target.health = 0;
+    if (state.mode === "waves") {
+      target.outroom = false;
+      target.y = 0;
+      target.vy = 0;
+      if (attacker === state.player && target.bot) {
+        state.coins += 20;
+        state.stats.ko += 1;
+        state.stats.points += 20;
+        saveProgress();
+        state.message = `Du målade ut ${target.name}! +20`;
+        state.messageTime = 1.4;
+      }
+      if (target === state.player) {
+        state.message = "Du blev träffad i det oändliga huset!";
+        state.messageTime = 2.4;
+      }
+      return;
+    }
     target.outroom = true;
     const slot = state.outroomCount++;
-    target.x = 68.7 + (slot % 3) * 1.25;
-    target.z = 68.7 + Math.floor(slot / 3) * 1.25;
+    target.x = OUTROOM.minX + 0.7 + (slot % 3) * 1.25;
+    target.z = OUTROOM.minZ + 0.7 + Math.floor(slot / 3) * 1.25;
     target.angle = Math.PI;
+    target.y = 0;
+    target.vy = 0;
     if (attacker && !attacker.bot && target.bot) {
       state.coins += 20;
       state.stats.ko += 1;
@@ -454,6 +1096,12 @@
       state.messageTime = 2;
     }
     if (target === state.player) {
+      state.onWall = false;
+      state.wallClimb = null;
+      state.wallContactTime = 0;
+      state.wallDismountReady = false;
+      state.crouching = false;
+      state.crouchToggle = false;
       state.message = "Du är utslagen – välkommen till Outroom!";
       state.messageTime = 4;
       state.outroomIntro = 3.2;
@@ -461,19 +1109,49 @@
     }
   }
 
+  function autoAimAtNearestEnemy(actor) {
+    const enemies = livingEnemies(actor);
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const enemy of enemies) {
+      const distance = Math.hypot(enemy.x - actor.x, enemy.z - actor.z);
+      if (distance < nearestDistance) {
+        nearest = enemy;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return null;
+    actor.angle = Math.atan2(nearest.z - actor.z, nearest.x - actor.x);
+    const targetShape = actorTargetShape(nearest);
+    state.pitch = Math.atan2(actorShotOrigin(actor) - targetShape.center, Math.max(0.2, nearestDistance));
+    state.scoped = false;
+    return nearest;
+  }
+
   function fire(actor) {
     if (!actor.alive || actor.cooldown > 0) return false;
+    if (actor === state.player) autoAimAtNearestEnemy(actor);
     const stats = weaponStats(actor);
     actor.cooldown += stats.interval;
     let angle = actor.angle;
     const spread = stats.key === "longgun" ? (stats.upgraded && state.scoped ? 0.002 : 0.022) : 0.01;
     angle += (seededRandom() - 0.5) * spread;
-    const aimPitch = actor === state.player ? state.pitch : 0;
+    let aimPitch = actor === state.player ? state.pitch : 0;
+    if (actor !== state.player && actor.target?.alive) {
+      const targetShape = actorTargetShape(actor.target);
+      const targetDistance = Math.max(0.2, Math.hypot(actor.target.x - actor.x, actor.target.z - actor.z));
+      aimPitch = Math.atan2(actorShotOrigin(actor) - targetShape.center, targetDistance);
+    }
     const result = nearestTargetOnRay(actor, angle, stats.range, aimPitch);
     let end = result.wallHit;
     if (result.target) {
       const target = result.target;
-      end = { x: target.x, z: target.z, distance: result.distance };
+      end = {
+        x: target.x,
+        z: target.z,
+        y: actorTargetShape(target).center,
+        distance: result.distance,
+      };
       target.health = Math.max(0, target.health - stats.damage);
       target.paint.push({ color: actor.color, amount: stats.damage });
       if (target.paint.length > 8) target.paint.shift();
@@ -486,11 +1164,16 @@
     } else {
       const downward = actor === state.player && state.pitch > 0.22;
       if (downward) {
-        const groundDistance = Math.min(stats.range, CAMERA_HEIGHT / Math.tan(Math.max(0.05, state.pitch)));
+        const groundDistance = Math.min(
+          stats.range,
+          actorShotOrigin(actor) / Math.tan(Math.max(0.05, state.pitch)),
+        );
         if (groundDistance < result.wallHit.distance) {
           end = {
             x: actor.x + Math.cos(angle) * groundDistance,
             z: actor.z + Math.sin(angle) * groundDistance,
+            y: 0.04,
+            surface: "floor",
           };
           addDecal(end, actor.color, true);
         } else addDecal(result.wallHit, actor.color, false);
@@ -498,6 +1181,8 @@
     }
     state.tracers.push({
       x1: actor.x, z1: actor.z, x2: end.x, z2: end.z,
+      y1: actorShotOrigin(actor),
+      y2: Number.isFinite(end.y) ? end.y : 1.18,
       color: actor.color, life: 0.09,
     });
     if (actor === state.player) {
@@ -558,6 +1243,112 @@
     } else bot.cooldown = Math.max(0, bot.cooldown);
   }
 
+  function isClimbableWallAt(x, z) {
+    const cellX = Math.floor(x);
+    const cellZ = Math.floor(z);
+    if (cellX < 0 || cellZ < 0 || cellX >= MAP_W || cellZ >= MAP_H) return false;
+    return climbableWalls[cellIndex(cellX, cellZ)] === 1;
+  }
+
+  function findClimbableWallAhead(actor, directionX, directionZ) {
+    for (let distance = PLAYER_RADIUS + 0.04; distance <= 0.86; distance += 0.06) {
+      const x = actor.x + directionX * distance;
+      const z = actor.z + directionZ * distance;
+      if (isClimbableWallAt(x, z)) {
+        const cellX = Math.floor(x);
+        const cellZ = Math.floor(z);
+        return {
+          cellX,
+          cellZ,
+          centerX: cellX + 0.5,
+          centerZ: cellZ + 0.5,
+        };
+      }
+      if (getCell(x, z) !== 0) return null;
+    }
+    return null;
+  }
+
+  function startWallClimb(player, wall) {
+    state.wallClimb = {
+      ...wall,
+      fromX: player.x,
+      fromZ: player.z,
+      progress: 0,
+    };
+    state.wallContactTime = 0;
+    state.wallDismountReady = false;
+    state.crouching = false;
+    state.crouchToggle = false;
+    player.vy = 0;
+    state.message = "SPRING UPPFÖR VÄGGEN!";
+    state.messageTime = 1.6;
+  }
+
+  function updateWallClimb(player, dt) {
+    const climb = state.wallClimb;
+    if (!climb) return;
+    climb.progress = Math.min(1, climb.progress + dt / WALL_CLIMB_SECONDS);
+    const smooth = climb.progress * climb.progress * (3 - 2 * climb.progress);
+    player.x = climb.fromX + (climb.centerX - climb.fromX) * smooth;
+    player.z = climb.fromZ + (climb.centerZ - climb.fromZ) * smooth;
+    player.y = WALL_TOP_HEIGHT * smooth;
+    player.vy = 0;
+    if (climb.progress >= 1) {
+      state.wallClimb = null;
+      state.onWall = true;
+      state.wallDismountReady = false;
+      player.x = climb.centerX;
+      player.z = climb.centerZ;
+      player.y = WALL_TOP_HEIGHT;
+      state.message = "DU STÅR PÅ VÄGGEN – SIKTA NERÅT!";
+      state.messageTime = 2.4;
+    }
+  }
+
+  function leaveWall(player, directionX, directionZ, jump = false) {
+    const length = Math.max(0.001, Math.hypot(directionX, directionZ));
+    const nx = player.x + directionX / length * 0.86;
+    const nz = player.z + directionZ / length * 0.86;
+    if (getCell(nx, nz) !== 0 || collides(nx, nz)) return false;
+    player.x = nx;
+    player.z = nz;
+    player.y = WALL_TOP_HEIGHT;
+    player.vy = jump ? 3.2 : 0;
+    state.onWall = false;
+    state.wallDismountReady = false;
+    return true;
+  }
+
+  function jumpOffWall(player) {
+    const directions = [
+      [Math.cos(player.angle), Math.sin(player.angle)],
+      [-Math.cos(player.angle), -Math.sin(player.angle)],
+      [Math.cos(player.angle + Math.PI / 2), Math.sin(player.angle + Math.PI / 2)],
+      [Math.cos(player.angle - Math.PI / 2), Math.sin(player.angle - Math.PI / 2)],
+    ];
+    return directions.some(([x, z]) => leaveWall(player, x, z, true));
+  }
+
+  function movePlayerOnWall(player, dx, dz, magnitude) {
+    player.y = WALL_TOP_HEIGHT;
+    player.vy = 0;
+    if (magnitude < 0.08) {
+      state.wallDismountReady = true;
+      return;
+    }
+    if (!state.wallDismountReady) return;
+    const nx = player.x + dx;
+    const nz = player.z + dz;
+    if (isClimbableWallAt(nx, nz)) {
+      player.x = nx;
+      player.z = nz;
+      return;
+    }
+    if (getCell(nx, nz) !== 0) return;
+    leaveWall(player, dx, dz, false);
+  }
+
   function updatePlayer(dt) {
     const p = state.player;
     if (!p) return;
@@ -576,19 +1367,50 @@
     const forward = forwardInput - joyY;
     const side = sideInput + joyX;
     const magnitude = Math.hypot(forward, side);
-    const sprint = keys.ShiftLeft || keys.ShiftRight || touchActions.sprint;
-    const speed = (sprint ? 4.25 : 2.65) * dt / Math.max(1, magnitude);
-    if (p.alive || p.outroom) {
-      moveActor(
-        p,
-        (Math.cos(p.angle) * forward + Math.cos(p.angle + Math.PI / 2) * side) * speed,
-        (Math.sin(p.angle) * forward + Math.sin(p.angle + Math.PI / 2) * side) * speed,
-      );
+    const wantsCrouch = keys.KeyC || keys.ControlLeft || keys.ControlRight || state.crouchToggle;
+    state.crouching = Boolean(wantsCrouch && !state.wallClimb && (p.alive || p.outroom));
+    if (state.crouching) state.movingTableId = null;
+    const sprint = (keys.ShiftLeft || keys.ShiftRight || touchActions.sprint) && !state.crouching;
+    state.sprinting = Boolean(sprint);
+    const movementSpeed = state.crouching ? 1.55 : (sprint ? 4.25 : 2.65);
+    const speed = movementSpeed * dt / Math.max(1, magnitude);
+    const moveX = (Math.cos(p.angle) * forward + Math.cos(p.angle + Math.PI / 2) * side) * speed;
+    const moveZ = (Math.sin(p.angle) * forward + Math.sin(p.angle + Math.PI / 2) * side) * speed;
+    const canMove = p.alive || p.outroom;
+
+    if (state.wallClimb) {
+      updateWallClimb(p, dt);
+    } else if (state.onWall) {
+      if ((keys.Space || touchActions.jump || state.jumping) && jumpOffWall(p)) {
+        state.jumping = false;
+      } else {
+        movePlayerOnWall(p, moveX, moveZ, magnitude);
+      }
+    } else {
+      const beforeX = p.x;
+      const beforeZ = p.z;
+      if (canMove) moveActor(p, moveX, moveZ);
+      const intendedDistance = Math.hypot(moveX, moveZ);
+      const movedDistance = Math.hypot(p.x - beforeX, p.z - beforeZ);
+      const blocked = intendedDistance > 0.001 && movedDistance < intendedDistance * 0.42;
+      if (p.alive && !p.outroom && p.y <= 0.001 && blocked) {
+        const directionLength = Math.max(0.001, Math.hypot(moveX, moveZ));
+        const wall = findClimbableWallAhead(p, moveX / directionLength, moveZ / directionLength);
+        if (wall) {
+          state.wallContactTime += dt;
+          if (state.wallContactTime >= 0.14) startWallClimb(p, wall);
+        } else state.wallContactTime = 0;
+      } else state.wallContactTime = 0;
+
+      if (!state.wallClimb) {
+        if ((keys.Space || touchActions.jump || state.jumping) && p.y <= 0.001) p.vy = 4.2;
+        p.vy -= 10.5 * dt;
+        p.y = Math.max(0, p.y + p.vy * dt);
+        if (p.y === 0 && p.vy < 0) p.vy = 0;
+      }
     }
-    if ((keys.Space || touchActions.jump || state.jumping) && p.y <= 0.001) p.vy = 4.2;
-    p.vy -= 10.5 * dt;
-    p.y = Math.max(0, p.y + p.vy * dt);
-    if (p.y === 0 && p.vy < 0) p.vy = 0;
+    updateMovingTable();
+    updateTableCover();
     if (p.alive && (state.firing || touchActions.shoot)) {
       let burst = 0;
       while (p.cooldown <= 0 && burst < 24 && p.alive) {
@@ -598,7 +1420,57 @@
     } else p.cooldown = Math.max(0, p.cooldown);
   }
 
+  function wrapEndlessEntities() {
+    if (state.mode !== "waves") return;
+    const wrap = (value) => {
+      if (value < 10) return value + 48;
+      if (value >= 58) return value - 48;
+      return value;
+    };
+    for (const actor of state.players) {
+      actor.x = wrap(actor.x);
+      actor.z = wrap(actor.z);
+    }
+    for (const decal of state.decals) {
+      decal.x = wrap(decal.x);
+      decal.z = wrap(decal.z);
+    }
+    for (const tracer of state.tracers) {
+      tracer.x1 = wrap(tracer.x1);
+      tracer.z1 = wrap(tracer.z1);
+      tracer.x2 = wrap(tracer.x2);
+      tracer.z2 = wrap(tracer.z2);
+    }
+    const moving = activeFurniture.find((item) => item.id === state.movingTableId);
+    if (moving) {
+      moving.x = wrap(moving.x);
+      moving.z = wrap(moving.z);
+    }
+  }
+
   function checkWinner(dt) {
+    if (state.mode === "waves") {
+      if (!state.player?.alive) {
+        state.endDelay += dt;
+        if (state.endDelay >= 1.25) {
+          state.winner = null;
+          endMatch();
+        }
+        return;
+      }
+      const botsLeft = state.players.filter((actor) => actor.bot && actor.alive).length;
+      if (botsLeft === 0) {
+        state.waveDelay += dt;
+        if (state.waveDelay >= 1.35) {
+          if (state.wave < WAVE_BOT_COUNTS.length) startWave(state.wave + 1);
+          else {
+            state.winner = state.player.team;
+            endMatch();
+          }
+        }
+      } else state.waveDelay = 0;
+      return;
+    }
     const alive = state.players.filter((p) => p.alive);
     const contenders = state.mode === "solo"
       ? new Set(alive.map((p) => p.id))
@@ -622,17 +1494,36 @@
     if (playerWon) {
       state.coins += 100;
       state.stats.points += 100;
-      saveProgress();
     }
+    const expiredUpgrades = [];
+    Object.keys(UPGRADE_COST).forEach((key) => {
+      if (!state.upgrades[key]) return;
+      state.upgradeMatches[key] = Math.max(0, (state.upgradeMatches[key] || UPGRADE_MATCH_LIFETIME) - 1);
+      if (state.upgradeMatches[key] === 0) {
+        state.upgrades[key] = false;
+        expiredUpgrades.push(key === "handgun" ? "Superpistolen" : "Supersiktet");
+      }
+    });
+    if (!state.upgrades.longgun) state.scoped = false;
+    saveProgress();
     const title = document.getElementById("match-end-title");
     const message = document.getElementById("match-end-message");
     const kicker = document.getElementById("match-end-kicker");
-    if (kicker) kicker.textContent = "MATCHEN ÄR SLUT";
-    if (title) title.textContent = playerWon ? "DU VANN!" : "VINNARE!";
+    if (kicker) kicker.textContent = state.mode === "waves" ? `WAVES · ${state.wave}/7` : "MATCHEN ÄR SLUT";
+    if (title) title.textContent = playerWon
+      ? (state.mode === "waves" ? "SJU VÅGOR KLARA!" : "DU VANN!")
+      : (state.mode === "waves" ? "HUSET VANN DENNA GÅNG" : "VINNARE!");
     if (message) {
-      message.textContent = playerWon
-        ? "Du eller ditt lag blev sist kvar i Paint War. +100 Paint-poäng!"
-        : "Du åkte ut, men färgkriget fortsatte till sista deltagaren.";
+      const resultText = state.mode === "waves"
+        ? (playerWon
+          ? "Du klarade alla sju vågorna i det oändliga huset. +100 Paint-poäng!"
+          : `Du tog dig till wave ${state.wave} av 7. Försök igen!`)
+        : (playerWon
+          ? "Du eller ditt lag blev sist kvar i Paint War. +100 Paint-poäng!"
+          : "Du åkte ut, men färgkriget fortsatte till sista deltagaren.");
+      message.textContent = expiredUpgrades.length
+        ? `${resultText} ${expiredUpgrades.join(" och ")} tog slut och kan köpas igen i Shoppen.`
+        : resultText;
     }
     setText(["result-hits"], `${state.stats.hits}`);
     setText(["result-ko"], `${state.stats.ko}`);
@@ -647,6 +1538,7 @@
     state.time += dt;
     updatePlayer(dt);
     for (const bot of state.players) if (bot.bot) updateBot(bot, dt);
+    wrapEndlessEntities();
     for (const tracer of state.tracers) tracer.life -= dt;
     state.tracers = state.tracers.filter((t) => t.life > 0);
     state.hitmarker = Math.max(0, state.hitmarker - dt);
@@ -689,7 +1581,7 @@
       const cell = getCell(mapX, mapZ);
       if (cell === 2 && !windowHit) {
         windowHit = { distance, side, mapX, mapZ };
-      } else if (cell === 1) {
+      } else if (cell === 1 || cell === 4) {
         return { distance, side, mapX, mapZ, windowHit };
       }
     }
@@ -723,7 +1615,7 @@
       const wallH = Math.min(H * 3, proj / corrected);
       const top = horizon - wallH * (1 - CAMERA_HEIGHT);
       const theme = wallTheme[cellIndex(hit.mapX, hit.mapZ)] || 0;
-      let color = WALL_COLORS[theme];
+      let color = climbableWalls[cellIndex(hit.mapX, hit.mapZ)] ? "#75f04f" : WALL_COLORS[theme];
       if (hit.side) color = shade(color, 0.78);
       const fog = Math.min(0.72, corrected / 75);
       g.fillStyle = mixColor(color, "#bdd0d3", fog);
@@ -741,6 +1633,7 @@
 
     drawDecalsAndTracers(p, fov, horizon, proj, zBuffer);
     drawActors(p, fov, horizon, proj, zBuffer);
+    drawFurniture2D(p, fov, horizon, proj, zBuffer);
     drawMinimap(p);
     drawWeapon();
     drawCrosshair();
@@ -863,19 +1756,73 @@
     }
   }
 
+  function drawFurniture2D(p, fov, horizon, proj, zBuffer) {
+    const visible = activeFurniture
+      .map((item) => ({ item, q: projectPoint(p, item.x, item.z, fov, horizon, proj) }))
+      .filter(({ q }) => q && q.depth > 0.15)
+      .sort((a, b) => b.q.depth - a.q.depth);
+    for (const { item, q } of visible) {
+      const column = Math.max(0, Math.min(W - 1, Math.floor(q.x)));
+      if (zBuffer[column] + 0.3 < q.depth) continue;
+      const width = Math.max(3, Math.min(W, proj * item.width / q.depth));
+      const height = Math.max(3, Math.min(H, proj * item.height / q.depth));
+      const bottom = horizon + proj * CAMERA_HEIGHT / q.depth;
+      const top = bottom - height;
+      g.fillStyle = "rgba(12,18,33,.28)";
+      g.fillRect(q.x - width * 0.54, top + 3, width * 1.08, height);
+      g.fillStyle = item.color;
+      g.fillRect(q.x - width / 2, top, width, height);
+      g.fillStyle = "rgba(255,255,255,.34)";
+      g.fillRect(q.x - width / 2, top, width, Math.max(2, height * 0.1));
+      g.strokeStyle = "#24303c";
+      g.lineWidth = Math.max(1, width * 0.025);
+      g.strokeRect(q.x - width / 2, top, width, height);
+      if (item.kind === "cabinet" || item.kind === "crate") {
+        g.beginPath();
+        g.moveTo(q.x, top);
+        g.lineTo(q.x, bottom);
+        g.stroke();
+      } else {
+        g.fillStyle = "rgba(28,35,49,.5)";
+        g.fillRect(q.x - width * 0.4, top + height * 0.52, width * 0.8, Math.max(2, height * 0.08));
+      }
+    }
+  }
+
   function drawMinimap(p) {
     if (state.scoped) return;
-    const size = 62;
+    const size = 72;
     const left = 8;
     const top = 8;
     g.fillStyle = "rgba(8,18,25,.68)";
     g.fillRect(left, top, size, size);
-    const scale = size / 65;
+    const arenaExtent = Math.max(activeBounds.maxX, activeBounds.maxZ, 1);
+    const scale = size / arenaExtent;
     g.fillStyle = "rgba(215,226,219,.42)";
-    for (let z = 0; z <= 64; z += 2) {
-      for (let x = 0; x <= 64; x += 2) {
-        if (getCell(x, z)) g.fillRect(left + x * scale, top + z * scale, 2 * scale + 0.5, 2 * scale + 0.5);
+    for (let z = activeBounds.minZ; z <= activeBounds.maxZ; z += 2) {
+      for (let x = activeBounds.minX; x <= activeBounds.maxX; x += 2) {
+        const cell = getCell(x, z);
+        if (cell === 1 || cell === 2) {
+          g.fillRect(left + x * scale, top + z * scale, 2 * scale + 0.5, 2 * scale + 0.5);
+        }
       }
+    }
+    g.fillStyle = "#7bea58";
+    for (let z = activeBounds.minZ; z <= activeBounds.maxZ; z += 1) {
+      for (let x = activeBounds.minX; x <= activeBounds.maxX; x += 1) {
+        if (climbableWalls[cellIndex(x, z)]) {
+          g.fillRect(left + x * scale, top + z * scale, Math.max(1, scale), Math.max(1, scale));
+        }
+      }
+    }
+    for (const item of activeFurniture) {
+      g.fillStyle = item.color;
+      g.fillRect(
+        left + (item.x - item.width / 2) * scale,
+        top + (item.z - item.depth / 2) * scale,
+        Math.max(1, item.width * scale),
+        Math.max(1, item.depth * scale),
+      );
     }
     for (const actor of state.players) {
       if (!actor.alive || actor === p) continue;
@@ -1044,9 +1991,17 @@
     const hp = p ? Math.ceil(p.health) : 100;
     setText(["hp", "health", "health-value"], `${hp}`);
     setText(["fargmynt", "färgmynt", "coins"], `${state.coins}`);
-    setText(["team", "team-label"], p ? (state.mode === "solo" ? "SOLO" : `LAG ${p.team + 1}`) : "–");
-    setText(["mode", "mode-label"], state.mode ? state.mode.toUpperCase() : "–");
-    const alive = state.players.filter((x) => x.alive).length;
+    setText(["team", "team-label"], p ? (
+      state.mode === "solo" ? "SOLO"
+        : state.mode === "waves" ? "PISTOLVÅGOR"
+          : `LAG ${p.team + 1}`
+    ) : "–");
+    setText(["mode", "mode-label"], state.mode === "waves"
+      ? `WAVE ${state.wave}/7`
+      : state.mode ? `${state.mode.toUpperCase()} · ${MAP_LABELS[state.mapId] || ""}` : "–");
+    const alive = state.mode === "waves"
+      ? state.players.filter((x) => x.bot && x.alive).length
+      : state.players.filter((x) => x.alive).length;
     setText(["alive", "players-left", "alive-count", "spectating-count"], `${alive}`);
     const healthFill = document.getElementById("health-fill");
     if (healthFill) healthFill.style.width = `${Math.max(0, hp)}%`;
@@ -1056,7 +2011,7 @@
       const symbol = document.getElementById("weapon-symbol");
       if (symbol) symbol.textContent = state.weapon === 0 ? "▰" : "▰━";
       const teamBadge = document.getElementById("team-badge");
-      if (teamBadge) teamBadge.hidden = state.phase !== "playing" || state.mode === "solo";
+      if (teamBadge) teamBadge.hidden = state.phase !== "playing" || state.mode === "solo" || state.mode === "waves";
       const teamDot = teamBadge && teamBadge.querySelector(".team-dot");
       if (teamDot) {
         teamDot.style.background = p.color;
@@ -1066,7 +2021,10 @@
     const status = document.getElementById("status-banner");
     if (status) {
       status.hidden = !(state.phase === "playing" && state.messageTime > 0 && state.message);
-      status.textContent = state.messageTime > 0 ? state.message : "";
+      status.textContent = state.underTableId
+        ? "SKYDDAD UNDER BORDET"
+        : state.messageTime > 0 ? state.message : "";
+      status.hidden = !(state.phase === "playing" && (state.underTableId || (state.messageTime > 0 && state.message)));
     }
     const gameStatus = document.getElementById("game-status");
     if (gameStatus) gameStatus.textContent = state.messageTime > 0 ? state.message : "";
@@ -1095,21 +2053,27 @@
 
   function updateShop() {
     setText(["shop-coins", "fargmynt", "färgmynt", "coins"], `${state.coins}`);
+    const shopMessage = document.getElementById("shop-message");
+    if (shopMessage) {
+      shopMessage.textContent = "Varje uppgradering håller i 3 färdigspelade matcher och kan sedan köpas igen.";
+    }
     document.querySelectorAll("[data-upgrade]").forEach((card) => {
       const key = card.dataset.upgrade;
       if (!(key in UPGRADE_COST)) return;
       const bought = state.upgrades[key];
+      const remaining = bought ? Math.max(1, state.upgradeMatches[key] || UPGRADE_MATCH_LIFETIME) : 0;
       card.classList.toggle("bought", bought);
       card.classList.toggle("owned", bought);
+      card.dataset.matchesRemaining = `${remaining}`;
       const button = card.querySelector("[data-buy]");
       if (!button) return;
       button.disabled = bought || state.coins < UPGRADE_COST[key];
       button.classList.toggle("bought", bought);
       button.classList.toggle("owned", bought);
       const label = document.getElementById(`${key}-price`) || button.querySelector("small");
-      if (label) label.textContent = bought ? "KÖPT" : `✦ ${UPGRADE_COST[key]}`;
+      if (label) label.textContent = bought ? `${remaining} MATCHER KVAR` : `✦ ${UPGRADE_COST[key]}`;
       const mainLabel = button.querySelector("span");
-      if (mainLabel) mainLabel.textContent = bought ? "UPPGRADERAD" : "KÖP UPPGRADERING";
+      if (mainLabel) mainLabel.textContent = bought ? "AKTIV UPPGRADERING" : "KÖP UPPGRADERING";
     });
   }
 
@@ -1118,16 +2082,21 @@
     if (el) el.addEventListener("click", fn);
   }
 
-  bindClick("solo-btn", () => startMatch("solo"));
-  bindClick("duo-btn", () => startMatch("duo"));
-  bindClick("team-btn", () => startMatch("team"));
+  bindClick("solo-btn", () => chooseMode("solo"));
+  bindClick("duo-btn", () => chooseMode("duo"));
+  bindClick("team-btn", () => startMatch("team", "village"));
+  bindClick("waves-btn", () => startMatch("waves", "endless-house"));
+  document.querySelectorAll("[data-map]").forEach((button) => {
+    button.addEventListener("click", () => startMatch(state.pendingMode || "solo", button.dataset.map));
+  });
+  bindClick("map-select-back", returnToMenu);
   bindClick("shop-btn", openShop);
   bindClick("shop-close", returnToMenu);
   bindClick("close-shop-btn", returnToMenu);
   bindClick("home-btn", returnToMenu);
-  bindClick("play-again-btn", () => startMatch(state.mode || "solo"));
+  bindClick("play-again-btn", () => startMatch(state.mode || "solo", state.mapId || "village"));
   bindClick("back-to-menu-btn", returnToMenu);
-  bindClick("restart-btn", () => startMatch(state.mode || "solo"));
+  bindClick("restart-btn", () => startMatch(state.mode || "solo", state.mapId || "village"));
   bindClick("menu-btn", returnToMenu);
   bindClick("fullscreen-btn", () => {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -1145,6 +2114,13 @@
       touchActions[action] = active;
       return;
     }
+    if (action === "crouch") {
+      if (active) {
+        state.crouchToggle = !state.crouchToggle;
+        state.crouching = state.crouchToggle;
+      }
+      return;
+    }
     if (action === "jump") {
       state.jumping = active;
       return;
@@ -1155,12 +2131,15 @@
       state.scoped = false;
       updateHud();
     }
+    if (action === "move-table") toggleMoveTable();
     if (action === "weapon-1") state.weapon = 0;
     if (action === "weapon-2") state.weapon = 1;
     if (action === "scope" && state.weapon === 1 && state.upgrades.longgun) state.scoped = !state.scoped;
     if (action === "menu" || action === "back-menu") returnToMenu();
-    if (action === "restart") startMatch(state.mode || "solo");
-    if (action === "solo" || action === "duo" || action === "team") startMatch(action);
+    if (action === "restart") startMatch(state.mode || "solo", state.mapId || "village");
+    if (action === "solo" || action === "duo") chooseMode(action);
+    if (action === "team") startMatch("team", "village");
+    if (action === "waves") startMatch("waves", "endless-house");
     if (action === "shop") openShop();
   }
 
@@ -1175,7 +2154,8 @@
     });
     const release = (event) => {
       event.preventDefault();
-      button.classList.remove("active");
+      if (action === "crouch") button.classList.toggle("active", state.crouchToggle);
+      else button.classList.remove("active");
       handleAction(action, false);
     };
     button.addEventListener("pointerup", release);
@@ -1197,7 +2177,7 @@
       state.scoped = false;
       updateHud();
     }
-    if (event.code === "KeyQ" && state.weapon === 1 && state.upgrades.longgun) state.scoped = !state.scoped;
+    if (event.code === "KeyE" && !event.repeat) toggleMoveTable();
     if (event.code === "KeyF") {
       if (document.fullscreenElement) document.exitFullscreen();
       else document.getElementById("game-shell")?.requestFullscreen?.();
@@ -1210,35 +2190,13 @@
   });
   window.addEventListener("blur", resetControls);
 
-  canvas.addEventListener("click", () => {
-    if (
-      state.phase === "playing"
-      && matchMedia("(pointer:fine)").matches
-      && !navigator.webdriver
-      && document.hasFocus()
-    ) {
-      try {
-        const result = canvas.requestPointerLock?.();
-        result?.catch?.(() => {});
-      } catch {
-        // Pointer lock kan nekas i inbäddade webbläsare; spelet fortsätter ändå.
-      }
-    }
-  });
   canvas.addEventListener("mousedown", (event) => {
     if (event.button === 0) state.firing = true;
-    if (event.button === 2 && state.weapon === 1 && state.upgrades.longgun) state.scoped = true;
   });
   window.addEventListener("mouseup", (event) => {
     if (event.button === 0) state.firing = false;
-    if (event.button === 2) state.scoped = false;
   });
   canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-  window.addEventListener("mousemove", (event) => {
-    if (document.pointerLockElement !== canvas || state.phase !== "playing" || !state.player) return;
-    state.player.angle = normalizeAngle(state.player.angle + event.movementX * 0.0025);
-    state.pitch = Math.max(-0.65, Math.min(0.65, state.pitch + event.movementY * 0.002));
-  });
 
   canvas.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch" || state.phase !== "playing") return;
@@ -1252,8 +2210,6 @@
         x: event.clientX,
         y: event.clientY,
       };
-    } else if (!pointerState.look) {
-      pointerState.look = { id: event.pointerId, x: event.clientX, y: event.clientY };
     }
   }, { passive: false });
   canvas.addEventListener("pointermove", (event) => {
@@ -1261,13 +2217,6 @@
     if (pointerState.move && pointerState.move.id === event.pointerId) {
       pointerState.move.x = event.clientX;
       pointerState.move.y = event.clientY;
-    } else if (pointerState.look && pointerState.look.id === event.pointerId && state.player) {
-      const dx = event.clientX - pointerState.look.x;
-      const dy = event.clientY - pointerState.look.y;
-      state.player.angle = normalizeAngle(state.player.angle + dx * 0.006);
-      state.pitch = Math.max(-0.65, Math.min(0.65, state.pitch + dy * 0.004));
-      pointerState.look.x = event.clientX;
-      pointerState.look.y = event.clientY;
     }
   }, { passive: false });
   function releasePointer(event) {
@@ -1341,12 +2290,19 @@
     return JSON.stringify({
       coordinateSystem: "origin northwest; x increases east/right, z increases south/down; angles are radians, 0=east",
       graphics: state.graphics3d ? "real-time WebGL 3D" : "canvas raycaster fallback",
+      camera: state.graphics3d ? "third-person, diagonal behind and above the player" : "fallback view",
       phase: state.phase,
       mode: state.mode,
+      map: state.mapId,
+      mapLabel: MAP_LABELS[state.mapId] || state.mapId,
+      wave: state.mode === "waves" ? state.wave : null,
+      wavesTotal: 7,
       timeSeconds: Number(state.time.toFixed(2)),
       player: p ? {
         x: Number(p.x.toFixed(2)),
         z: Number(p.z.toFixed(2)),
+        y: Number(p.y.toFixed(2)),
+        vy: Number(p.vy.toFixed(2)),
         angle: Number(p.angle.toFixed(3)),
         pitch: Number(state.pitch.toFixed(3)),
         hp: p.health,
@@ -1359,32 +2315,78 @@
         fireIntervalMs: stats.interval,
         range: stats.range,
         scoped: state.scoped,
+        crouching: state.crouching,
+        underTable: state.underTableId,
+        movingTable: state.movingTableId,
+        eyeHeight: Number(actorShotOrigin(p).toFixed(2)),
+        onWall: state.onWall,
+        wallClimbing: Boolean(state.wallClimb),
+        wallClimbProgress: state.wallClimb
+          ? Number(state.wallClimb.progress.toFixed(2))
+          : (state.onWall ? 1 : 0),
       } : null,
       match: {
         activeCount: state.players.filter((actor) => actor.alive).length,
+        botsRemaining: state.players.filter((actor) => actor.bot && actor.alive).length,
         outroomCount: state.players.filter((actor) => actor.outroom).length,
         winner: state.winner,
         paintDecals: state.decals.length,
       },
       upgrades: { ...state.upgrades },
+      upgradeMatchesRemaining: { ...state.upgradeMatches },
+      upgradeRules: {
+        playerOnly: true,
+        botsCanUpgrade: false,
+        expiresAfterCompletedMatches: UPGRADE_MATCH_LIFETIME,
+        repurchaseRequiredAfterExpiry: true,
+      },
       coins: state.coins,
-      nearbyParticipants: visible.map((actor) => ({
-        id: actor.id,
-        name: actor.name,
-        x: Number(actor.x.toFixed(2)),
-        z: Number(actor.z.toFixed(2)),
-        hp: actor.health,
-        alive: actor.alive,
-        team: actor.team,
-        location: actor.outroom ? "outroom" : "arena",
-        distance: Number(Math.hypot(actor.x - p.x, actor.z - p.z).toFixed(2)),
-      })),
+      nearbyParticipants: visible.map((actor) => {
+        const actorWeapon = weaponStats(actor);
+        return {
+          id: actor.id,
+          name: actor.name,
+          x: Number(actor.x.toFixed(2)),
+          z: Number(actor.z.toFixed(2)),
+          y: Number(actor.y.toFixed(2)),
+          hp: actor.health,
+          alive: actor.alive,
+          team: actor.team,
+          location: actor.outroom ? "outroom" : "arena",
+          distance: Number(Math.hypot(actor.x - p.x, actor.z - p.z).toFixed(2)),
+          weapon: actorWeapon.key,
+          weaponUpgraded: actorWeapon.upgraded,
+          fireIntervalMs: actorWeapon.interval,
+          range: actorWeapon.range,
+          crouching: false,
+          onWall: false,
+        };
+      }),
       arena: {
-        size: "64x64 world units plus sealed Outroom",
-        houses: 9,
+        id: activeMapId,
+        kind: activeMapKind,
+        size: activeMapKind === "endless-house" ? "periodic house that continues forever" : `${activeBounds.width}x${activeBounds.height}`,
+        areaMultiplier: activeMapKind === "village" ? ARENA_AREA_MULTIPLIER : 1,
+        districts: activeTiles.length,
+        houses: activeHouseDefs.length,
+        furniture: activeFurniture.length,
+        movableTables: activeFurniture.filter((item) => item.movable).length,
+        climbableStandaloneWallCells: climbableWalls.reduce((total, value) => total + value, 0),
         characters: state.graphics3d ? "animated 3D people" : "2D fallback people",
         windowsAreShootThrough: true,
         paintPersistsUntilMatchEnd: true,
+      },
+      mobilityRules: {
+        playerCanRunUpStandaloneWalls: true,
+        houseWallsClimbable: false,
+        botsCanWallRun: false,
+        playerCanCrouch: true,
+        playerCanHideUnderTables: true,
+        tablesBlockShots: true,
+        shootingAutoTargetsNearestEnemy: true,
+        manualAiming: false,
+        botsHandgunOnlyInWaves: true,
+        botsCanCrouch: false,
       },
     });
   };
@@ -1403,16 +2405,30 @@
 
   window.PaintWar = {
     startMatch,
+    chooseMode,
     returnToMenu,
     openShop,
     buyUpgrade,
+    toggleMoveTable,
+    fireActor: fire,
     getState: () => state,
     getArena: () => ({
+      id: activeMapId,
+      kind: activeMapKind,
+      revision: arenaRevision,
       width: MAP_W,
       height: MAP_H,
+      districtSize: DISTRICT_SIZE,
+      areaMultiplier: ARENA_AREA_MULTIPLIER,
+      tiles: activeTiles,
+      bounds: activeBounds,
+      outroom: OUTROOM,
       cells: grid,
       wallThemes: wallTheme,
-      houses: HOUSE_FLOORS,
+      climbableWalls,
+      houses: activeHouseFloors,
+      houseDefs: activeHouseDefs,
+      furniture: activeFurniture,
     }),
   };
 
