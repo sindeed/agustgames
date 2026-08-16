@@ -117,3 +117,10 @@ Original prompt: Bygg Paint War som ett förstapersonsspel för dator, iPad och 
 - Simulerad iPad-QA passerar utan fel: ett svep ändrade sidvinkeln 0,748 radianer och kamerans position 4,48 enheter utan att flytta spelaren eller avfyra skott.
 - Tvåfingertestet passerar: joysticken flyttade spelaren 1,33 enheter samtidigt som det andra fingret vred kameran 0,484 radianer.
 - Den säkra höjdgränsen 0,46–0,72 höll gubben synlig över husväggarna. Kontrollbild: `output/paint-war-camera-orbit/ipad-after-camera-drag.png`.
+
+### Gubben följer kamerans håll
+
+- Ny användarbegäran: när spelaren drar kameran åt sidan ska gubben vända hela kroppen åt samma håll.
+- Spelarens kroppsriktning följer nu kamerans bakdiagonala spelriktning exakt; uppmätt riktningsfel efter svep är 0 radianer.
+- Automatisk skjutning använder en separat tillfällig skottvinkel. En bot gick verifierat från 100 till 70 HP utan att gubbens riktning, kamerans vinkel eller kamerans höjd ändrades.
+- Full regression passerar fortfarande utan fel: alla sju Waves, kartval, 32 bord, bordsskydd, bordflytt och samtliga sex iPad-knappar.

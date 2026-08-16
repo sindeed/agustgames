@@ -573,6 +573,13 @@
     pointerState.look = null;
   }
 
+  function facePlayerTowardCamera() {
+    if (!state.player) return;
+    state.player.angle = normalizeAngle(
+      state.cameraOrbit.yaw + Math.PI + CAMERA_ORBIT_SHOULDER_ANGLE,
+    );
+  }
+
   function collides(x, z, actor = null) {
     for (let i = 0; i < 8; i += 1) {
       const a = i * Math.PI / 4;
@@ -1144,22 +1151,31 @@
       }
     }
     if (!nearest) return null;
-    actor.angle = Math.atan2(nearest.z - actor.z, nearest.x - actor.x);
     const targetShape = actorTargetShape(nearest);
-    state.pitch = Math.atan2(actorShotOrigin(actor) - targetShape.center, Math.max(0.2, nearestDistance));
-    state.scoped = false;
-    return nearest;
+    return {
+      target: nearest,
+      angle: Math.atan2(nearest.z - actor.z, nearest.x - actor.x),
+      pitch: Math.atan2(
+        actorShotOrigin(actor) - targetShape.center,
+        Math.max(0.2, nearestDistance),
+      ),
+    };
   }
 
   function fire(actor) {
     if (!actor.alive || actor.cooldown > 0) return false;
-    if (actor === state.player) autoAimAtNearestEnemy(actor);
+    const playerAim = actor === state.player ? autoAimAtNearestEnemy(actor) : null;
+    if (actor === state.player) {
+      state.scoped = false;
+    }
     const stats = weaponStats(actor);
     actor.cooldown += stats.interval;
-    let angle = actor.angle;
-    const spread = stats.key === "longgun" ? (stats.upgraded && state.scoped ? 0.002 : 0.022) : 0.01;
+    let angle = playerAim?.angle ?? actor.angle;
+    const spread = playerAim
+      ? 0
+      : (stats.key === "longgun" ? (stats.upgraded && state.scoped ? 0.002 : 0.022) : 0.01);
     angle += (seededRandom() - 0.5) * spread;
-    let aimPitch = actor === state.player ? state.pitch : 0;
+    let aimPitch = actor === state.player ? (playerAim?.pitch || 0) : 0;
     if (actor !== state.player && actor.target?.alive) {
       const targetShape = actorTargetShape(actor.target);
       const targetDistance = Math.max(0.2, Math.hypot(actor.target.x - actor.x, actor.target.z - actor.z));
@@ -1185,11 +1201,11 @@
       if (target === state.player) state.hurtFlash = 0.25;
       if (target.health <= 0) eliminate(target, actor);
     } else {
-      const downward = actor === state.player && state.pitch > 0.22;
+      const downward = actor === state.player && aimPitch > 0.22;
       if (downward) {
         const groundDistance = Math.min(
           stats.range,
-          actorShotOrigin(actor) / Math.tan(Math.max(0.05, state.pitch)),
+          actorShotOrigin(actor) / Math.tan(Math.max(0.05, aimPitch)),
         );
         if (groundDistance < result.wallHit.distance) {
           end = {
@@ -2245,6 +2261,7 @@
     pointerState.look.y = event.clientY;
     if (Math.abs(dx) + Math.abs(dy) < 0.5) return;
     state.cameraOrbit.yaw = normalizeAngle(state.cameraOrbit.yaw + dx * 0.0044);
+    if (Math.abs(dx) >= 0.1) facePlayerTowardCamera();
     state.cameraOrbit.elevation = Math.max(
       CAMERA_ORBIT_MIN_ELEVATION,
       Math.min(CAMERA_ORBIT_MAX_ELEVATION, state.cameraOrbit.elevation + dy * 0.0015),
