@@ -106,3 +106,14 @@ Original prompt: Bygg Paint War som ett förstapersonsspel för dator, iPad och 
 - Full iPad-QA gav inga konsol- eller sidfel. Resultat: `output/paint-war-ipad-final/results.json`.
 - Verifierad riktig iPad-bild: `output/paint-war-ipad-final/ipad-waves-gameplay.png`.
 - Nästa steg: publicera de fem Paint War-filerna till Agust Games och liveverifiera sidan.
+
+## Vridbar tredjepersonskamera på iPad
+
+- Ny användarbegäran: ett drag med fingret över den fria spelplanen ska visa gubben från ett annat håll i tredje person.
+- Kameran har nu en egen absolut sidvinkel och höjd som inte används för siktning eller skott.
+- Joysticken och de sex actionknapparna behåller sina egna pekare, så vänster tum kan styra samtidigt som höger tum vrider kameran.
+- Kameran begränsas till en trygg ovanifrånvinkel och hittar mjukt tillbaka bakom gubben när spelaren börjar röra sig efter en paus.
+- Menyhjälpen beskriver den nya gesten och spelstatusen exponerar kameravinklarna för exakt iPad-QA.
+- Simulerad iPad-QA passerar utan fel: ett svep ändrade sidvinkeln 0,748 radianer och kamerans position 4,48 enheter utan att flytta spelaren eller avfyra skott.
+- Tvåfingertestet passerar: joysticken flyttade spelaren 1,33 enheter samtidigt som det andra fingret vred kameran 0,484 radianer.
+- Den säkra höjdgränsen 0,46–0,72 höll gubben synlig över husväggarna. Kontrollbild: `output/paint-war-camera-orbit/ipad-after-camera-drag.png`.

@@ -60,6 +60,32 @@ const thirdPersonDesired = new THREE.Vector3();
 const thirdPersonLook = new THREE.Vector3();
 const thirdPersonTarget = new THREE.Vector3();
 
+const CAMERA_ORBIT_RADIUS = 7.15;
+const CAMERA_DEFAULT_ELEVATION = 0.5;
+const CAMERA_MIN_ELEVATION = 0.46;
+const CAMERA_MAX_ELEVATION = 0.72;
+const CAMERA_SHOULDER_ANGLE = Math.atan2(1.15, 6.2);
+
+function normalizeAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function ensureCameraOrbit(player) {
+  const defaultYaw = normalizeAngle(player.angle + Math.PI - CAMERA_SHOULDER_ANGLE);
+  if (!state.cameraOrbit || typeof state.cameraOrbit !== "object") {
+    state.cameraOrbit = {};
+  }
+  const orbit = state.cameraOrbit;
+  if (!Number.isFinite(orbit.yaw)) orbit.yaw = defaultYaw;
+  orbit.yaw = normalizeAngle(orbit.yaw);
+  orbit.elevation = Number.isFinite(orbit.elevation)
+    ? Math.max(CAMERA_MIN_ELEVATION, Math.min(CAMERA_MAX_ELEVATION, orbit.elevation))
+    : CAMERA_DEFAULT_ELEVATION;
+  orbit.dragging = Boolean(orbit.dragging);
+  if (!Number.isFinite(orbit.lastInputTime)) orbit.lastInputTime = -Infinity;
+  return orbit;
+}
+
 function waitForGame(attempt = 0) {
   if (window.PaintWar?.getState && window.PaintWar?.getArena) {
     start3D();
@@ -99,6 +125,13 @@ function start3D() {
         furniture: furnitureModels.size,
         decals: decalMeshes.length,
         arena: arena?.kind || "village",
+        cameraOrbit: state?.cameraOrbit ? {
+          yaw: Number.isFinite(state.cameraOrbit.yaw) ? state.cameraOrbit.yaw : null,
+          elevation: Number.isFinite(state.cameraOrbit.elevation)
+            ? state.cameraOrbit.elevation
+            : null,
+          dragging: Boolean(state.cameraOrbit.dragging),
+        } : null,
       }),
     };
     requestAnimationFrame(frame);
@@ -1642,24 +1675,34 @@ function updateCameraAndWeapon(dt) {
     ? Math.sin(state.time * (playerSpeed > 3.4 ? 12 : 8)) * Math.min(0.08, playerSpeed * 0.014)
     : cameraBob * 0.82;
 
-  // Paint War spelas i tredje person. Kameran ligger bakdiagonalt på spelarens
-  // högra sida och tittar ned mot överkroppen, så både riktning och vapen syns.
-  const forwardX = Math.cos(p.angle);
-  const forwardZ = Math.sin(p.angle);
-  const rightX = -forwardZ;
-  const rightZ = forwardX;
-  const followDistance = 6.2;
-  const sideOffset = 1.15;
+  // Paint War spelas i tredje person. Kameran kan dras runt spelaren, men hittar
+  // mjukt tillbaka till det bakdiagonala grundlaget när spelaren rör sig igen.
+  const orbit = ensureCameraOrbit(p);
+  const defaultYaw = normalizeAngle(p.angle + Math.PI - CAMERA_SHOULDER_ANGLE);
+  const gameTime = Number.isFinite(state.time) ? state.time : 0;
+  const secondsSinceLook = gameTime - orbit.lastInputTime;
+  if (!orbit.dragging && secondsSinceLook > 1.25 && playerSpeed > 0.18) {
+    const yawBlend = 1 - Math.exp(-dt * 2.4);
+    const elevationBlend = 1 - Math.exp(-dt * 1.6);
+    orbit.yaw = normalizeAngle(
+      orbit.yaw + normalizeAngle(defaultYaw - orbit.yaw) * yawBlend,
+    );
+    orbit.elevation += (CAMERA_DEFAULT_ELEVATION - orbit.elevation) * elevationBlend;
+  }
+
+  const horizontalDistance = CAMERA_ORBIT_RADIUS * Math.cos(orbit.elevation);
+  const verticalDistance = CAMERA_ORBIT_RADIUS * Math.sin(orbit.elevation);
   thirdPersonDesired.set(
-    p.x - forwardX * followDistance + rightX * sideOffset,
-    p.y + 4.65 - playerCrouch * 0.22 + Math.abs(cameraBob) * 0.18,
-    p.z - forwardZ * followDistance + rightZ * sideOffset,
+    p.x + Math.cos(orbit.yaw) * horizontalDistance,
+    p.y + 1.25 - playerCrouch * 0.22 + verticalDistance + Math.abs(cameraBob) * 0.18,
+    p.z + Math.sin(orbit.yaw) * horizontalDistance,
   );
-  const pitch = Math.max(-0.48, Math.min(0.48, Number(state.pitch) || 0));
+  const viewForwardX = -Math.cos(orbit.yaw);
+  const viewForwardZ = -Math.sin(orbit.yaw);
   thirdPersonTarget.set(
-    p.x + forwardX * 1.25,
-    p.y + 1.28 - playerCrouch * 0.45 - Math.tan(pitch) * 1.15,
-    p.z + forwardZ * 1.25,
+    p.x + viewForwardX * 1.05,
+    p.y + 1.28 - playerCrouch * 0.45,
+    p.z + viewForwardZ * 1.05,
   );
   if (!thirdPersonReady || camera.position.distanceToSquared(thirdPersonDesired) > 625) {
     camera.position.copy(thirdPersonDesired);

@@ -36,6 +36,10 @@
   const WALL_TOP_HEIGHT = 3.08;
   const WALL_CLIMB_SECONDS = 0.64;
   const UPGRADE_MATCH_LIFETIME = 3;
+  const CAMERA_ORBIT_DEFAULT_ELEVATION = 0.5;
+  const CAMERA_ORBIT_MIN_ELEVATION = 0.46;
+  const CAMERA_ORBIT_MAX_ELEVATION = 0.72;
+  const CAMERA_ORBIT_SHOULDER_ANGLE = Math.atan2(1.15, 6.2);
   const TEAM_COLORS = ["#20a4ff", "#ff466d", "#ffd43b", "#5ee06f", "#bd63ff"];
   const SOLO_COLORS = [
     "#20a4ff", "#ff466d", "#ffd43b", "#5ee06f", "#bd63ff",
@@ -264,6 +268,12 @@
     crouching: false,
     crouchToggle: false,
     pitch: 0,
+    cameraOrbit: {
+      yaw: Math.PI - CAMERA_ORBIT_SHOULDER_ANGLE,
+      elevation: CAMERA_ORBIT_DEFAULT_ELEVATION,
+      dragging: false,
+      lastInputTime: 0,
+    },
     recoil: 0,
     hitmarker: 0,
     hurtFlash: 0,
@@ -552,6 +562,17 @@
     return a;
   }
 
+  function resetCameraOrbit() {
+    const heading = Number(state.player?.angle) || 0;
+    state.cameraOrbit.yaw = normalizeAngle(
+      heading + Math.PI - CAMERA_ORBIT_SHOULDER_ANGLE,
+    );
+    state.cameraOrbit.elevation = CAMERA_ORBIT_DEFAULT_ELEVATION;
+    state.cameraOrbit.dragging = false;
+    state.cameraOrbit.lastInputTime = state.time;
+    pointerState.look = null;
+  }
+
   function collides(x, z, actor = null) {
     for (let i = 0; i < 8; i += 1) {
       const a = i * Math.PI / 4;
@@ -748,6 +769,7 @@
     Object.keys(touchActions).forEach((key) => { touchActions[key] = false; });
     pointerState.move = null;
     pointerState.look = null;
+    state.cameraOrbit.dragging = false;
     state.firing = false;
     state.jumping = false;
     state.sprinting = false;
@@ -819,6 +841,7 @@
     state.weapon = 0;
     state.scoped = false;
     state.pitch = 0;
+    resetCameraOrbit();
     state.onWall = false;
     state.wallClimb = null;
     state.wallContactTime = 0;
@@ -2201,27 +2224,41 @@
   canvas.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch" || state.phase !== "playing") return;
     event.preventDefault();
+    if (pointerState.look) return;
     capturePointerSafely(canvas, event.pointerId);
-    if (event.clientX < window.innerWidth * 0.43 && !pointerState.move) {
-      pointerState.move = {
-        id: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        x: event.clientX,
-        y: event.clientY,
-      };
-    }
+    pointerState.look = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    state.cameraOrbit.dragging = true;
+    state.cameraOrbit.lastInputTime = state.time;
   }, { passive: false });
   canvas.addEventListener("pointermove", (event) => {
-    if (event.pointerType !== "touch") return;
-    if (pointerState.move && pointerState.move.id === event.pointerId) {
-      pointerState.move.x = event.clientX;
-      pointerState.move.y = event.clientY;
-    }
+    if (event.pointerType !== "touch"
+      || !pointerState.look
+      || pointerState.look.id !== event.pointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - pointerState.look.x;
+    const dy = event.clientY - pointerState.look.y;
+    pointerState.look.x = event.clientX;
+    pointerState.look.y = event.clientY;
+    if (Math.abs(dx) + Math.abs(dy) < 0.5) return;
+    state.cameraOrbit.yaw = normalizeAngle(state.cameraOrbit.yaw + dx * 0.0044);
+    state.cameraOrbit.elevation = Math.max(
+      CAMERA_ORBIT_MIN_ELEVATION,
+      Math.min(CAMERA_ORBIT_MAX_ELEVATION, state.cameraOrbit.elevation + dy * 0.0015),
+    );
+    state.cameraOrbit.dragging = true;
+    state.cameraOrbit.lastInputTime = state.time;
   }, { passive: false });
   function releasePointer(event) {
     if (pointerState.move && pointerState.move.id === event.pointerId) pointerState.move = null;
-    if (pointerState.look && pointerState.look.id === event.pointerId) pointerState.look = null;
+    if (pointerState.look && pointerState.look.id === event.pointerId) {
+      pointerState.look = null;
+      state.cameraOrbit.dragging = false;
+      state.cameraOrbit.lastInputTime = state.time;
+    }
   }
   canvas.addEventListener("pointerup", releasePointer);
   canvas.addEventListener("pointercancel", releasePointer);
@@ -2291,6 +2328,12 @@
       coordinateSystem: "origin northwest; x increases east/right, z increases south/down; angles are radians, 0=east",
       graphics: state.graphics3d ? "real-time WebGL 3D" : "canvas raycaster fallback",
       camera: state.graphics3d ? "third-person, diagonal behind and above the player" : "fallback view",
+      cameraOrbit: {
+        yaw: Number(state.cameraOrbit.yaw.toFixed(3)),
+        elevation: Number(state.cameraOrbit.elevation.toFixed(3)),
+        dragging: state.cameraOrbit.dragging,
+        touchDragEnabled: true,
+      },
       phase: state.phase,
       mode: state.mode,
       map: state.mapId,
@@ -2385,6 +2428,7 @@
         tablesBlockShots: true,
         shootingAutoTargetsNearestEnemy: true,
         manualAiming: false,
+        touchDragRotatesThirdPersonCamera: true,
         botsHandgunOnlyInWaves: true,
         botsCanCrouch: false,
       },
@@ -2409,6 +2453,7 @@
     returnToMenu,
     openShop,
     buyUpgrade,
+    resetCameraOrbit,
     toggleMoveTable,
     fireActor: fire,
     getState: () => state,
