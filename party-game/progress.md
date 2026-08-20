@@ -67,7 +67,7 @@ Spelet är beställt av **Agust** — exakt stavning **A-G-U-S-T**, inte August 
 - [x] Implementera tangentbord, iPad-touchknappar, paus/fortsätt/starta om och helskärm med korrekt canvas-resize.
 - [x] Exponera `window.render_game_to_text`, `window.advanceTime(ms)` och det avtalade `window.__partyGameDebug`.
 - [x] Kör hela testmatrisen i `qa-plan.md`, inspektera spelskärmbilder och verifiera noll nya konsolfel.
-- [ ] Lägg till Party Game i arkadmenyn, publicera enligt repo-flödet och ge Agust korrekt iPad-länk/laddningsinstruktion.
+- [x] Lägg till Party Game i arkadmenyn, publicera enligt repo-flödet och ge Agust korrekt iPad-länk/laddningsinstruktion.
 
 ## Verifiering
 
@@ -75,3 +75,4 @@ Spelet är beställt av **Agust** — exakt stavning **A-G-U-S-T**, inte August 
 - Alla sex världar granskade som skärmbilder.
 - Meny, Plattan och touchkontroller granskade visuellt.
 - Inga JavaScript-, konsol- eller sidfel i slutkörningen.
+- GitHub Pages-publiceringen lyckades och den publika spel- samt JavaScript-länken svarar med HTTP 200.
