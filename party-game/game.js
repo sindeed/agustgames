@@ -1597,6 +1597,7 @@
     const scale = clamp(state.view.w / 1280, 0.75, 1.1);
     ctx.save();
     ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
     ctx.fillStyle = "rgba(35,20,70,.84)"; roundRectPath(18, 18, 310 * scale, 68 * scale, 18 * scale); ctx.fill();
     ctx.fillStyle = "#ffe45b"; ctx.font = `1000 ${19 * scale}px system-ui`; ctx.fillText(`${MODE_NAMES[state.mode]} · ${MAP_NAMES[state.map]}`, 37, 42 * scale);
     ctx.fillStyle = "#fff"; ctx.font = `800 ${13 * scale}px system-ui`;
