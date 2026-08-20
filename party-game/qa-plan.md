@@ -31,6 +31,8 @@ Ingen testning har körts ännu. Planen är gjord för korta, deterministiska Pl
 | F02 | Varje Fri-karta | Skjut kanonen upprepade gånger med tidssteg mellan skotten. | Stora svarta kanonkulor syns, kolliderar korrekt och kan slå ut; inget ammunitionsvärde minskar eller hindrar fortsatt skjutning efter många skott. |
 | C01 | Fri / Storstad | Gå in/ut ur bil, kör på en figur och kör in i ett hus. | Use ger frivillig exit; påkörning kan skada/slå ut i Fri; huskrock skadar bilen; trasig bil stannar och kastar ut eventuell förare. Detta skiljer sig tydligt från Fred där figurer aldrig skadas. |
 | C02 | Fri / Storstad | Observera bot-AI över tid. | Bottar går in i bilar, kör och försöker köra på både spelaren och andra bottar; botkollisioner kan ge stridsresultat och spelet fortsätter utan låsning. |
+| C03 | Fri / Storstad | Sätt människan respektive en bot i en hel bil och träffa bilen med pil samt kanonkula. | Skottet stoppas; bilen förblir hel, föraren sitter kvar och blir inte utslagen. En obemannad bil kan fortfarande skjutas sönder med kanonkula. |
+| C04 | Fri / Storstad | Kör två bilar rakt genom varandra och kör därefter på en figur till fots. | Bilarna passerar genom varandra utan bil–bil-skada; figuren till fots kan fortfarande bli påkörd och utslagen. |
 | H01 | Fri / Backen | Slå ut en figur på sluttningen. | Figuren går in i slapp ragdoll, påverkas av lutning/gravitation och rullar tydligt nedför i stället för att ligga fast eller glida stelt. |
 | T01 | Fri / Plattan | Flytta/knuffa en figur över kanten och stega tiden. | Figuren faller visuellt, markeras eliminerad när den passerar fallgränsen och återkommer inte under samma runda. |
 | T02 | Fri / Plattan | Eliminera tills en figur återstår. | `#round-screen` visas med korrekt vinnare/resultat i `#round-title` och `#round-message`; Restart skapar ny runda med exakt 10 aktiva figurer. |
@@ -43,6 +45,7 @@ Ingen testning har körts ännu. Planen är gjord för korta, deterministiska Pl
 | V03 | Fri / Borgen, sköld | Låt ett sköldande mål träffas av svärd, sedan pil; sänk skölden och upprepa. | Skölden stoppar båda attackerna utan hit-räkning/utslagning. Samma attacker fungerar när skölden inte skyddar. Blockerat svärdsslag räknas inte mot de tre träffarna. |
 | A01 | Valfri karta | Håll en riktning, släpp, byt riktning och inspektera flera bildrutor. | Figuren har mjuk, tydligt vaggande gummigång med lösa lemmar; animationen följer rörelseriktning och fryser inte. |
 | A02 | Fri, valfri karta | Kör `knockOut(1,0)` och stega korta intervall. | Hela kroppen blir slapp och faller ihop fysiskt; ingen stel dödsbild används. Vanlig KO och permanent Plattan-eliminering är olika state. |
+| V01 | Storstad och Borgen | Granska figurer/bilar som rör sig framför och bakom byggnader/murar. | Rubber Bandits-kameravinkeln finns kvar, men djupet är lika tydligt som i Paint War 2 Deluxe: hus, borg och bilar har volym, olika belysta sidor, kastskuggor och korrekt övertäckning mellan nära/fjärran objekt. |
 | A03 | Alla karttyper | Förflytta spelaren till flera kanter/höjder. | Kameran håller samma sneda, lätt upphöjda party-brawler-vy, följer begripligt och visar relevanta hot utan skak, klippning eller tom yta. |
 | I01 | Desktop | Spela med tangentbordets visade kontroller: fyra riktningar, attack, use och cycle. | Alla handlingar fungerar, keyup stoppar rörelse, fokus fastnar inte på knappar och sidan scrollar inte under spel. |
 | I02 | iPad-viewport | Dra `#move-stick-base` i alla riktningar och använd samtidigt `#attack-btn`, `#use-btn`, `#cycle-btn` med ett andra finger. Släpp och avbryt även draget. | Analog riktning och fart fungerar, spaken återgår till mitten utan fastnad rörelse, samtidiga handlingar fungerar och inga kontroller ligger utanför skärmen eller ovanpå viktiga menyval. |
@@ -132,6 +135,28 @@ window.advanceTime(100);
 const state = d.getState();
 // Assert: bilen är trasig och föraren ute. Kör därefter på ett mål via normal input;
 // i Fri får målstatus/hälsa ändras, till skillnad från Fred.
+```
+
+```js
+// 6b. Människa och bot är skottsäkra i bemannad bil.
+const d = window.__partyGameDebug;
+d.start('free', 'city');
+d.enterNearestCar(0);
+let state = d.getState();
+const humanCar = state.players[0].inCar;
+d.hitCarWithProjectile(humanCar, 'arrow');
+d.hitCarWithProjectile(humanCar, 'cannonball');
+state = d.getState();
+// Assert: bilen är hel, driver === 0, människan är inte KO och sitter kvar.
+
+d.start('free', 'city');
+d.enterNearestCar(1);
+state = d.getState();
+const botCar = state.players[1].inCar;
+d.hitCarWithProjectile(botCar, 'arrow');
+d.hitCarWithProjectile(botCar, 'cannonball');
+state = d.getState();
+// Assert: bilen är hel, driver === 1, botten är inte KO och sitter kvar.
 ```
 
 ```js

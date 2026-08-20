@@ -414,7 +414,12 @@
       ensureAudio();
       touchStick.pointerId = event.pointerId;
       ui.joystick?.classList.add("is-active");
-      base.setPointerCapture?.(event.pointerId);
+      try {
+        base.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Some iPad/browser gesture transitions can end the native pointer
+        // just before capture. Movement still works and release resets it.
+      }
       move(event);
     });
     base.addEventListener("pointermove", move);
@@ -1074,8 +1079,13 @@
       let removed = false;
       for (const car of state.cars) {
         if (car.broken || distSq(shot, car) > (car.radius + shot.radius) ** 2) continue;
-        if (shot.type === "cannonball") breakCar(car);
-        projectileImpact(shot);
+        if (car.driver !== null) {
+          burst(shot.x, shot.z, "#bdefff", 9);
+          sfx("block");
+        } else {
+          if (shot.type === "cannonball") breakCar(car);
+          projectileImpact(shot);
+        }
         state.projectiles.splice(i, 1);
         removed = true;
         break;
@@ -1254,9 +1264,27 @@
     const bt = project(rect.x + rect.w, rect.z, top);
     const ct = project(rect.x + rect.w, rect.z + rect.d, top);
     const dt = project(rect.x, rect.z + rect.d, top);
-    pathPolygon([d, c, ct, dt], shade(color, -26));
-    pathPolygon([b, c, ct, bt], shade(color, -42));
-    pathPolygon([at, bt, ct, dt], shade(color, 18), "rgba(25,18,45,.28)", 1.4);
+    const shadowX = top * 6 * isoScale();
+    const shadowY = top * 2.8 * isoScale();
+    pathPolygon([a, b, c, d].map((point) => ({ x: point.x + shadowX, y: point.y + shadowY })), "rgba(29,24,49,.16)");
+    const leftFace = ctx.createLinearGradient(d.x, d.y, dt.x, dt.y);
+    leftFace.addColorStop(0, shade(color, -38));
+    leftFace.addColorStop(1, shade(color, -12));
+    const rightFace = ctx.createLinearGradient(c.x, c.y, ct.x, ct.y);
+    rightFace.addColorStop(0, shade(color, -52));
+    rightFace.addColorStop(1, shade(color, -24));
+    const roof = ctx.createLinearGradient(at.x, at.y, ct.x, ct.y);
+    roof.addColorStop(0, shade(color, 34));
+    roof.addColorStop(1, shade(color, 10));
+    pathPolygon([d, c, ct, dt], leftFace);
+    pathPolygon([b, c, ct, bt], rightFace);
+    pathPolygon([at, bt, ct, dt], roof, "rgba(255,244,207,.55)", 1.8);
+    ctx.strokeStyle = "rgba(37,24,55,.23)";
+    ctx.lineWidth = 1.5 * isoScale();
+    ctx.beginPath();
+    ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y);
+    ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y);
+    ctx.stroke();
     if (rect.h >= 4 && rect.w > 2) {
       const rows = Math.min(3, Math.floor(rect.h / 2));
       for (let r = 0; r < rows; r++) {
@@ -1334,8 +1362,6 @@
     }
     for (let z = b.minZ + 1; z < b.maxZ; z += 4) worldQuad(-0.12, z, 0.24, 1.8, "#ffd34f");
     for (let x = b.minX + 1; x < b.maxX; x += 4) worldQuad(x, -0.12, 1.8, 0.24, "#ffd34f");
-    CITY_BUILDINGS.slice().sort((a, bld) => a.x + a.z - bld.x - bld.z).forEach((building) => drawIsoBox(building));
-    for (const position of [[-3, 4], [4, 4], [-4, -9], [8, -9]]) drawTree(position[0], position[1]);
   }
 
   function drawGrass() {
@@ -1347,31 +1373,37 @@
         worldQuad(x, z, 2, 2, variation < 2 ? "#6ed05d" : "#64c456", 0, "rgba(32,110,52,.09)");
       }
     }
-    drawFence(-14, -10.5, 28, 0, 18);
-    drawFence(-14, 10.5, 28, 0, 18);
-    drawFence(-14, -10.5, 0, 21, 14);
-    drawFence(14, -10.5, 0, 21, 14);
     for (const flower of [[-9,-5],[8,6],[4,-8],[-4,8],[16,-2],[-17,5]]) drawFlower(flower[0], flower[1]);
   }
 
-  function drawFence(x, z, w, d, count) {
+  function drawFenceSection(x1, z1, x2, z2) {
     const scale = isoScale();
-    let previous = null;
-    for (let i = 0; i <= count; i++) {
-      const px = x + w * (i / count);
-      const pz = z + d * (i / count);
-      const bottom = project(px, pz, 0);
-      const top = project(px, pz, 0.85);
+    const startBottom = project(x1, z1, 0);
+    const startTop = project(x1, z1, 0.9);
+    const endBottom = project(x2, z2, 0);
+    const endTop = project(x2, z2, 0.9);
+    const railStartLow = project(x1, z1, 0.36);
+    const railEndLow = project(x2, z2, 0.36);
+    const railStartHigh = project(x1, z1, 0.68);
+    const railEndHigh = project(x2, z2, 0.68);
+    ctx.strokeStyle = "rgba(35,25,35,.17)";
+    ctx.lineWidth = 6 * scale;
+    ctx.beginPath(); ctx.moveTo(startBottom.x + 6 * scale, startBottom.y + 3 * scale); ctx.lineTo(endBottom.x + 6 * scale, endBottom.y + 3 * scale); ctx.stroke();
+    const wood = ctx.createLinearGradient(startTop.x, startTop.y, endBottom.x, endBottom.y);
+    wood.addColorStop(0, "#a16d43"); wood.addColorStop(1, "#5d3826");
+    ctx.strokeStyle = wood;
+    ctx.lineCap = "round";
+    ctx.lineWidth = 4 * scale;
+    ctx.beginPath();
+    ctx.moveTo(railStartLow.x, railStartLow.y); ctx.lineTo(railEndLow.x, railEndLow.y);
+    ctx.moveTo(railStartHigh.x, railStartHigh.y); ctx.lineTo(railEndHigh.x, railEndHigh.y);
+    ctx.stroke();
+    ctx.lineWidth = 6 * scale;
+    for (const [bottom, top] of [[startBottom, startTop], [endBottom, endTop]]) {
       ctx.strokeStyle = "#704b2f";
-      ctx.lineWidth = 5 * scale;
       ctx.beginPath(); ctx.moveTo(bottom.x, bottom.y); ctx.lineTo(top.x, top.y); ctx.stroke();
-      if (previous) {
-        const rail = project(px, pz, 0.55);
-        ctx.lineWidth = 3 * scale;
-        ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(rail.x, rail.y); ctx.stroke();
-        previous = rail;
-      } else previous = project(px, pz, 0.55);
     }
+    ctx.lineCap = "butt";
   }
 
   function drawHill() {
@@ -1386,7 +1418,9 @@
         ], z % 2 ? "#65bf58" : "#6ac65b", "rgba(37,114,53,.08)");
       }
     }
-    for (let x = -15; x <= 15; x += 5) drawTree(x, 10.5);
+  }
+
+  function drawHillSign() {
     const sign = project(-14, -9, groundHeight(-14, -9));
     ctx.save(); ctx.translate(sign.x, sign.y - 25); ctx.rotate(-0.05); ctx.fillStyle = "#f8d15c"; ctx.fillRect(-36, -19, 72, 30); ctx.fillStyle = "#503825"; ctx.font = "900 13px system-ui"; ctx.textAlign = "center"; ctx.fillText("BRANT!", 0, 1); ctx.restore();
   }
@@ -1414,23 +1448,35 @@
     for (let z = -9.7; z < -4; z += 1.15) worldQuad(4.45, z, 1.1, 0.65, "#a39570", 0.05, "#d3c79c");
     if (state.bridgeOpen) {
       for (let z = 4; z < 10.1; z += 0.8) worldQuad(-1.25, z, 2.5, 0.68, z % 1.6 < .7 ? "#9a6039" : "#ad7142", 0.08, "#613d28");
-    } else {
-      const hinge = project(0, 4.15, 0);
-      const raised = project(0, 4.15, 3.5);
-      ctx.strokeStyle = "#77472e"; ctx.lineWidth = 18 * isoScale(); ctx.beginPath(); ctx.moveTo(hinge.x, hinge.y); ctx.lineTo(raised.x, raised.y); ctx.stroke();
     }
-    castleWalls().filter((wall) => !wall.gate).forEach((wall) => drawIsoBox(wall, "#a99679"));
-    for (const [x, z] of [[-6.4,-4.7],[5.65,-4.7],[-6.4,4.05],[5.65,4.05]]) drawTower(x, z);
-    drawCastleButton();
+  }
+
+  function drawRaisedBridge() {
+    const scale = isoScale();
+    const hinge = project(0, 4.15, 0);
+    const raised = project(0, 4.15, 3.5);
+    ctx.strokeStyle = "rgba(31,23,43,.2)"; ctx.lineWidth = 21 * scale; ctx.beginPath(); ctx.moveTo(hinge.x + 7 * scale, hinge.y + 4 * scale); ctx.lineTo(raised.x + 7 * scale, raised.y + 4 * scale); ctx.stroke();
+    const wood = ctx.createLinearGradient(hinge.x, hinge.y, raised.x, raised.y);
+    wood.addColorStop(0, "#6a3d28"); wood.addColorStop(0.5, "#9b6039"); wood.addColorStop(1, "#c28754");
+    ctx.strokeStyle = wood; ctx.lineWidth = 18 * scale; ctx.beginPath(); ctx.moveTo(hinge.x, hinge.y); ctx.lineTo(raised.x, raised.y); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,221,160,.48)"; ctx.lineWidth = 2 * scale; ctx.beginPath(); ctx.moveTo(hinge.x - 5 * scale, hinge.y); ctx.lineTo(raised.x - 5 * scale, raised.y); ctx.stroke();
   }
 
   function drawTower(x, z) {
     const scale = isoScale();
     const p = project(x + 0.35, z + 0.35, 3.6);
-    ctx.fillStyle = "#c5b393";
+    const towerGradient = ctx.createRadialGradient(p.x - 8 * scale, p.y - 8 * scale, 2, p.x, p.y, 24 * scale);
+    towerGradient.addColorStop(0, "#eee0bf");
+    towerGradient.addColorStop(0.55, "#c5b393");
+    towerGradient.addColorStop(1, "#816f61");
+    ctx.fillStyle = towerGradient;
     ctx.beginPath(); ctx.arc(p.x, p.y, 17 * scale, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#754f83";
+    const roofGradient = ctx.createLinearGradient(p.x - 20 * scale, p.y - 34 * scale, p.x + 20 * scale, p.y);
+    roofGradient.addColorStop(0, "#a779b2");
+    roofGradient.addColorStop(1, "#593966");
+    ctx.fillStyle = roofGradient;
     ctx.beginPath(); ctx.moveTo(p.x - 20 * scale, p.y); ctx.lineTo(p.x, p.y - 35 * scale); ctx.lineTo(p.x + 20 * scale, p.y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(255,242,211,.5)"; ctx.lineWidth = 1.5 * scale; ctx.stroke();
   }
 
   function drawCastleButton() {
@@ -1446,9 +1492,15 @@
     const scale = isoScale();
     const bottom = project(x, z, 0);
     const top = project(x, z, 1.7);
-    ctx.strokeStyle = "#75492d"; ctx.lineWidth = 7 * scale; ctx.beginPath(); ctx.moveTo(bottom.x, bottom.y); ctx.lineTo(top.x, top.y); ctx.stroke();
-    ctx.fillStyle = "#3eaa63"; ctx.beginPath(); ctx.arc(top.x, top.y - 10 * scale, 20 * scale, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#62cd74"; ctx.beginPath(); ctx.arc(top.x - 9 * scale, top.y - 20 * scale, 12 * scale, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(29,37,39,.17)";
+    ctx.beginPath(); ctx.ellipse(bottom.x + 12 * scale, bottom.y + 5 * scale, 23 * scale, 8 * scale, 0.18, 0, TAU); ctx.fill();
+    const trunkGradient = ctx.createLinearGradient(bottom.x - 5 * scale, 0, bottom.x + 5 * scale, 0);
+    trunkGradient.addColorStop(0, "#9a6541"); trunkGradient.addColorStop(1, "#53301f");
+    ctx.strokeStyle = trunkGradient; ctx.lineWidth = 8 * scale; ctx.beginPath(); ctx.moveTo(bottom.x, bottom.y); ctx.lineTo(top.x, top.y); ctx.stroke();
+    const leaves = ctx.createRadialGradient(top.x - 9 * scale, top.y - 22 * scale, 2, top.x, top.y - 10 * scale, 25 * scale);
+    leaves.addColorStop(0, "#86e590"); leaves.addColorStop(0.48, "#49bd6b"); leaves.addColorStop(1, "#248151");
+    ctx.fillStyle = leaves; ctx.beginPath(); ctx.arc(top.x, top.y - 10 * scale, 21 * scale, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(181,255,177,.55)"; ctx.beginPath(); ctx.arc(top.x - 9 * scale, top.y - 21 * scale, 9 * scale, 0, TAU); ctx.fill();
   }
 
   function drawFlower(x, z) {
@@ -1461,6 +1513,7 @@
 
   function drawEntities() {
     const drawables = [];
+    queueMapScenery(drawables);
     for (const pickup of state.pickups) if (pickup.takenBy === null) drawables.push({ depth: pickup.x + pickup.z, draw: () => drawPickup(pickup) });
     for (const car of state.cars) drawables.push({ depth: car.x + car.z + 0.2, draw: () => drawCar(car) });
     for (const shot of state.projectiles) drawables.push({ depth: shot.x + shot.z + 0.3, draw: () => drawProjectile(shot) });
@@ -1471,6 +1524,58 @@
     drawables.sort((a, b) => a.depth - b.depth);
     for (const drawable of drawables) drawable.draw();
     drawParticles();
+  }
+
+  function queueMapScenery(drawables) {
+    if (state.map === "city") {
+      for (const building of CITY_BUILDINGS) {
+        drawables.push({
+          depth: building.x + building.w + building.z + building.d - 0.35,
+          draw: () => drawIsoBox(building),
+        });
+      }
+      for (const [x, z] of [[-3, 4], [4, 4], [-4, -9], [8, -9]]) {
+        drawables.push({ depth: x + z + 0.3, draw: () => drawTree(x, z) });
+      }
+    } else if (state.map === "hill") {
+      drawables.push({ depth: -23, draw: drawHillSign });
+      for (let x = -15; x <= 15; x += 5) {
+        drawables.push({ depth: x + 10.8, draw: () => drawTree(x, 10.5) });
+      }
+    } else if (state.map === "grass") {
+      const fences = [
+        [-14, -10.5, 14, -10.5, 18],
+        [-14, 10.5, 14, 10.5, 18],
+        [-14, -10.5, -14, 10.5, 14],
+        [14, -10.5, 14, 10.5, 14],
+      ];
+      for (const [x1, z1, x2, z2, count] of fences) {
+        for (let index = 0; index < count; index++) {
+          const start = index / count;
+          const end = (index + 1) / count;
+          const sx = lerp(x1, x2, start);
+          const sz = lerp(z1, z2, start);
+          const ex = lerp(x1, x2, end);
+          const ez = lerp(z1, z2, end);
+          drawables.push({
+            depth: (sx + sz + ex + ez) * 0.5 + 0.1,
+            draw: () => drawFenceSection(sx, sz, ex, ez),
+          });
+        }
+      }
+    } else if (state.map === "castle") {
+      if (!state.bridgeOpen) drawables.push({ depth: 4.3, draw: drawRaisedBridge });
+      for (const wall of castleWalls().filter((item) => !item.gate)) {
+        drawables.push({
+          depth: wall.x + wall.w + wall.z + wall.d - 0.2,
+          draw: () => drawIsoBox(wall, "#a99679"),
+        });
+      }
+      for (const [x, z] of [[-6.4,-4.7],[5.65,-4.7],[-6.4,4.05],[5.65,4.05]]) {
+        drawables.push({ depth: x + z + 1.1, draw: () => drawTower(x, z) });
+      }
+      drawables.push({ depth: 3.1, draw: drawCastleButton });
+    }
   }
 
   function drawPickup(pickup) {
@@ -1491,38 +1596,102 @@
     ctx.restore();
   }
 
+  function orientedRectCorners(cx, cz, angle, length, width) {
+    const forward = { x: Math.cos(angle), z: Math.sin(angle) };
+    const side = { x: -forward.z, z: forward.x };
+    const halfLength = length * 0.5;
+    const halfWidth = width * 0.5;
+    return [
+      { x: cx - forward.x * halfLength - side.x * halfWidth, z: cz - forward.z * halfLength - side.z * halfWidth },
+      { x: cx + forward.x * halfLength - side.x * halfWidth, z: cz + forward.z * halfLength - side.z * halfWidth },
+      { x: cx + forward.x * halfLength + side.x * halfWidth, z: cz + forward.z * halfLength + side.z * halfWidth },
+      { x: cx - forward.x * halfLength + side.x * halfWidth, z: cz - forward.z * halfLength + side.z * halfWidth },
+    ];
+  }
+
+  function drawOrientedIsoPrism(cx, cz, angle, length, width, baseY, height, color, castShadow = false) {
+    const corners = orientedRectCorners(cx, cz, angle, length, width);
+    const base = corners.map((point) => project(point.x, point.z, baseY));
+    const top = corners.map((point) => project(point.x, point.z, baseY + height));
+    if (castShadow) {
+      const ground = corners.map((point) => project(point.x, point.z, 0));
+      const offsetX = height * 11 * isoScale();
+      const offsetY = height * 5 * isoScale();
+      pathPolygon(ground.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY })), "rgba(27,23,43,.23)");
+    }
+    const faces = corners.map((point, index) => {
+      const next = (index + 1) % corners.length;
+      const edgeX = corners[next].x - point.x;
+      const edgeZ = corners[next].z - point.z;
+      const edgeLength = Math.hypot(edgeX, edgeZ) || 1;
+      const light = (edgeZ / edgeLength) * -0.65 + (-edgeX / edgeLength) * -0.76;
+      return { index, next, depth: (base[index].y + base[next].y) * 0.5, amount: -35 + light * 14 };
+    }).sort((a, b) => a.depth - b.depth);
+    for (const face of faces) {
+      const gradient = ctx.createLinearGradient(base[face.index].x, base[face.index].y, top[face.index].x, top[face.index].y);
+      gradient.addColorStop(0, shade(color, face.amount - 12));
+      gradient.addColorStop(1, shade(color, face.amount + 8));
+      pathPolygon([base[face.index], base[face.next], top[face.next], top[face.index]], gradient, "rgba(30,22,43,.32)", 1.1 * isoScale());
+    }
+    const roof = ctx.createLinearGradient(top[0].x, top[0].y, top[2].x, top[2].y);
+    roof.addColorStop(0, shade(color, 30));
+    roof.addColorStop(1, shade(color, 2));
+    pathPolygon(top, roof, "rgba(255,244,212,.62)", 1.25 * isoScale());
+    return { corners, base, top };
+  }
+
   function drawCar(car) {
     const scale = isoScale();
-    const p = project(car.x, car.z, 0.25);
-    const forwardWorld = { x: Math.cos(car.angle), z: Math.sin(car.angle) };
-    const front = project(car.x + forwardWorld.x, car.z + forwardWorld.z, 0.25);
-    const screenAngle = Math.atan2(front.y - p.y, front.x - p.x);
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(screenAngle);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = "rgba(27,24,42,.25)";
-    ctx.beginPath(); ctx.ellipse(0, 14, 42, 14, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = car.broken ? "#625f68" : shade(car.color, -16);
-    roundRectPath(-39, -18, 78, 34, 10); ctx.fill();
-    ctx.fillStyle = car.broken ? "#474650" : car.color;
-    roundRectPath(-22, -30, 43, 26, 9); ctx.fill();
-    ctx.fillStyle = "#bfeaff";
-    roundRectPath(-14, -26, 26, 14, 4); ctx.fill();
-    ctx.fillStyle = "#272534";
-    ctx.beginPath(); ctx.arc(-25, 16, 10, 0, TAU); ctx.arc(25, 16, 10, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#fff3a0"; ctx.fillRect(31, -10, 8, 8);
+    const forward = { x: Math.cos(car.angle), z: Math.sin(car.angle) };
+    const side = { x: -forward.z, z: forward.x };
+    const carShadow = orientedRectCorners(car.x, car.z, car.angle, 3, 1.55)
+      .map((point) => project(point.x, point.z, 0))
+      .map((point) => ({ x: point.x + 8 * scale, y: point.y + 4 * scale }));
+    pathPolygon(carShadow, "rgba(27,23,43,.23)");
+    const wheelColor = car.broken ? "#34333a" : "#201d2c";
+    for (const forwardOffset of [-0.86, 0.86]) {
+      for (const sideOffset of [-0.64, 0.64]) {
+        const wheel = project(
+          car.x + forward.x * forwardOffset + side.x * sideOffset,
+          car.z + forward.z * forwardOffset + side.z * sideOffset,
+          0.2,
+        );
+        ctx.fillStyle = wheelColor;
+        ctx.beginPath(); ctx.ellipse(wheel.x, wheel.y, 8 * scale, 5 * scale, 0.2, 0, TAU); ctx.fill();
+        ctx.fillStyle = "#6e6b79";
+        ctx.beginPath(); ctx.ellipse(wheel.x, wheel.y, 3 * scale, 2 * scale, 0.2, 0, TAU); ctx.fill();
+      }
+    }
+    const bodyColor = car.broken ? "#66636c" : car.color;
+    drawOrientedIsoPrism(car.x, car.z, car.angle, 2.8, 1.38, 0.18, 0.58, bodyColor);
+    const cabinX = car.x - forward.x * 0.24;
+    const cabinZ = car.z - forward.z * 0.24;
+    drawOrientedIsoPrism(cabinX, cabinZ, car.angle, 1.28, 1.02, 0.76, 0.55, car.broken ? "#55545d" : "#72cce8");
+    for (const sideOffset of [-0.43, 0.43]) {
+      const lamp = project(
+        car.x + forward.x * 1.42 + side.x * sideOffset,
+        car.z + forward.z * 1.42 + side.z * sideOffset,
+        0.52,
+      );
+      ctx.fillStyle = car.broken ? "#a39d88" : "#fff1a0";
+      ctx.beginPath(); ctx.arc(lamp.x, lamp.y, 4.5 * scale, 0, TAU); ctx.fill();
+    }
     if (car.broken) {
-      ctx.strokeStyle = "#f0eff5"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-11, -25); ctx.lineTo(5, -12); ctx.moveTo(6, -25); ctx.lineTo(-5, -13); ctx.stroke();
+      const windshield = project(cabinX + forward.x * 0.32, cabinZ + forward.z * 0.32, 1.31);
+      ctx.strokeStyle = "#f3f3f8"; ctx.lineWidth = 1.6 * scale;
+      ctx.beginPath(); ctx.moveTo(windshield.x - 8 * scale, windshield.y - 5 * scale); ctx.lineTo(windshield.x + 7 * scale, windshield.y + 5 * scale); ctx.moveTo(windshield.x + 5 * scale, windshield.y - 6 * scale); ctx.lineTo(windshield.x - 3 * scale, windshield.y + 5 * scale); ctx.stroke();
     }
     if (car.driver !== null) {
       const driver = state.players[car.driver];
-      ctx.fillStyle = driver.color;
-      ctx.beginPath(); ctx.arc(-2, -31, 11, 0, TAU); ctx.fill();
-      ctx.strokeStyle = "#241c39"; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = "#171423"; ctx.beginPath(); ctx.arc(2, -33, 1.8, 0, TAU); ctx.fill();
+      const head = project(cabinX - forward.x * 0.12, cabinZ - forward.z * 0.12, 1.48);
+      const headGradient = ctx.createRadialGradient(head.x - 4 * scale, head.y - 5 * scale, 1, head.x, head.y, 12 * scale);
+      headGradient.addColorStop(0, shade(driver.color, 40));
+      headGradient.addColorStop(1, shade(driver.color, -18));
+      ctx.fillStyle = headGradient;
+      ctx.beginPath(); ctx.arc(head.x, head.y, 11 * scale, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#241c39"; ctx.lineWidth = 2 * scale; ctx.stroke();
+      ctx.fillStyle = "#171423"; ctx.beginPath(); ctx.arc(head.x + 3 * scale, head.y - 2 * scale, 1.8 * scale, 0, TAU); ctx.fill();
     }
-    ctx.restore();
   }
 
   function drawProjectile(shot) {
@@ -1547,9 +1716,11 @@
     const scale = isoScale();
     const ground = groundHeight(player.x, player.z) ?? player.y;
     const shadow = project(player.x, player.z, ground + 0.02);
+    const lift = Math.max(0, player.y - ground);
+    const shadowScale = clamp(1 - lift * 0.055, 0.55, 1);
     ctx.save();
-    ctx.fillStyle = "rgba(25,20,44,.24)";
-    ctx.beginPath(); ctx.ellipse(shadow.x, shadow.y, (player.knocked ? 31 : 18) * scale, (player.knocked ? 10 : 8) * scale, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = `rgba(25,20,44,${0.24 / (1 + lift * 0.35)})`;
+    ctx.beginPath(); ctx.ellipse(shadow.x + lift * 3 * scale, shadow.y + lift * 1.5 * scale, (player.knocked ? 31 : 18) * scale * shadowScale, (player.knocked ? 10 : 8) * scale * shadowScale, 0, 0, TAU); ctx.fill();
     ctx.restore();
     if (player.knocked) drawRagdoll(player);
     else drawUprightPlayer(player);
@@ -1557,17 +1728,24 @@
 
   function drawUprightPlayer(player) {
     const scale = isoScale();
-    const bob = Math.abs(Math.sin(player.walk)) * 4.5 * player.moveAmount;
-    const wobble = Math.sin(player.walk * 0.52 + player.index) * 0.085 * (0.25 + player.moveAmount);
+    const step = Math.sin(player.walk);
+    const jellyWave = Math.sin(player.walk * 2 + player.index * 0.37);
+    const idleWave = Math.sin(state.time * 2.8 + player.index * 0.71);
+    const bob = Math.abs(step) * 8 * player.moveAmount + idleWave * 0.7;
+    const wobble = Math.sin(player.walk * 0.58 + player.index) * 0.17 * (0.35 + player.moveAmount) + idleWave * 0.022;
+    const squash = jellyWave * 0.11 * player.moveAmount + idleWave * 0.018;
+    const squashX = 1 + squash;
+    const squashY = 1 - squash * 0.82;
+    const headLag = -wobble * 30 - step * 2.5 * player.moveAmount;
     const p = project(player.x, player.z, player.y + 0.15);
     const facingEnd = project(player.x + player.facingX, player.z + player.facingZ, player.y);
     const facingAngle = Math.atan2(facingEnd.y - p.y, facingEnd.x - p.x);
-    const legSwing = Math.sin(player.walk) * 8 * player.moveAmount;
-    const armSwing = -Math.sin(player.walk) * 13 * player.moveAmount;
+    const legSwing = step * 14 * player.moveAmount;
+    const armSwing = -step * 23 * player.moveAmount;
     ctx.save();
     ctx.translate(p.x, p.y - bob * scale);
     ctx.rotate(wobble);
-    ctx.scale(scale, scale);
+    ctx.scale(scale * squashX, scale * squashY);
     ctx.lineCap = "round";
     ctx.strokeStyle = shade(player.color, -35);
     ctx.lineWidth = 11;
@@ -1584,7 +1762,16 @@
     ctx.fillStyle = bodyGradient;
     roundRectPath(-19, -64, 38, 48, 17); ctx.fill();
     ctx.strokeStyle = "rgba(39,26,58,.35)"; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.fillStyle = shade(player.color, 24);
+    ctx.fillStyle = "rgba(255,255,255,.18)";
+    ctx.beginPath(); ctx.ellipse(-8, -49, 5.5, 12, -0.2, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.translate(headLag, -Math.abs(squash) * 6);
+    ctx.rotate(-wobble * 0.62);
+    const headGradient = ctx.createRadialGradient(-7, -80, 2, 0, -73, 23);
+    headGradient.addColorStop(0, shade(player.color, 48));
+    headGradient.addColorStop(0.48, shade(player.color, 24));
+    headGradient.addColorStop(1, shade(player.color, -18));
+    ctx.fillStyle = headGradient;
     ctx.beginPath(); ctx.ellipse(0, -73, 18, 20, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = "rgba(39,26,58,.5)"; ctx.lineWidth = 2.5; ctx.stroke();
     const eyeShift = Math.cos(facingAngle) * 3;
@@ -1593,6 +1780,7 @@
     ctx.fillStyle = "#21172f";
     ctx.beginPath(); ctx.arc(-5 + eyeShift, -76, 2.2, 0, TAU); ctx.arc(7 + eyeShift, -76, 2.2, 0, TAU); ctx.fill();
     ctx.strokeStyle = "#522b3d"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -68, 5, 0.1, Math.PI - 0.1); ctx.stroke();
+    ctx.restore();
     drawHeldWeapon(player, facingAngle);
     if (player.blockedFlash > 0) {
       ctx.strokeStyle = `rgba(211,248,255,${player.blockedFlash * 2.8})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, -44, 31, -1.3, 1.3); ctx.stroke();
@@ -1623,13 +1811,27 @@
   function drawRagdoll(player) {
     const scale = isoScale();
     const p = project(player.x, player.z, player.y + 0.04);
-    const angle = Math.atan2(player.vz || player.facingZ, player.vx || player.facingX) * 0.45 + Math.sin(player.walk) * 0.18;
-    ctx.save(); ctx.translate(p.x, p.y - 5 * scale); ctx.rotate(angle); ctx.scale(scale, scale); ctx.lineCap = "round";
+    const speed = Math.hypot(player.vx, player.vz);
+    const limpMotion = clamp(speed / 4.5 + Math.abs(player.vy) * 0.32, 0, 1);
+    const flop = Math.sin(player.walk * 1.35 + player.index) * (7 + Math.min(12, speed * 1.5)) * limpMotion;
+    const counterFlop = Math.cos(player.walk * 1.7 + player.index * 0.6) * (6 + Math.min(10, speed)) * limpMotion;
+    const rubberSquash = Math.sin(player.walk * 1.9) * 0.13 * limpMotion;
+    const angle = Math.atan2(player.vz || player.facingZ, player.vx || player.facingX) * 0.45 + Math.sin(player.walk) * 0.34 * limpMotion;
+    ctx.save(); ctx.translate(p.x, p.y - 5 * scale); ctx.rotate(angle); ctx.scale(scale * (1 + rubberSquash), scale * (1 - rubberSquash * 0.55)); ctx.lineCap = "round";
     ctx.strokeStyle = shade(player.color, -25); ctx.lineWidth = 11;
-    ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(-30, 14); ctx.moveTo(7, 1); ctx.lineTo(27, 18); ctx.moveTo(-10, -7); ctx.lineTo(-29, -19); ctx.moveTo(11, -7); ctx.lineTo(34, -12); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-7, 0); ctx.quadraticCurveTo(-18, 7 + flop * 0.35, -31, 14 + flop * 0.42);
+    ctx.moveTo(7, 1); ctx.quadraticCurveTo(18, 8 - counterFlop * 0.3, 29, 18 - counterFlop * 0.4);
+    ctx.moveTo(-10, -7); ctx.quadraticCurveTo(-18, -12 + counterFlop * 0.32, -31, -19 + counterFlop * 0.55);
+    ctx.moveTo(11, -7); ctx.quadraticCurveTo(22, -10 - flop * 0.3, 35, -12 - flop * 0.52);
+    ctx.stroke();
     ctx.fillStyle = player.color; roundRectPath(-20, -17, 42, 26, 13); ctx.fill(); ctx.strokeStyle = "rgba(35,24,49,.45)"; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.fillStyle = shade(player.color, 24); ctx.beginPath(); ctx.ellipse(25, -5, 16, 15, 0.2, 0, TAU); ctx.fill(); ctx.strokeStyle = "rgba(35,24,49,.5)"; ctx.stroke();
+    ctx.save(); ctx.translate(flop * 0.18, counterFlop * 0.16); ctx.rotate(-flop * 0.012);
+    const headGradient = ctx.createRadialGradient(19, -10, 1, 25, -5, 19);
+    headGradient.addColorStop(0, shade(player.color, 45)); headGradient.addColorStop(1, shade(player.color, -15));
+    ctx.fillStyle = headGradient; ctx.beginPath(); ctx.ellipse(25, -5, 16, 15, 0.2, 0, TAU); ctx.fill(); ctx.strokeStyle = "rgba(35,24,49,.5)"; ctx.stroke();
     ctx.strokeStyle = "#281b35"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(20, -9); ctx.lineTo(25, -4); ctx.moveTo(25, -9); ctx.lineTo(20, -4); ctx.moveTo(29, -8); ctx.lineTo(34, -3); ctx.moveTo(34, -8); ctx.lineTo(29, -3); ctx.stroke();
+    ctx.restore();
     ctx.restore();
     const stars = Math.min(3, Math.ceil(player.knockoutTimer));
     ctx.fillStyle = "#ffe356"; ctx.font = `900 ${16 * scale}px system-ui`; ctx.textAlign = "center";
@@ -1665,6 +1867,7 @@
     const human = state.players[0];
     if (!human || state.screen === "menu" || state.screen === "maps") return;
     const scale = clamp(state.view.w / 1280, 0.75, 1.1);
+    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
     ctx.save();
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
@@ -1676,21 +1879,43 @@
     if (state.mode === "free") {
       const weapon = currentWeapon(human);
       const hudWidth = 270 * scale;
-      ctx.fillStyle = "rgba(35,20,70,.84)"; roundRectPath(state.view.w - hudWidth - 18, 18, hudWidth, 68 * scale, 18 * scale); ctx.fill();
-      ctx.fillStyle = "#fff"; ctx.font = `900 ${16 * scale}px system-ui`; ctx.textAlign = "right"; ctx.fillText(WEAPON_NAMES[weapon] || "INGET VAPEN", state.view.w - 38, 42 * scale);
+      const weaponTop = coarsePointer ? 96 * scale : 18;
+      ctx.fillStyle = "rgba(35,20,70,.84)"; roundRectPath(state.view.w - hudWidth - 18, weaponTop, hudWidth, 68 * scale, 18 * scale); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = `900 ${16 * scale}px system-ui`; ctx.textAlign = "right"; ctx.fillText(WEAPON_NAMES[weapon] || "INGET VAPEN", state.view.w - 38, weaponTop + 24 * scale);
       ctx.fillStyle = "#ffdf56"; ctx.font = `800 ${12 * scale}px system-ui`;
       const detail = weapon === "sword" ? `TRÄFFAR PÅ DIG: ${human.swordHits}/3` : (weapon === "bow" || weapon === "cannon") ? "OÄNDLIG AMMUNITION" : "BLOCKERAR SVÄRD + PILAR";
-      ctx.fillText(detail, state.view.w - 38, 67 * scale);
+      ctx.fillText(detail, state.view.w - 38, weaponTop + 49 * scale);
     }
     if (state.map === "castle") {
       ctx.textAlign = "center"; ctx.fillStyle = state.bridgeOpen ? "rgba(47,183,101,.9)" : "rgba(120,71,46,.88)"; roundRectPath(state.view.w / 2 - 110 * scale, 20, 220 * scale, 38 * scale, 13 * scale); ctx.fill(); ctx.fillStyle = "#fff"; ctx.font = `900 ${13 * scale}px system-ui`; ctx.fillText(state.bridgeOpen ? "VINDBRYGGAN ÄR ÖPPEN" : "HITTA KNAPPEN ELLER HEMLIGA VÄGEN", state.view.w / 2, 39 * scale);
     }
     if (state.screen === "playing" && !state.roundOver) {
       ctx.textAlign = "center"; ctx.fillStyle = "rgba(28,18,50,.72)"; roundRectPath(state.view.w / 2 - 195 * scale, state.view.h - 49 * scale, 390 * scale, 31 * scale, 12 * scale); ctx.fill(); ctx.fillStyle = "#fff"; ctx.font = `800 ${11.5 * scale}px system-ui`;
-      const moveHint = window.matchMedia("(pointer: coarse)").matches ? "SPAK: GÅ" : "WASD/PILAR: GÅ";
+      const moveHint = coarsePointer ? "SPAK: GÅ" : "WASD/PILAR: GÅ";
       ctx.fillText(state.mode === "free" ? `${moveHint} · SPACE/J: ANFALL · E: ANVÄND · Q: BYT` : `${moveHint} · E: KÖR/HOPPA UR`, state.view.w / 2, state.view.h - 33 * scale);
     }
     ctx.restore();
+  }
+
+  function drawWorldLighting() {
+    const sunlight = ctx.createLinearGradient(0, 0, state.view.w, state.view.h);
+    sunlight.addColorStop(0, "rgba(255,249,211,.12)");
+    sunlight.addColorStop(0.5, "rgba(255,255,255,0)");
+    sunlight.addColorStop(1, "rgba(49,29,88,.07)");
+    ctx.fillStyle = sunlight;
+    ctx.fillRect(0, 0, state.view.w, state.view.h);
+    const vignette = ctx.createRadialGradient(
+      state.view.w * 0.5,
+      state.view.h * 0.46,
+      Math.min(state.view.w, state.view.h) * 0.24,
+      state.view.w * 0.5,
+      state.view.h * 0.5,
+      Math.max(state.view.w, state.view.h) * 0.72,
+    );
+    vignette.addColorStop(0, "rgba(31,20,62,0)");
+    vignette.addColorStop(1, "rgba(31,20,62,.13)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, state.view.w, state.view.h);
   }
 
   function roundRectPath(x, y, width, height, radius) {
@@ -1712,6 +1937,7 @@
     if (state.map && !["menu", "maps"].includes(state.screen)) {
       drawMap();
       drawEntities();
+      drawWorldLighting();
       drawHud();
     } else {
       ctx.fillStyle = "#24145f";
@@ -1903,12 +2129,12 @@
       render();
       return { result, state: getDebugState() };
     },
-    enterNearestCar() {
-      const human = state.players[0];
-      if (!human || state.map !== "city") return { result: false, state: getDebugState() };
-      const car = nearestCar(human, false);
-      if (car && distSq(human, car) > 7) { human.x = car.x + 1.4; human.z = car.z; }
-      const result = enterCar(human, car);
+    enterNearestCar(playerIndex = 0) {
+      const player = state.players[playerIndex];
+      if (!player || state.map !== "city") return { result: false, state: getDebugState() };
+      const car = nearestCar(player, false);
+      if (car && distSq(player, car) > 7) { player.x = car.x + 1.4; player.z = car.z; }
+      const result = enterCar(player, car);
       render();
       return { result, state: getDebugState() };
     },
@@ -1918,6 +2144,29 @@
       breakCar(car);
       render();
       return { result: Boolean(car?.broken), state: getDebugState() };
+    },
+    hitCarWithProjectile(carIndex = 0, type = "cannonball") {
+      const car = state.cars[carIndex];
+      if (!car || car.broken) return { result: false, state: getDebugState() };
+      const owner = state.players.find((player) => player.index !== car.driver && !player.eliminated);
+      const shotType = type === "arrow" ? "arrow" : "cannonball";
+      state.projectiles.push({
+        id: `debug-${state.frame}-${carIndex}-${shotType}`,
+        type: shotType,
+        owner: owner?.index ?? 0,
+        x: car.x,
+        z: car.z,
+        y: shotType === "arrow" ? 1.15 : 0.75,
+        vx: 0.01,
+        vz: 0,
+        vy: 0,
+        radius: shotType === "arrow" ? 0.14 : 0.58,
+        life: 1,
+        rotation: 0,
+      });
+      updateProjectiles(0);
+      render();
+      return { result: !car.broken, state: getDebugState() };
     },
     getState() { return getDebugState(); },
   });

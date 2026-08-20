@@ -86,3 +86,14 @@ Styrspaken är verifierad med analog halv/full fart, diagonal riktning, pointer 
 - [x] Låt alla tio börja på gräset utanför Borgen och ge bottarna exakt en sekunds skjutpaus i början.
 
 Verifierat: samtliga tio startpositioner ligger på gräsfastlandet, inga projektiler finns före en sekund, skjutgrinden öppnar vid en sekund och bottarna träffar valda mål därefter. Skärmbilden visar hela gruppen utanför vallgraven.
+
+- [x] Gör figurerna mycket gummigare med kraftigare vaggning, squash/stretch, studs, huvudeftersläpning, lösa lemmar och ännu slappare rullande ragdolls.
+
+Verifierat: den officiella webbspelsklienten visar tydligare studs, vaggning och kroppssquash under gång. En utslagen figur har provats i Backen och visas med böjda, svajande lemmar och gummig rullning. Alla sex världar startar fortfarande med exakt en människa och nio bottar, tredje svärdsträffen slår ut i Fri, Fred blockerar utslagning, bottarna skjuter inte före en sekund och inga konsolfel uppstod.
+
+- [x] Gör förare och bottar helt skottsäkra medan de sitter i en bil. Bilar ska köra igenom varandra utan bilskada, men fortfarande kunna köra på figurer till fots.
+- [x] Förstärk Party Games isometriska 3D-djup till samma tydliga 3D-känsla som Paint War 2 Deluxe, utan att ändra Rubber Bandits-kameravinkeln.
+
+Verifierat: både människan och en bot stannar kvar oskadade i en hel bil efter direktträff av både pil och kanonkula. Skottet stoppas av bilen. Befintlig bilfysik saknar bil–bil-kollision och låter därför bilar passera genom varandra, medan påkörningskontrollen fortfarande gäller figurer till fots. Tomma bilar kan fortfarande skjutas sönder och huskrascher fungerar som tidigare.
+
+3D-uppgraderingen har riktiga isometriska bilprismor, kastskuggor, ljusgradienter, rundade volymreflexer och gemensam djupsortering för figurer, bilar, hus, träd, grässtaket, uppfälld vindbrygga och borgmurar. Storstaden, Grässlätten och Borgen granskades visuellt; alla sex världar renderades utan konsolfel. Ragdollen fladdrar kraftigt under träff/rullning men lägger sig still när farten tar slut. På iPad ligger vapenrutan nu under toppknapparna utan överlapp och styrspaken verifierades igen. Canvas-testet höll cirka 0,6 ms per simulerad bildruta på testmaskinen.
