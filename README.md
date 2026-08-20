@@ -14,6 +14,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
+| Party Game | [`party-game/`](party-game/) | Färgglatt fysik-partyspel med spelaren och nio bottar. Utforska fredligt i Fred eller kör alla mot alla med kanoner, bilar och borgvapen i Fri. |
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |
 | Survivor of Days | [`survivor-blockshop/`](survivor-blockshop/) | Bygg en bas, handla block i Blockshop och skydda hjärtat i fem dygn. |
 | Wilder: The Big City | [`wilder-big-city/`](wilder-big-city/) | Utforska den stora staden Wilder i förstapersons-3D. Välj en av 19 personer (4 poliser, 5 tjuvar och 10 vanliga människor), kör fordon och besök stadens 13 byggnader. |
@@ -27,6 +28,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 ```
 agustgames/
 ├── index.html        ← arkad-meny som länkar till alla spel
+├── party-game/       ← Fysik-partyspel med Fred, Fri, 9 bottar och sex världar
 ├── puzzle-game/      ← Pixelgubben (index.html + style.css + game.js)
 ├── survivor-blockshop/ ← Survivor of Days and Blockshop of Building
 ├── wilder-big-city/  ← Förstapersons-3D i staden Wilder

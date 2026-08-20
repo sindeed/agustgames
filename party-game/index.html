@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#24145f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Party Game · Agust Games</title>
+    <link rel="icon" href="../favicon.ico">
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css?v=20260820-1">
+    <script src="game.js?v=20260820-1" defer></script>
+  </head>
+  <body>
+    <aside class="rotate-notice" aria-label="Vänd skärmen till liggande läge">
+      <div class="rotate-device" aria-hidden="true"><span>↻</span></div>
+      <strong>VÄND PÅ DIN IPAD</strong>
+      <p>Party Game spelas bäst i liggande läge!</p>
+    </aside>
+
+    <main class="game-shell" id="game-shell">
+      <canvas
+        id="game"
+        width="1280"
+        height="720"
+        tabindex="0"
+        aria-label="Party Game, ett färgglatt partyspel med tio figurer"
+      >
+        Din webbläsare behöver stöd för canvas för att spela Party Game.
+      </canvas>
+
+      <div class="party-speckles" aria-hidden="true">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+
+      <nav class="top-controls" aria-label="Spelknappar">
+        <a class="top-button home-button" href="../" aria-label="Till Agust Games">
+          <span aria-hidden="true">⌂</span>
+          <small>HEM</small>
+        </a>
+        <button class="top-button" id="pause-btn" type="button" aria-label="Pausa spelet" hidden>
+          <span aria-hidden="true">Ⅱ</span>
+          <small>PAUS</small>
+        </button>
+        <button class="top-button" id="sound-btn" type="button" aria-label="Stäng av ljudet" aria-pressed="false">
+          <span class="sound-on" aria-hidden="true">♪</span>
+          <span class="sound-off" aria-hidden="true">×</span>
+          <small>LJUD</small>
+        </button>
+        <button class="top-button" id="fullscreen-btn" type="button" aria-label="Växla helskärm">
+          <span aria-hidden="true">⛶</span>
+          <small>STOR</small>
+        </button>
+      </nav>
+
+      <section class="screen-overlay menu-screen" id="menu-screen" aria-labelledby="game-title">
+        <div class="menu-blob menu-blob-one" aria-hidden="true"></div>
+        <div class="menu-blob menu-blob-two" aria-hidden="true"></div>
+        <div class="menu-content">
+          <header class="title-lockup">
+            <p class="eyebrow">AGUST GAMES PRESENTERAR</p>
+            <h1 id="game-title">
+              <span>PARTY</span>
+              <span>GAME</span>
+            </h1>
+            <p class="title-tagline">10 GUMMIGA FIGURER · 6 VÄRLDAR · MAXAT KAOS</p>
+          </header>
+
+          <div class="mode-area">
+            <p class="pick-label">VÄLJ HUR NI SKA SPELA</p>
+            <div class="mode-grid" role="group" aria-label="Välj spelläge">
+              <button class="mode-card peace-card" type="button" data-mode="peace">
+                <span class="mode-sticker" aria-hidden="true">☮</span>
+                <span class="mode-copy">
+                  <strong>FRED</strong>
+                  <small>INGEN FÅR SLÅSS</small>
+                  <span>Du och 9 fredliga bottar går runt, kör bilar och kan krascha.</span>
+                </span>
+                <span class="mode-arrow" aria-hidden="true">▶</span>
+              </button>
+
+              <button class="mode-card free-card" type="button" data-mode="free">
+                <span class="mode-sticker" aria-hidden="true">⚔</span>
+                <span class="mode-copy">
+                  <strong>FRI</strong>
+                  <small>ALLA MOT ALLA</small>
+                  <span>Du och 9 bottar får slåss, skjuta och försöka bli sist kvar!</span>
+                </span>
+                <span class="mode-arrow" aria-hidden="true">▶</span>
+              </button>
+            </div>
+          </div>
+
+          <footer class="menu-footer">
+            <span><kbd>WASD</kbd> eller <kbd>↑↓←→</kbd> GÅ</span>
+            <span><kbd>J</kbd> SLÅ / SKJUT</span>
+            <span><kbd>E</kbd> ANVÄND</span>
+            <span><kbd>Q</kbd> BYT</span>
+          </footer>
+        </div>
+      </section>
+
+      <section class="screen-overlay map-screen" id="map-screen" aria-labelledby="map-title" hidden>
+        <div class="map-panel">
+          <header class="map-header">
+            <button class="back-button" id="map-back-btn" type="button" aria-label="Tillbaka till spellägen">
+              <span aria-hidden="true">‹</span> TILLBAKA
+            </button>
+            <div>
+              <p class="eyebrow">10 FIGURER ÄR REDO</p>
+              <h2 id="map-title">VÄLJ VÄRLD</h2>
+              <p id="map-message">Vart börjar festen?</p>
+            </div>
+          </header>
+
+          <div class="map-group" data-for="peace" aria-label="Fredliga världar" hidden>
+            <button class="map-card city-map" type="button" data-map="city" data-for="peace">
+              <span class="map-art city-art" aria-hidden="true">
+                <i></i><i></i><i></i><b></b>
+              </span>
+              <span class="map-copy">
+                <strong>STORSTADEN</strong>
+                <small>KÖR BIL · UTFORSKA · KRASCHA</small>
+              </span>
+              <span class="map-number">01</span>
+            </button>
+
+            <button class="map-card grass-map" type="button" data-map="grass" data-for="peace">
+              <span class="map-art grass-art" aria-hidden="true">
+                <i></i><i></i><i></i><b></b>
+              </span>
+              <span class="map-copy">
+                <strong>GRÄSSLÄTTEN</strong>
+                <small>JÄTTESTOR · STAKET ATT KLÄTTRA ÖVER</small>
+              </span>
+              <span class="map-number">02</span>
+            </button>
+          </div>
+
+          <div class="map-group free-map-group" data-for="free" aria-label="Världar för alla mot alla" hidden>
+            <button class="map-card city-map" type="button" data-map="city" data-for="free">
+              <span class="map-art city-art" aria-hidden="true">
+                <i></i><i></i><i></i><b></b>
+              </span>
+              <span class="map-copy">
+                <strong>STORSTADEN</strong>
+                <small>KÖR PÅ VARANDRA · KRASCHA HUS</small>
+              </span>
+              <span class="map-number">01</span>
+            </button>
+
+            <button class="map-card hill-map" type="button" data-map="hill" data-for="free">
+              <span class="map-art hill-art" aria-hidden="true">
+                <i></i><i></i><i></i><b></b>
+              </span>
+              <span class="map-copy">
+                <strong>BACKEN</strong>
+                <small>SLÅ NER DEM · SE DEM RULLA</small>
+              </span>
+              <span class="map-number">02</span>
+            </button>
+
+            <button class="map-card platform-map" type="button" data-map="platform" data-for="free">
+              <span class="map-art platform-art" aria-hidden="true">
+                <i></i><i></i><i></i><b></b>
+              </span>
+              <span class="map-copy">
+                <strong>PLATTAN</strong>
+                <small>HÖGT I LUFTEN · RAMLA = UTE</small>
+              </span>
+              <span class="map-number">03</span>
+            </button>
+
+            <button class="map-card castle-map" type="button" data-map="castle" data-for="free">
+              <span class="map-art castle-art" aria-hidden="true">
+                <i></i><i></i><i></i><b></b>
+              </span>
+              <span class="map-copy">
+                <strong>BORGEN</strong>
+                <small>VALLGRAV · HEMLIG VÄG · VAPEN</small>
+              </span>
+              <span class="map-number">04</span>
+            </button>
+          </div>
+
+          <p class="map-tip" id="map-tip">I Fred kan ingen skada någon.</p>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-screen" id="pause-screen" aria-labelledby="pause-title" hidden>
+        <div class="dialog-card pause-card">
+          <span class="dialog-icon" aria-hidden="true">Ⅱ</span>
+          <p class="eyebrow">TA EN LITEN PAUS</p>
+          <h2 id="pause-title">PAUS</h2>
+          <p>Festen väntar på dig.</p>
+          <div class="dialog-actions">
+            <button class="primary-button" id="resume-btn" type="button">FORTSÄTT ▶</button>
+            <button class="secondary-button" id="restart-btn" type="button">BÖRJA OM ↻</button>
+            <button class="text-button" id="menu-btn" type="button">VÄLJ NYTT LÄGE</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-screen" id="round-screen" aria-labelledby="round-title" hidden>
+        <div class="dialog-card round-card">
+          <span class="winner-burst" aria-hidden="true">★</span>
+          <p class="eyebrow">RUNDAN ÄR KLAR</p>
+          <h2 id="round-title">BRA SPELAT!</h2>
+          <p id="round-message">Tryck på spela igen när du är redo.</p>
+          <div class="dialog-actions">
+            <button class="primary-button" id="play-again-btn" type="button">SPELA IGEN ▶</button>
+            <button class="text-button" id="round-menu-btn" type="button">VÄLJ NY VÄRLD</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="touch-controls" id="touch-controls" aria-label="Pekskärmskontroller" hidden>
+        <div class="d-pad" aria-label="Gå">
+          <button class="touch-button d-up" type="button" data-key="ArrowUp" aria-label="Gå upp">▲</button>
+          <button class="touch-button d-left" type="button" data-key="ArrowLeft" aria-label="Gå vänster">◀</button>
+          <button class="touch-button d-down" type="button" data-key="ArrowDown" aria-label="Gå ner">▼</button>
+          <button class="touch-button d-right" type="button" data-key="ArrowRight" aria-label="Gå höger">▶</button>
+        </div>
+        <div class="action-pad">
+          <button class="touch-button action-button cycle-button" id="cycle-btn" type="button">
+            <span aria-hidden="true">↻</span><small>BYT</small>
+          </button>
+          <button class="touch-button action-button use-button" id="use-btn" type="button">
+            <span aria-hidden="true">✦</span><small>ANVÄND</small>
+          </button>
+          <button class="touch-button action-button attack-button" id="attack-btn" type="button">
+            <span aria-hidden="true">✹</span><small>SLÅ/SKJUT</small>
+          </button>
+        </div>
+      </section>
+
+      <div class="status-toast" id="status-toast" role="status" aria-live="polite" hidden></div>
+    </main>
+  </body>
+</html>
