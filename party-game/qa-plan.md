@@ -10,7 +10,7 @@ Ingen testning har körts ännu. Planen är gjord för korta, deterministiska Pl
 - Knappar: `#resume-btn`, `#restart-btn`, `#pause-btn`, `#sound-btn`, `#fullscreen-btn`.
 - Lägesval: `[data-mode="peace"]`, `[data-mode="free"]`.
 - Kartval: `[data-map="city"]`, `[data-map="grass"]`, `[data-map="hill"]`, `[data-map="platform"]`, `[data-map="castle"]`, alltid med rätt `data-for="peace|free"`.
-- Touchrörelse: `[data-key="ArrowUp"]`, `[data-key="ArrowDown"]`, `[data-key="ArrowLeft"]`, `[data-key="ArrowRight"]`.
+- Touchrörelse: analog styrspak `#move-stick-base` med knopp `#move-stick-knob`.
 - Touchhandlingar: `#attack-btn`, `#use-btn`, `#cycle-btn`.
 - Hookar: `window.render_game_to_text()`, `window.advanceTime(ms)` och `window.__partyGameDebug` med minst `.start(mode,map)`, `.knockOut(targetIndex,sourceIndex)`, `.hitSword(targetIndex,sourceIndex)`, `.fireWeapon(playerIndex)`, `.enterNearestCar()`, `.damageCar()`, `.getState()`.
 
@@ -44,7 +44,7 @@ Ingen testning har körts ännu. Planen är gjord för korta, deterministiska Pl
 | A02 | Fri, valfri karta | Kör `knockOut(1,0)` och stega korta intervall. | Hela kroppen blir slapp och faller ihop fysiskt; ingen stel dödsbild används. Vanlig KO och permanent Plattan-eliminering är olika state. |
 | A03 | Alla karttyper | Förflytta spelaren till flera kanter/höjder. | Kameran håller samma sneda, lätt upphöjda party-brawler-vy, följer begripligt och visar relevanta hot utan skak, klippning eller tom yta. |
 | I01 | Desktop | Spela med tangentbordets visade kontroller: fyra riktningar, attack, use och cycle. | Alla handlingar fungerar, keyup stoppar rörelse, fokus fastnar inte på knappar och sidan scrollar inte under spel. |
-| I02 | iPad-viewport | Använd samtliga `[data-key]` samt `#attack-btn`, `#use-btn`, `#cycle-btn` med pointer/touch down/up. | Samma funktioner som tangentbordet; samtidiga rörelse + handling fungerar; inga kontroller ligger utanför skärmen eller ovanpå viktiga menyval. |
+| I02 | iPad-viewport | Dra `#move-stick-base` i alla riktningar och använd samtidigt `#attack-btn`, `#use-btn`, `#cycle-btn` med ett andra finger. Släpp och avbryt även draget. | Analog riktning och fart fungerar, spaken återgår till mitten utan fastnad rörelse, samtidiga handlingar fungerar och inga kontroller ligger utanför skärmen eller ovanpå viktiga menyval. |
 | I03 | Pågående spel | Öppna `#pause-screen` med `#pause-btn` och paus-tangent; stega tid; välj Resume. | Under paus ändras ingen fysik, AI, projektil eller timer; rätt overlay syns; `#resume-btn` återupptar exakt samma state. |
 | I04 | Pågående spel | Klicka `#restart-btn`. | Samma mode/karta startar rent med 10 figurer, noll gammal projektil-/KO-/bilstate och stängd/initial kartmekanik. |
 | I05 | Desktop och iPad-viewport | Toggla `#fullscreen-btn` och tangenten `f`; lämna med Esc; rotera/ändra viewport. | Fullscreen går in/ur där API stöds; canvas skalas utan stretching/klippning, inputmappning förblir korrekt och nekad fullscreen ger inget kraschat state. |

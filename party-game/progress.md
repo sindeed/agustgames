@@ -76,3 +76,9 @@ Spelet är beställt av **Agust** — exakt stavning **A-G-U-S-T**, inte August 
 - Meny, Plattan och touchkontroller granskade visuellt.
 - Inga JavaScript-, konsol- eller sidfel i slutkörningen.
 - GitHub Pages-publiceringen lyckades och den publika spel- samt JavaScript-länken svarar med HTTP 200.
+
+## Senaste önskemål
+
+- [x] Byt iPadens fyra pilknappar mot en analog styrspak och verifiera drag, släpp, avbrott samt samtidig attack.
+
+Styrspaken är verifierad med analog halv/full fart, diagonal riktning, pointer capture, släpp, avbrott, paus/blur och samtidig attack. Tangentbordet fungerar fortfarande.

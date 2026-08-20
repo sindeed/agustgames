@@ -13,8 +13,8 @@
     <title>Party Game · Agust Games</title>
     <link rel="icon" href="../favicon.ico">
     <link rel="apple-touch-icon" href="../apple-touch-icon.png">
-    <link rel="stylesheet" href="style.css?v=20260820-2">
-    <script src="game.js?v=20260820-2" defer></script>
+    <link rel="stylesheet" href="style.css?v=20260820-3">
+    <script src="game.js?v=20260820-3" defer></script>
   </head>
   <body>
     <aside class="rotate-notice" aria-label="Vänd skärmen till liggande läge">
@@ -220,11 +220,15 @@
       </section>
 
       <section class="touch-controls" id="touch-controls" aria-label="Pekskärmskontroller" hidden>
-        <div class="d-pad" aria-label="Gå">
-          <button class="touch-button d-up" type="button" data-key="ArrowUp" aria-label="Gå upp">▲</button>
-          <button class="touch-button d-left" type="button" data-key="ArrowLeft" aria-label="Gå vänster">◀</button>
-          <button class="touch-button d-down" type="button" data-key="ArrowDown" aria-label="Gå ner">▼</button>
-          <button class="touch-button d-right" type="button" data-key="ArrowRight" aria-label="Gå höger">▶</button>
+        <div class="joystick" id="move-stick" aria-label="Styrspak för att gå">
+          <div class="joystick-base" id="move-stick-base">
+            <span class="joystick-arrow joystick-up" aria-hidden="true">▲</span>
+            <span class="joystick-arrow joystick-right" aria-hidden="true">▶</span>
+            <span class="joystick-arrow joystick-down" aria-hidden="true">▼</span>
+            <span class="joystick-arrow joystick-left" aria-hidden="true">◀</span>
+            <span class="joystick-knob" id="move-stick-knob" aria-hidden="true"></span>
+          </div>
+          <small>STYR</small>
         </div>
         <div class="action-pad">
           <button class="touch-button action-button cycle-button" id="cycle-btn" type="button">
