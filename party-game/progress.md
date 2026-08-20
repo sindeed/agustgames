@@ -82,3 +82,7 @@ Spelet är beställt av **Agust** — exakt stavning **A-G-U-S-T**, inte August 
 - [x] Byt iPadens fyra pilknappar mot en analog styrspak och verifiera drag, släpp, avbrott samt samtidig attack.
 
 Styrspaken är verifierad med analog halv/full fart, diagonal riktning, pointer capture, släpp, avbrott, paus/blur och samtidig attack. Tangentbordet fungerar fortfarande.
+
+- [x] Låt alla tio börja på gräset utanför Borgen och ge bottarna exakt en sekunds skjutpaus i början.
+
+Verifierat: samtliga tio startpositioner ligger på gräsfastlandet, inga projektiler finns före en sekund, skjutgrinden öppnar vid en sekund och bottarna träffar valda mål därefter. Skärmbilden visar hela gruppen utanför vallgraven.

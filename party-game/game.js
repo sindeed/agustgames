@@ -28,6 +28,7 @@
   const TAU = Math.PI * 2;
   const FIXED_STEP = 1 / 60;
   const PLAYER_COUNT = 10;
+  const BOT_SHOOT_DELAY = 1;
   const PLAYER_COLORS = [
     "#ff405d", "#30b8ff", "#ffd232", "#7c5cff", "#36d67f",
     "#ff843d", "#f15ee6", "#55ded5", "#9fd33d", "#ff6d9f",
@@ -209,10 +210,14 @@
       }
       return result;
     }
-    for (let i = 0; i < PLAYER_COUNT; i++) {
-      result.push({ x: -4.2 + (i % 5) * 2.1, z: -1.9 + Math.floor(i / 5) * 2.3, y: 0 });
-    }
-    return result;
+    // Borgen starts on the grassy mainland outside the moat. The player must
+    // use the hidden path (or later the drawbridge) to reach the castle.
+    return [
+      { x: 0, z: -11.8 }, { x: -2.4, z: -11.8 }, { x: 2.4, z: -11.8 },
+      { x: -4.8, z: -11.8 }, { x: 4.8, z: -11.8 }, { x: -7.2, z: -11.8 },
+      { x: 7.2, z: -11.8 }, { x: -9.6, z: -11.8 }, { x: 9.6, z: -11.8 },
+      { x: 0, z: -10.5 },
+    ];
   }
 
   function makeCars() {
@@ -692,7 +697,7 @@
         player.facingZ = aim.z;
         const weapon = currentWeapon(player);
         if (weapon === "sword" && distance < 2.15) attack(player);
-        else if ((weapon === "bow" && distance < 12) || (weapon === "cannon" && distance < 10)) {
+        else if (state.roundTime >= BOT_SHOOT_DELAY && ((weapon === "bow" && distance < 12) || (weapon === "cannon" && distance < 10))) {
           if (seeded() < 0.28) attack(player);
         } else if (weapon === "shield" && seeded() < 0.12 && player.inventory.length > 1) cycleWeaponQuiet(player);
         if (distance < 2.4 && weapon !== "sword" && player.inventory.includes("sword")) selectWeapon(player, "sword");
@@ -1817,6 +1822,8 @@
       playerCount: state.players.length,
       aliveCount: state.players.filter((player) => !player.eliminated).length,
       bridgeOpen: state.bridgeOpen,
+      botShootDelaySeconds: BOT_SHOOT_DELAY,
+      botsCanShoot: state.roundTime >= BOT_SHOOT_DELAY,
       input: {
         joystick: { x: rounded(touchStick.x), y: rounded(touchStick.y), active: touchStick.pointerId !== null },
       },

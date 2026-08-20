@@ -35,6 +35,7 @@ Ingen testning har körts ännu. Planen är gjord för korta, deterministiska Pl
 | T01 | Fri / Plattan | Flytta/knuffa en figur över kanten och stega tiden. | Figuren faller visuellt, markeras eliminerad när den passerar fallgränsen och återkommer inte under samma runda. |
 | T02 | Fri / Plattan | Eliminera tills en figur återstår. | `#round-screen` visas med korrekt vinnare/resultat i `#round-title` och `#round-message`; Restart skapar ny runda med exakt 10 aktiva figurer. |
 | K01 | Fri / Borgen | Inspektera karta och navigera runt vallgraven. | Stor borg, vallgrav, stängd vindbrygga och en verkligt passerbar hemlig väg in finns; vägen är dold nog att upptäckas men inte blockerad av osynlig kollision. |
+| K01b | Fri / Borgen, start | Läs alla tio startpositioner och stega först 0,99 s och sedan förbi 1,00 s. | Alla börjar på gräsfastlandet utanför vallgraven. Bottarna får sikta/röra sig men skapar ingen projektil före en sekund; därefter får de skjuta på valda mål. |
 | K02 | Fri / Borgen | Börja/ta sig in, gå till knappen och aktivera Use. | Knappen reagerar en gång, vindbryggan öppnas synligt, dess kollision ändras och bron går att passera från båda håll. |
 | K03 | Fri / Borgen | Växla utrustning med Cycle och observera spelare/bottar. | Kanon, svärd, pilbåge och sköld går att identifiera och använda; bottarna använder utrustning mot varandra och inte bara mot människan. |
 | V01 | Fri / Borgen, svärd | Ge samma oskyddade mål tre separata svärdsträffar. | Efter träff 1 och 2 är målet inte utslaget; exakt träff 3 ger utslagning/ragdoll. |
