@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#101a32">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>War of Kingdoms · Agust Games</title>
+    <link rel="icon" href="../favicon.ico">
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="stylesheet" href="style.css?v=20260825-first-release">
+  </head>
+  <body>
+    <main class="game-shell" id="game-shell">
+      <canvas
+        id="game"
+        width="1280"
+        height="720"
+        tabindex="0"
+        aria-label="War of Kingdoms, ett tredimensionellt förstapersonsspel"
+      >
+        Din webbläsare behöver stöd för WebGL för att spela War of Kingdoms.
+      </canvas>
+
+      <div class="top-controls" aria-label="Spelkontroller">
+        <a class="icon-button" id="home-btn" href="../" aria-label="Till Agust Games-menyn" title="Agust Games">
+          <span aria-hidden="true">⌂</span>
+          <small>MENY</small>
+        </a>
+        <button class="icon-button" id="fullscreen-btn" type="button" aria-label="Växla helskärm" title="Helskärm (F)">
+          <span aria-hidden="true">⛶</span>
+          <small>HELSKÄRM</small>
+        </button>
+        <button class="icon-button pause-control" id="pause-btn" type="button" aria-label="Pausa spelet" title="Pausa (Esc)" hidden>
+          <span aria-hidden="true">Ⅱ</span>
+          <small>PAUS</small>
+        </button>
+      </div>
+
+      <section class="royal-hud" id="hud" aria-label="Kungarikets status" hidden>
+        <div class="hud-panel health-panel">
+          <span class="hud-symbol heart" aria-hidden="true">♥</span>
+          <span class="hud-copy">
+            <small>LIV</small>
+            <span class="health-track"><span class="health-fill" id="health-fill"></span></span>
+          </span>
+          <strong id="health-value">100</strong>
+        </div>
+
+        <div class="hud-panel resource-panel">
+          <span class="coin-symbol" aria-hidden="true">●</span>
+          <span><small>PENGAR</small><strong id="money-value">50</strong></span>
+          <span class="resource-divider" aria-hidden="true"></span>
+          <span class="diamond-symbol" aria-hidden="true">◆</span>
+          <span><small>DIAMANTER</small><strong id="diamond-value">0</strong></span>
+        </div>
+
+        <div class="hud-panel time-panel">
+          <span class="sun-symbol" aria-hidden="true">☀</span>
+          <span><small id="phase-label">DAG 1</small><strong id="clock-value">3:00</strong></span>
+        </div>
+
+        <div class="hud-panel battle-panel">
+          <span class="weapon-symbol" aria-hidden="true">⚔</span>
+          <span><small>VAPEN</small><strong id="weapon-label">SVÄRD</strong></span>
+          <span class="resource-divider" aria-hidden="true"></span>
+          <span><small>FÖLJER</small><strong id="followers-value">0</strong></span>
+        </div>
+      </section>
+
+      <div class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+      <div class="interaction-prompt" id="interaction-prompt" role="status" aria-live="polite" hidden>
+        <kbd>E</kbd><span>ANVÄND</span>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+      <section class="screen-overlay menu-screen" id="menu-screen" aria-labelledby="game-title">
+        <div class="banner-field" aria-hidden="true">
+          <span class="banner banner-red"></span>
+          <span class="banner banner-blue"></span>
+          <span class="castle-silhouette castle-left"></span>
+          <span class="castle-silhouette castle-right"></span>
+        </div>
+
+        <div class="menu-content">
+          <header class="title-lockup">
+            <p class="eyebrow">AGUST GAMES PRESENTERAR</p>
+            <div class="crown-mark" aria-hidden="true">♛</div>
+            <h1 id="game-title">
+              <span>WAR OF</span>
+              <strong>KINGDOMS</strong>
+            </h1>
+            <p class="tagline">BYGG DIN ARMÉ · FÖRSVARA BORGEN · BLI RIKETS MÄKTIGASTE KUNG</p>
+          </header>
+
+          <div class="menu-card">
+            <p class="royal-callout"><span aria-hidden="true">♜</span> DIN BORG VÄNTAR</p>
+            <ul class="feature-list" aria-label="Det här kan du göra i spelet">
+              <li><span aria-hidden="true">⚔</span> Led svärdvakter, bågskyttar och ryttare</li>
+              <li><span aria-hidden="true">☀</span> Kriga på dagen och smyg på natten</li>
+              <li><span aria-hidden="true">◆</span> Hitta skatter och försvara ditt rike</li>
+            </ul>
+            <button class="primary-button start-button" id="start-btn" type="button">
+              <span class="button-crown" aria-hidden="true">♛</span>
+              <span><strong>BLI KUNG</strong><small>STARTA ÄVENTYRET</small></span>
+              <span class="button-arrow" aria-hidden="true">▶</span>
+            </button>
+          </div>
+
+          <aside class="desktop-help" aria-label="Datorkontroller">
+            <span><kbd>WASD</kbd> GÅ</span>
+            <span><kbd>DRA</kbd> TITTA</span>
+            <span><kbd>E</kbd> ANVÄND</span>
+            <span><kbd>KLICK</kbd> SLÅ / SKJUT</span>
+            <span><kbd>Q</kbd> BYT VAPEN</span>
+          </aside>
+          <p class="touch-help">Spela i liggande läge · styr med joysticken · dra på världen för att titta</p>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="world-map" aria-labelledby="map-title" hidden>
+        <div class="dialog map-dialog">
+          <header class="dialog-header">
+            <div>
+              <p class="eyebrow">DE SJU RIKENA</p>
+              <h2 id="map-title">VÄRLDSKARTAN</h2>
+              <p>Välj en borg. På dagen kan du anfalla, på natten kan du smyga.</p>
+            </div>
+            <button class="close-button" id="close-map-btn" type="button" aria-label="Stäng världskartan">×</button>
+          </header>
+          <div class="map-parchment">
+            <span class="map-river" aria-hidden="true"></span>
+            <span class="map-mountain mountain-one" aria-hidden="true"></span>
+            <span class="map-mountain mountain-two" aria-hidden="true"></span>
+            <div class="map-grid" id="map-grid" aria-label="Kungarikets sju borgar"></div>
+          </div>
+          <p class="dialog-tip"><span aria-hidden="true">☀</span> DAG: ATTACKERA &nbsp; · &nbsp; <span aria-hidden="true">☾</span> NATT: SMYGUPPDRAG</p>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="question-dialog" aria-labelledby="question-title" hidden>
+        <div class="dialog compact-dialog question-card">
+          <div class="dialog-seal" aria-hidden="true">♛</div>
+          <p class="eyebrow">KUNGEN BESTÄMMER</p>
+          <h2 id="question-title">VILL DU ATTACKERA?</h2>
+          <p id="question-text">Är du säker?</p>
+          <div class="dialog-actions">
+            <button class="primary-button" id="question-yes" type="button">JA</button>
+            <button class="secondary-button" id="question-no" type="button">NEJ</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="selection-dialog" aria-labelledby="selection-title" hidden>
+        <div class="dialog selection-dialog">
+          <header class="dialog-header selection-header">
+            <div>
+              <p class="eyebrow">DINA EGNA VAKTER</p>
+              <h2 id="selection-title">VÄLJ DIN ARMÉ</h2>
+              <p id="selection-copy">Högst 20 av dina egna vakter får följa med.</p>
+            </div>
+            <div class="selection-total" aria-label="Antal valda vakter">
+              <small>VALDA</small>
+              <strong id="selection-total">0 / 20</strong>
+            </div>
+          </header>
+
+          <div class="unit-picker" role="group" aria-label="Välj vakter">
+            <article class="unit-row sword-row">
+              <div class="unit-emblem" aria-hidden="true">⚔</div>
+              <div class="unit-name"><strong>SVÄRD + SKÖLD</strong><small>NÄRSTRID</small></div>
+              <div class="counter-controls">
+                <button type="button" data-unit="sword" data-delta="-1" aria-label="Ta bort en svärdvakt">−</button>
+                <span><strong data-unit-count="sword">0</strong><small data-unit-available="sword">AV 4</small></span>
+                <button type="button" data-unit="sword" data-delta="1" aria-label="Lägg till en svärdvakt">+</button>
+              </div>
+            </article>
+
+            <article class="unit-row archer-row">
+              <div class="unit-emblem" aria-hidden="true">➶</div>
+              <div class="unit-name"><strong>PILBÅGE</strong><small>SKJUTER PÅ AVSTÅND</small></div>
+              <div class="counter-controls">
+                <button type="button" data-unit="archer" data-delta="-1" aria-label="Ta bort en bågskytt">−</button>
+                <span><strong data-unit-count="archer">0</strong><small data-unit-available="archer">AV 4</small></span>
+                <button type="button" data-unit="archer" data-delta="1" aria-label="Lägg till en bågskytt">+</button>
+              </div>
+            </article>
+
+            <article class="unit-row cavalry-row">
+              <div class="unit-emblem" aria-hidden="true">♞</div>
+              <div class="unit-name"><strong>SPJUT + HÄST</strong><small>SNABBT KAVALLERI</small></div>
+              <div class="counter-controls">
+                <button type="button" data-unit="cavalry" data-delta="-1" aria-label="Ta bort en spjutryttare">−</button>
+                <span><strong data-unit-count="cavalry">0</strong><small data-unit-available="cavalry">AV 2</small></span>
+                <button type="button" data-unit="cavalry" data-delta="1" aria-label="Lägg till en spjutryttare">+</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="dialog-actions selection-actions">
+            <button class="primary-button" id="selection-confirm" type="button">FÄRDIG</button>
+            <button class="secondary-button" id="selection-cancel" type="button">AVBRYT</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="shop-dialog" aria-labelledby="shop-title" hidden>
+        <div class="dialog shop-dialog">
+          <header class="dialog-header">
+            <div>
+              <p class="eyebrow">BYNS AFFÄR</p>
+              <h2 id="shop-title">KUNGENS MARKNAD</h2>
+              <p>Varje köp ger två namnlösa vakter.</p>
+            </div>
+            <button class="close-button" id="close-shop-btn" type="button" aria-label="Stäng affären">×</button>
+          </header>
+
+          <div class="shop-grid">
+            <article class="shop-card sword-card">
+              <div class="shop-icon" aria-hidden="true">⚔</div>
+              <div><small>DU HAR <strong data-owned="sword">4</strong></small><h3>SVÄRD + SKÖLD</h3><p>Två starka närstridsvakter.</p></div>
+              <button type="button" data-buy="sword"><span>KÖP 2</span><strong>● 10</strong></button>
+            </article>
+            <article class="shop-card archer-card">
+              <div class="shop-icon" aria-hidden="true">➶</div>
+              <div><small>DU HAR <strong data-owned="archer">4</strong></small><h3>PILBÅGE</h3><p>Två bågskyttar för mark eller torn.</p></div>
+              <button type="button" data-buy="archer"><span>KÖP 2</span><strong>● 15</strong></button>
+            </article>
+            <article class="shop-card cavalry-card">
+              <div class="shop-icon" aria-hidden="true">♞</div>
+              <div><small>DU HAR <strong data-owned="cavalry">2</strong></small><h3>SPJUT + HÄST</h3><p>Två snabba ryttare med sköld.</p></div>
+              <button type="button" data-buy="cavalry"><span>KÖP 2</span><strong>● 20</strong></button>
+            </article>
+          </div>
+
+          <div class="diamond-trade">
+            <span class="diamond-symbol large" aria-hidden="true">◆</span>
+            <span><strong>SÄLJ EN DIAMANT</strong><small>FÅ 10 PENGAR</small></span>
+            <button class="primary-button" id="sell-diamond-btn" type="button" disabled>INGA DIAMANTER ATT SÄLJA</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="outcome-dialog" aria-labelledby="outcome-title" hidden>
+        <div class="dialog compact-dialog outcome-card">
+          <div class="result-rays" aria-hidden="true"></div>
+          <div class="result-crown" aria-hidden="true">♛</div>
+          <p class="eyebrow">SLAGET ÄR AVGJORT</p>
+          <h2 id="outcome-title">DU VANN KRIGET!</h2>
+          <p id="outcome-text">Riket får 50 pengar.</p>
+          <button class="primary-button" id="outcome-continue" type="button">FORTSÄTT</button>
+        </div>
+      </section>
+
+      <section class="screen-overlay dialog-overlay" id="pause-dialog" aria-labelledby="pause-title" hidden>
+        <div class="dialog compact-dialog pause-card">
+          <div class="dialog-seal" aria-hidden="true">Ⅱ</div>
+          <p class="eyebrow">SPELET VÄNTAR</p>
+          <h2 id="pause-title">PAUS</h2>
+          <div class="pause-actions">
+            <button class="primary-button" id="resume-btn" type="button">FORTSÄTT SPELA</button>
+            <button class="secondary-button" id="restart-btn" type="button">BÖRJA OM</button>
+            <a class="secondary-button button-link" href="../">AGUST GAMES-MENYN</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="touch-controls" id="touch-controls" aria-label="Pekkontroller" hidden>
+        <div class="joystick" id="move-stick" aria-label="Styrspak">
+          <span class="joystick-arrows" aria-hidden="true">‹ &nbsp; · &nbsp; ›</span>
+          <span class="joystick-knob" id="move-stick-knob"></span>
+        </div>
+        <div class="touch-actions">
+          <button class="touch-button switch-button" id="switch-btn" type="button" aria-label="Byt mellan svärd och pilbåge">
+            <span aria-hidden="true">↺</span><small>BYT</small>
+          </button>
+          <button class="touch-button use-button" id="use-btn" type="button" aria-label="Använd eller prata">
+            <span aria-hidden="true">E</span><small>ANVÄND</small>
+          </button>
+          <button class="touch-button attack-button" id="attack-btn" type="button" aria-label="Slå eller skjut">
+            <span aria-hidden="true">⚔</span><small>ATTACK</small>
+          </button>
+        </div>
+      </section>
+
+      <div class="rotate-notice" role="status">
+        <span class="rotate-device" aria-hidden="true">▯</span>
+        <strong>VÄND PADDAN</strong>
+        <p>War of Kingdoms spelas i liggande läge.</p>
+      </div>
+
+      <noscript>
+        <p class="noscript-message">JavaScript måste vara påslaget för att spela War of Kingdoms.</p>
+      </noscript>
+    </main>
+
+    <script type="module" src="game.js?v=20260825-first-release"></script>
+  </body>
+</html>
