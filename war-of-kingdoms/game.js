@@ -89,7 +89,7 @@ import * as THREE from "./vendor/three.module.js";
     aiAttackAt: 42,
     money: 50,
     diamonds: 0,
-    guards: { sword: 4, archer: 4, cavalry: 2 },
+    guards: { sword: 0, archer: 0, cavalry: 0 },
     towerSlots: [false, false, false, false],
     quickStealth: { sword: 0, archer: 0, cavalry: 0 },
     quickStealthIds: [],
@@ -298,11 +298,15 @@ import * as THREE from "./vendor/three.module.js";
     return state.deterministicSeed / 4294967296;
   };
   const randomRange = (min, max) => min + (max - min) * seeded();
-  const SAVE_KEY = "agust-games-war-of-kingdoms-v1";
+  const SAVE_KEY = "agust-games-war-of-kingdoms-v2";
+  const LEGACY_SAVE_KEY = "agust-games-war-of-kingdoms-v1";
+  const SAVE_VERSION = 2;
+  const LEGACY_FREE_GUARDS = { sword: 4, archer: 4, cavalry: 2 };
 
   function saveProgress() {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
+        version: SAVE_VERSION,
         money: state.money,
         diamonds: state.diamonds,
         guards: state.guards,
@@ -323,15 +327,25 @@ import * as THREE from "./vendor/three.module.js";
 
   function loadProgress() {
     try {
-      const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+      let saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+      let migrateFreeStartingGuards = false;
+      if (!saved || typeof saved !== "object") {
+        saved = JSON.parse(localStorage.getItem(LEGACY_SAVE_KEY) || "null");
+        migrateFreeStartingGuards = Boolean(saved && typeof saved === "object");
+      }
       if (!saved || typeof saved !== "object") return;
       if (Number.isFinite(saved.money)) state.money = Math.max(0, Math.floor(saved.money));
       if (Number.isFinite(saved.diamonds)) state.diamonds = Math.max(0, Math.floor(saved.diamonds));
       UNIT_TYPES.forEach((type) => {
-        if (Number.isFinite(saved.guards?.[type])) state.guards[type] = Math.max(0, Math.floor(saved.guards[type]));
+        if (!Number.isFinite(saved.guards?.[type])) return;
+        const savedCount = Math.max(0, Math.floor(saved.guards[type]));
+        state.guards[type] = migrateFreeStartingGuards
+          ? Math.max(0, savedCount - LEGACY_FREE_GUARDS[type])
+          : savedCount;
       });
       if (Array.isArray(saved.towerSlots) && saved.towerSlots.length === 4) state.towerSlots = saved.towerSlots.map(Boolean);
       normalizeTowerSlots();
+      if (migrateFreeStartingGuards) saveProgress();
     } catch { /* an invalid old save is ignored */ }
   }
 
@@ -821,17 +835,44 @@ import * as THREE from "./vendor/three.module.js";
     part.renderOrder = 100;
   });
 
-  function buildHomeGuards() {
+  function makeHomeGuardSpots(total) {
     const spots = [
       [-7, 7], [7, 7], [-9, -5], [9, -5], [-4, 11], [4, 11], [-12, 8], [12, 8],
       [-6, -8], [6, -8], [-15, -2], [15, -2], [-2, 6], [2, 6], [-10, 4], [10, 4],
     ];
+    if (total <= spots.length) return spots.slice(0, total);
+
+    const spacing = clamp(Math.sqrt(520 / Math.max(1, total)), 1.05, 2.35);
+    for (let z = -10.5; z <= 11 && spots.length < total; z += spacing) {
+      for (let x = -16; x <= 16 && spots.length < total; x += spacing) {
+        const besideMap = Math.hypot(x, z) < 5.2;
+        const besideBed = x < -10.2 && z > -3.2 && z < 5.4;
+        const besideStairs = x > 12.2 && z > -3.5 && z < 8;
+        const atPlayerStart = Math.hypot(x, z - 9) < 2.7;
+        const tooCloseToPreferredSpot = spots.some(([spotX, spotZ]) => Math.hypot(x - spotX, z - spotZ) < spacing * 0.72);
+        if (!besideMap && !besideBed && !besideStairs && !atPlayerStart && !tooCloseToPreferredSpot) spots.push([x, z]);
+      }
+    }
+
+    // Extremely large armies are packed more tightly, but every purchased guard still gets a place.
+    for (let index = spots.length; index < total; index++) {
+      const column = index % 32;
+      const row = Math.floor(index / 32) % 22;
+      spots.push([-16 + column * (32 / 31), -10.5 + row * (21 / 21)]);
+    }
+    return spots;
+  }
+
+  function buildHomeGuards() {
+    const assignedArchers = state.towerSlots.filter(Boolean).length;
+    const floorGuardTotal = UNIT_TYPES.reduce((total, type) => total + Math.max(0, state.guards[type] - (type === "archer" ? assignedArchers : 0)), 0);
+    const spots = makeHomeGuardSpots(floorGuardTotal);
     let spot = 0;
     UNIT_TYPES.forEach((type) => {
-      const assigned = type === "archer" ? state.towerSlots.filter(Boolean).length : 0;
+      const assigned = type === "archer" ? assignedArchers : 0;
       const count = Math.max(0, state.guards[type] - assigned);
-      for (let i = 0; i < Math.min(count, type === "cavalry" ? 4 : 8); i++) {
-        const [x, z] = spots[spot++ % spots.length];
+      for (let i = 0; i < count; i++) {
+        const [x, z] = spots[spot++];
         const data = { id: `home-${type}-${i}`, team: 0, type, x, z, hp: 100, alive: true, color: KINGDOM_COLORS[0] };
         const model = makeActor(data);
         homeGuardVisuals.push({ data, model, villager: false });
@@ -885,7 +926,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function selectionAvailable(type, selection = state.selection) {
-    if (type === "archer" && selection?.kind === "attack") return state.guards.archer;
+    if (type === "archer" && (selection?.kind === "attack" || selection?.kind === "stealth")) return state.guards.archer;
     return availableGuards(type);
   }
 
@@ -1048,6 +1089,7 @@ import * as THREE from "./vendor/three.module.js";
     state.money -= price;
     state.guards[type] += 2;
     saveProgress();
+    rebuildWorld();
     updateShopUi();
     sfx("coin");
     showToast(`TVÅ VAKTER MED ${UNIT_LABELS[type]} ÄR REDO`);
@@ -1289,8 +1331,7 @@ import * as THREE from "./vendor/three.module.js";
 
   function updateLighting(force = false) {
     const night = state.scene === "stealth" || state.phase === "night";
-    const target = night ? 1 : 0;
-    const t = force ? target : clamp(FIXED_STEP * 2.4, 0, 1);
+    const t = force ? 1 : clamp(FIXED_STEP * 2.4, 0, 1);
     scene.background.lerp(new THREE.Color(night ? 0x101936 : 0x73c9f4), t);
     scene.fog.color.lerp(new THREE.Color(night ? 0x172445 : 0xaddff0), t);
     hemisphere.intensity = lerp(hemisphere.intensity, night ? 0.42 : 1.85, t);
@@ -1830,7 +1871,7 @@ import * as THREE from "./vendor/three.module.js";
     Object.assign(state, {
       screen: "playing", scene: "home", paused: false, modal: null, time: 0, phase: "day", phaseElapsed: 0, day: 1,
       sleeping: 0, askedNight: false, aiAttackTriggered: false, aiAttackAt: 42, money: 50, diamonds: 0,
-      guards: { sword: 4, archer: 4, cavalry: 2 }, towerSlots: [false, false, false, false],
+      guards: { sword: 0, archer: 0, cavalry: 0 }, towerSlots: [false, false, false, false],
       quickStealth: { sword: 0, archer: 0, cavalry: 0 }, quickStealthIds: [], weapon: "sword", units: [], loot: [], battle: null, stealth: null,
       selection: null, question: null, nearest: null, enteredEnemyCastle: false, deterministicSeed: INITIAL_SEED,
     });
@@ -1870,7 +1911,15 @@ import * as THREE from "./vendor/three.module.js";
       dayNight: { phase: state.phase, day: state.day, elapsedSeconds: rounded(state.phaseElapsed), remainingSeconds: rounded(duration - state.phaseElapsed), durationSeconds: duration, sleepingSeconds: rounded(state.sleeping) },
       player: { x: rounded(state.player.x), y: rounded(state.player.y), z: rounded(state.player.z), yaw: rounded(state.player.yaw), pitch: rounded(state.player.pitch), hp: state.player.hp, alive: state.player.alive, weapon: state.weapon },
       resources: { money: state.money, diamonds: state.diamonds, diamondSellValue: 10 },
-      guards: { owned: { ...state.guards }, available: Object.fromEntries(UNIT_TYPES.map((type) => [type, availableGuards(type)])), towerSlots: [...state.towerSlots], quickStealth: { ...state.quickStealth }, quickStealthIds: [...state.quickStealthIds], unnamed: true },
+      guards: {
+        owned: { ...state.guards },
+        available: Object.fromEntries(UNIT_TYPES.map((type) => [type, availableGuards(type)])),
+        visibleInCastle: Object.fromEntries(UNIT_TYPES.map((type) => [type, homeGuardVisuals.filter((entry) => !entry.villager && entry.data.type === type).length])),
+        towerSlots: [...state.towerSlots],
+        quickStealth: { ...state.quickStealth },
+        quickStealthIds: [...state.quickStealthIds],
+        unnamed: true,
+      },
       kingdoms: { total: 7, player: 1, bots: 6, castlesIdentical: true, villagesPerKingdom: 1 },
       nearestInteraction: state.nearest ? { kind: state.nearest.kind, label: state.nearest.label, distance: rounded(state.nearest.distance) } : null,
       battle: state.battle ? { target: state.battle.target, incoming: state.battle.incoming, selected: state.battle.counts, over: state.battle.over, result: state.battle.result, playerKingRespawnedAtHome: state.battle.playerKingRespawnedAtHome, enemyKingRespawnedAtHome: state.battle.enemyKingRespawnedAtHome, friendlyAlive: state.units.filter((unit) => unit.team === 0 && unit.alive).length + (state.player.alive ? 1 : 0), enemyAlive: state.units.filter((unit) => unit.team === 1 && unit.alive).length } : null,

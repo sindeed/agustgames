@@ -1099,6 +1099,7 @@ button:disabled {
   content: "";
   border: 12px solid rgba(255, 255, 255, 0.035);
   border-radius: 50%;
+  pointer-events: none;
 }
 
 .sword-row { border-top-color: rgba(240, 95, 90, 0.72); }
