@@ -84,6 +84,8 @@ import * as THREE from "./vendor/three.module.js";
   const MINE_PAYOUT_SECONDS = 30;
   const MINE_INCOME = Object.freeze([0, 3, 5, 10, 13, 15, 20, 23, 25, 30]);
   const MINE_DIAMOND_EVERY_PAYOUTS = 4;
+  const CASTLE_GATE_WIDTH = 6;
+  const REAR_DRAWBRIDGE = Object.freeze({ x: 0, z: -20.5, width: 6, length: 14 });
   const ENEMY_MINER_COUNTS = Object.freeze([0, 2, 5, 8, 1, 7, 4]);
   const MINE_WORKER_SPOTS = Object.freeze([
     [-1.8, -41.2], [1.8, -41], [-3.5, -38.8], [3.5, -38.6], [-1.6, -36.8],
@@ -581,17 +583,22 @@ import * as THREE from "./vendor/three.module.js";
 
   function buildCastle({ enemy = false } = {}) {
     box(0, -0.35, 0, 37, 0.7, 27, materials.sand, worldRoot, false, true);
-    box(0, 3, -14, 40, 6, 1.5, materials.stone);
+    // The rear wall mirrors the front entrance, leaving a real doorway from
+    // the courtyard to the mine path instead of sealing the mine outside.
+    box(-11.5, 3, -14, 17, 6, 1.5, materials.stone);
+    box(11.5, 3, -14, 17, 6, 1.5, materials.stone);
     box(-11.5, 3, 14, 17, 6, 1.5, materials.stone);
     box(11.5, 3, 14, 17, 6, 1.5, materials.stone);
     box(-20, 3, 0, 1.5, 6, 28, materials.stone);
     box(20, 3, 0, 1.5, 6, 28, materials.stone);
-    addCollider(0, -14, 40, 1.5);
+    addCollider(-11.5, -14, 17, 1.5);
+    addCollider(11.5, -14, 17, 1.5);
     addCollider(-11.5, 14, 17, 1.5);
     addCollider(11.5, 14, 17, 1.5);
     addCollider(-20, 0, 1.5, 28);
     addCollider(20, 0, 1.5, 28);
-    crenellations(0, -14, 40, 1.2);
+    crenellations(-11.5, -14, 17, 1.2);
+    crenellations(11.5, -14, 17, 1.2);
     crenellations(-11.5, 14, 17, 1.2);
     crenellations(11.5, 14, 17, 1.2);
     crenellations(-20, 0, 1.2, 28);
@@ -609,6 +616,23 @@ import * as THREE from "./vendor/three.module.js";
       const y = 0.25 + i * 0.52;
       box(15.1, y, z, 3.2, 0.5, 1.05, materials.stoneDark);
     }
+
+    // A stone lintel and two open wooden door leaves make the rear opening
+    // read as a castle door while keeping the middle clear to walk through.
+    box(0, 5.15, -14, CASTLE_GATE_WIDTH, 1.7, 1.5, materials.stone);
+    box(-2.82, 2.05, -12.7, 0.24, 4.1, 2.45, materials.wood);
+    box(2.82, 2.05, -12.7, 0.24, 4.1, 2.45, materials.wood);
+    for (const x of [-2.82, 2.82]) {
+      box(x, 2.05, -12.08, 0.29, 0.14, 1.05, materials.ironDark);
+      box(x, 2.05, -13.32, 0.29, 0.14, 1.05, materials.ironDark);
+      addCollider(x, -12.7, 0.24, 2.45);
+    }
+
+    // The second drawbridge crosses the rear moat and meets the mine road.
+    box(REAR_DRAWBRIDGE.x, 0.15, REAR_DRAWBRIDGE.z, REAR_DRAWBRIDGE.width, 0.35, REAR_DRAWBRIDGE.length, materials.wood, worldRoot, true, true);
+    for (let z = -27; z <= -14; z += 1.25) box(0, 0.4, z, 6.3, 0.18, 0.12, materials.woodDark);
+    box(-3.15, 1, REAR_DRAWBRIDGE.z, 0.22, 1.8, REAR_DRAWBRIDGE.length, materials.woodDark);
+    box(3.15, 1, REAR_DRAWBRIDGE.z, 0.22, 1.8, REAR_DRAWBRIDGE.length, materials.woodDark);
 
     box(0, 0.15, 20.5, 6, 0.35, 14, materials.wood, worldRoot, true, true);
     for (let z = 14.4; z <= 27; z += 1.25) box(0, 0.4, z, 6.3, 0.18, 0.12, materials.woodDark);
@@ -998,9 +1022,10 @@ import * as THREE from "./vendor/three.module.js";
         const besideMap = Math.hypot(x, z) < 5.2;
         const besideBed = x < -10.2 && z > -3.2 && z < 5.4;
         const besideStairs = x > 12.2 && z > -3.5 && z < 8;
+        const rearDoorRoute = Math.abs(x) < 3.8 && z < -7.5;
         const atPlayerStart = Math.hypot(x, z - 9) < 2.7;
         const tooCloseToPreferredSpot = spots.some(([spotX, spotZ]) => Math.hypot(x - spotX, z - spotZ) < spacing * 0.72);
-        if (!besideMap && !besideBed && !besideStairs && !atPlayerStart && !tooCloseToPreferredSpot) spots.push([x, z]);
+        if (!besideMap && !besideBed && !besideStairs && !rearDoorRoute && !atPlayerStart && !tooCloseToPreferredSpot) spots.push([x, z]);
       }
     }
 
@@ -1870,8 +1895,10 @@ import * as THREE from "./vendor/three.module.js";
     if (state.scene === "battle") return false;
     const inOuter = Math.abs(x) < 29 && z > -25 && z < 26.8;
     const outsideCastle = Math.abs(x) > 21 || z < -15.2 || z > 15.2;
-    const onBridge = Math.abs(x) < 3.15 && z > 13.5 && z < 28;
-    return inOuter && outsideCastle && !onBridge && z < 27;
+    const onFrontBridge = Math.abs(x) < 3.15 && z > 13.5 && z < 28;
+    const onRearBridge = Math.abs(x - REAR_DRAWBRIDGE.x) < REAR_DRAWBRIDGE.width / 2 - 0.05
+      && Math.abs(z - REAR_DRAWBRIDGE.z) < REAR_DRAWBRIDGE.length / 2 + 0.45;
+    return inOuter && outsideCastle && !onFrontBridge && !onRearBridge && z < 27;
   }
 
   function collides(x, z, y) {
@@ -1908,8 +1935,11 @@ import * as THREE from "./vendor/three.module.js";
     camera.fov = lerp(camera.fov, sprint && magnitude > 0.1 ? 78 : 73, clamp(dt * 7, 0, 1));
     camera.updateProjectionMatrix();
     if (state.scene === "stealth") {
-      if (state.player.z < 12.5) state.enteredEnemyCastle = true;
-      if (state.enteredEnemyCastle && state.player.z > 25.2) finishStealth(false);
+      const insideCourtyard = Math.abs(state.player.x) < 19.1 && state.player.z > -12.6 && state.player.z < 12.6;
+      if (insideCourtyard) state.enteredEnemyCastle = true;
+      const leftByFrontBridge = Math.abs(state.player.x) < 3.2 && state.player.z > 25.2;
+      const leftByRearBridge = Math.abs(state.player.x) < 3.2 && state.player.z < -27.2;
+      if (state.enteredEnemyCastle && (leftByFrontBridge || leftByRearBridge)) finishStealth(false);
     }
   }
 
@@ -1994,6 +2024,23 @@ import * as THREE from "./vendor/three.module.js";
       z += dz / distance * strength;
     });
     return { x, z };
+  }
+
+  function rearBridgeWaypoint(from, target) {
+    if (!["stealth", "mineRaid", "mineDefense"].includes(state.scene)) return null;
+    const targetInsideCourtyard = Math.abs(target.x) < 19.1 && target.z > -12.8 && target.z < 12.8;
+    if (targetInsideCourtyard && from.z < -13) {
+      // First line up on the mine side, then stay centered until the actor is
+      // through the rear doorway. This keeps units off the moat at an angle.
+      if (from.z < -26.1 && Math.abs(from.x) > 1.7) return { x: 0, z: -26.2 };
+      return { x: 0, z: -11.8 };
+    }
+    const targetBeyondMineSide = target.z < -27;
+    if (targetBeyondMineSide && from.z > -27) {
+      if (from.z > -13 && Math.abs(from.x) > 1.7) return { x: 0, z: -12 };
+      return { x: 0, z: -27.25 };
+    }
+    return null;
   }
 
   function fireTracer(from, to, color = 0xffd45a) {
@@ -2163,8 +2210,10 @@ import * as THREE from "./vendor/three.module.js";
           const followDistance = dist(unit, state.player);
           if (followDistance > 2.6) {
             const followSpeed = unit.type === "cavalry" ? 3.1 : 2.15;
-            const dx = (state.player.x - unit.x) / followDistance;
-            const dz = (state.player.z - unit.z) / followDistance;
+            const followTarget = rearBridgeWaypoint(unit, state.player) || state.player;
+            const waypointDistance = Math.hypot(followTarget.x - unit.x, followTarget.z - unit.z) || 1;
+            const dx = (followTarget.x - unit.x) / waypointDistance;
+            const dz = (followTarget.z - unit.z) / waypointDistance;
             unit.facing = Math.atan2(dx, dz);
             moveUnit(unit, dx * followSpeed * dt, dz * followSpeed * dt);
             unit.walk += dt * followSpeed * 3.2;
@@ -2180,10 +2229,15 @@ import * as THREE from "./vendor/three.module.js";
       const dirZ = dz / distance;
       const speed = unit.fixed ? 0 : unit.type === "cavalry" ? 3.1 : unit.king ? 2.1 : 1.75;
       unit.facing = Math.atan2(dirX, dirZ);
-      if (distance > range) {
+      const lineOfSight = distance <= range && hasLineOfSight(unit, target);
+      if (distance > range || !lineOfSight) {
         if (speed > 0) {
-          let moveX = dirX;
-          let moveZ = dirZ;
+          const waypoint = rearBridgeWaypoint(unit, target);
+          const moveTarget = waypoint || target;
+          const moveDistance = Math.hypot(moveTarget.x - unit.x, moveTarget.z - unit.z) || 1;
+          let moveX = (moveTarget.x - unit.x) / moveDistance;
+          let moveZ = (moveTarget.z - unit.z) / moveDistance;
+          unit.facing = Math.atan2(moveX, moveZ);
           if (["mineRaid", "mineDefense"].includes(state.scene)) {
             const avoidance = unitAvoidance(unit);
             moveX += avoidance.x * 1.15;
@@ -2196,7 +2250,6 @@ import * as THREE from "./vendor/three.module.js";
           unit.walk += dt * speed * 3.2;
         }
       } else if (unit.cooldown <= 0) {
-        if (!hasLineOfSight(unit, target)) return;
         unit.cooldown = ranged ? 1.25 : unit.type === "cavalry" ? 1.15 : 0.9;
         const damage = ranged ? 18 : unit.type === "cavalry" ? 30 : unit.king ? 25 : 24;
         if (target.player) damagePlayer(damage);
@@ -2645,6 +2698,10 @@ import * as THREE from "./vendor/three.module.js";
         payouts: state.minePayouts,
         diamondEveryPayouts: MINE_DIAMOND_EVERY_PAYOUTS,
         visibleMiners: ["home", "mineDefense"].includes(state.scene) ? minerVisuals.filter((entry) => !entry.enemy).length : state.miners,
+      },
+      castle: {
+        rearDoor: { open: true, x: 0, z: -14, width: CASTLE_GATE_WIDTH, leadsTo: "mine" },
+        rearDrawbridge: { ...REAR_DRAWBRIDGE, lowered: true, crossesMoat: true },
       },
       combatRanges: { ...COMBAT_RANGES },
       guards: {
