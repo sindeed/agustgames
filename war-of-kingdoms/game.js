@@ -31,6 +31,8 @@ import * as THREE from "./vendor/three.module.js";
     questionText: $("#question-text"),
     questionYes: $("#question-yes"),
     questionNo: $("#question-no"),
+    questionBack: $("#question-back"),
+    questionActions: $("#question-actions"),
     selection: $("#selection-dialog"),
     selectionTitle: $("#selection-title"),
     selectionCopy: $("#selection-copy"),
@@ -70,14 +72,45 @@ import * as THREE from "./vendor/three.module.js";
     cavalry: "SPJUT + HÄST",
   };
   const UNIT_PRICES = { sword: 10, archer: 15, cavalry: 20 };
+  const COMBAT_RANGES = Object.freeze({
+    swordGuard: 2.15,
+    cavalrySpear: 3.2,
+    kingSword: 3.2,
+    archerBow: 13.5,
+    kingBow: 34,
+  });
+  const MINER_PRICE = 15;
+  const MAX_MINERS = 9;
+  const MINE_PAYOUT_SECONDS = 30;
+  const MINE_INCOME = Object.freeze([0, 3, 5, 10, 13, 15, 20, 23, 25, 30]);
+  const MINE_DIAMOND_EVERY_PAYOUTS = 4;
+  const ENEMY_MINER_COUNTS = Object.freeze([0, 2, 5, 8, 1, 7, 4]);
+  const MINE_WORKER_SPOTS = Object.freeze([
+    [-1.8, -41.2], [1.8, -41], [-3.5, -38.8], [3.5, -38.6], [-1.6, -36.8],
+    [1.7, -36.5], [-4.8, -34.8], [4.4, -32.8], [0, -33.5],
+  ]);
+  const MINE_GUARD_SPOTS = Object.freeze([
+    [-10.5, -32.5], [10.5, -32.5], [-9, -36.5], [9, -36.5], [-11, -40.5], [11, -40.5],
+  ]);
   const INITIAL_SEED = 741928;
   const KINGDOM_COLORS = [0x2f8fff, 0xd94a4a, 0x7e5ce4, 0xe5a72e, 0x31a56c, 0xd85aa8, 0x4f728c];
   const touchDevice = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+
+  const makeKingdoms = () => Array.from({ length: 7 }, (_, index) => ({
+    index,
+    player: index === 0,
+    towerArchers: index === 0 ? 0 : (index * 3 + 1) % 5,
+    miners: ENEMY_MINER_COUNTS[index],
+    money: 50,
+    mineElapsed: 0,
+    defeated: false,
+  }));
 
   const state = {
     screen: "menu",
     scene: "home",
     paused: false,
+    pausedModal: null,
     modal: null,
     time: 0,
     phase: "day",
@@ -90,6 +123,9 @@ import * as THREE from "./vendor/three.module.js";
     money: 50,
     diamonds: 0,
     guards: { sword: 0, archer: 0, cavalry: 0 },
+    miners: 0,
+    mineElapsed: 0,
+    minePayouts: 0,
     towerSlots: [false, false, false, false],
     quickStealth: { sword: 0, archer: 0, cavalry: 0 },
     quickStealthIds: [],
@@ -106,17 +142,21 @@ import * as THREE from "./vendor/three.module.js";
       swing: 0,
       moving: 0,
     },
-    kingdoms: Array.from({ length: 7 }, (_, index) => ({
-      index,
-      player: index === 0,
-      towerArchers: index === 0 ? 0 : (index * 3 + 1) % 5,
-      defeated: false,
-    })),
+    kingdoms: makeKingdoms(),
     units: [],
     loot: [],
     particles: [],
     battle: null,
     stealth: null,
+    mineRaid: null,
+    mineDefense: null,
+    pendingMineDefense: null,
+    loadNotice: "",
+    nightMineRaidTriggered: false,
+    nightMineRaidAt: 52,
+    sleepRaidMessage: "",
+    mineTransferId: 0,
+    lastMineTransfer: null,
     selection: null,
     question: null,
     nearest: null,
@@ -205,6 +245,7 @@ import * as THREE from "./vendor/three.module.js";
   const actorModels = new Map();
   const interactables = [];
   const homeGuardVisuals = [];
+  const minerVisuals = [];
   const towerMarkers = [];
 
   const textureCanvas = (base, fleck, lines = false) => {
@@ -264,6 +305,9 @@ import * as THREE from "./vendor/three.module.js";
     blue: new THREE.MeshStandardMaterial({ color: 0x2f8fff, roughness: 0.72 }),
     skin: new THREE.MeshStandardMaterial({ color: 0xefb98e, roughness: 0.82 }),
     leather: new THREE.MeshStandardMaterial({ color: 0x704125, roughness: 0.9 }),
+    rock: new THREE.MeshStandardMaterial({ color: 0x59636a, roughness: 0.96 }),
+    rockDark: new THREE.MeshStandardMaterial({ color: 0x20292e, roughness: 1 }),
+    gem: new THREE.MeshStandardMaterial({ color: 0x5cecff, emissive: 0x075f76, emissiveIntensity: 0.72, roughness: 0.18, metalness: 0.12 }),
     marker: new THREE.MeshStandardMaterial({ color: 0xffd93f, emissive: 0x5c3a00, emissiveIntensity: 0.5, roughness: 0.55 }),
   };
   const persistentMaterials = new Set(Object.values(materials));
@@ -298,9 +342,10 @@ import * as THREE from "./vendor/three.module.js";
     return state.deterministicSeed / 4294967296;
   };
   const randomRange = (min, max) => min + (max - min) * seeded();
-  const SAVE_KEY = "agust-games-war-of-kingdoms-v2";
+  const SAVE_KEY = "agust-games-war-of-kingdoms-v3";
+  const PREVIOUS_SAVE_KEY = "agust-games-war-of-kingdoms-v2";
   const LEGACY_SAVE_KEY = "agust-games-war-of-kingdoms-v1";
-  const SAVE_VERSION = 2;
+  const SAVE_VERSION = 3;
   const LEGACY_FREE_GUARDS = { sword: 4, archer: 4, cavalry: 2 };
 
   function saveProgress() {
@@ -311,6 +356,15 @@ import * as THREE from "./vendor/three.module.js";
         diamonds: state.diamonds,
         guards: state.guards,
         towerSlots: state.towerSlots,
+        miners: state.miners,
+        mineElapsed: state.mineElapsed,
+        minePayouts: state.minePayouts,
+        kingdoms: state.kingdoms.map((kingdom) => ({
+          miners: kingdom.miners,
+          money: kingdom.money,
+          mineElapsed: kingdom.mineElapsed,
+        })),
+        pendingMineDefense: state.pendingMineDefense,
       }));
     } catch { /* private browsing may block storage */ }
   }
@@ -328,10 +382,16 @@ import * as THREE from "./vendor/three.module.js";
   function loadProgress() {
     try {
       let saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+      let migratedOlderSave = false;
       let migrateFreeStartingGuards = false;
+      if (!saved || typeof saved !== "object") {
+        saved = JSON.parse(localStorage.getItem(PREVIOUS_SAVE_KEY) || "null");
+        migratedOlderSave = Boolean(saved && typeof saved === "object");
+      }
       if (!saved || typeof saved !== "object") {
         saved = JSON.parse(localStorage.getItem(LEGACY_SAVE_KEY) || "null");
         migrateFreeStartingGuards = Boolean(saved && typeof saved === "object");
+        migratedOlderSave = migrateFreeStartingGuards;
       }
       if (!saved || typeof saved !== "object") return;
       if (Number.isFinite(saved.money)) state.money = Math.max(0, Math.floor(saved.money));
@@ -344,8 +404,28 @@ import * as THREE from "./vendor/three.module.js";
           : savedCount;
       });
       if (Array.isArray(saved.towerSlots) && saved.towerSlots.length === 4) state.towerSlots = saved.towerSlots.map(Boolean);
+      if (Number.isFinite(saved.miners)) state.miners = clamp(Math.floor(saved.miners), 0, MAX_MINERS);
+      if (Number.isFinite(saved.mineElapsed)) state.mineElapsed = clamp(saved.mineElapsed, 0, MINE_PAYOUT_SECONDS);
+      if (Number.isFinite(saved.minePayouts)) state.minePayouts = Math.max(0, Math.floor(saved.minePayouts));
+      if (Array.isArray(saved.kingdoms)) {
+        for (let index = 1; index < state.kingdoms.length; index++) {
+          const savedKingdom = saved.kingdoms[index];
+          if (!savedKingdom || typeof savedKingdom !== "object") continue;
+          if (Number.isFinite(savedKingdom.miners)) state.kingdoms[index].miners = clamp(Math.floor(savedKingdom.miners), 1, MAX_MINERS);
+          if (Number.isFinite(savedKingdom.money)) state.kingdoms[index].money = Math.max(0, Math.floor(savedKingdom.money));
+          if (Number.isFinite(savedKingdom.mineElapsed)) state.kingdoms[index].mineElapsed = clamp(savedKingdom.mineElapsed, 0, MINE_PAYOUT_SECONDS);
+        }
+      }
+      const pending = saved.pendingMineDefense;
+      if (pending && Number.isInteger(pending.attacker) && state.kingdoms[pending.attacker] && !state.kingdoms[pending.attacker].player) {
+        state.pendingMineDefense = null;
+        const transfer = applyMineTransfer("incoming", pending.attacker, pending.requested);
+        state.loadNotice = transfer?.transferred > 0
+          ? `FIENDEKUNG ${pending.attacker} STAL ${transfer.transferred} ${transfer.transferred === 1 ? "MINER" : "MINERS"} NÄR GRUVFÖRSVARET AVBRÖTS`
+          : `DET AVBRUTNA GRUVFÖRSVARET KOSTADE INGA MINERS`;
+      }
       normalizeTowerSlots();
-      if (migrateFreeStartingGuards) saveProgress();
+      if (migratedOlderSave) saveProgress();
     } catch { /* an invalid old save is ignored */ }
   }
 
@@ -357,6 +437,10 @@ import * as THREE from "./vendor/three.module.js";
 
   function setModal(name, visible) {
     state.modal = visible ? name : null;
+    if (visible) {
+      clearTimeout(toastTimer);
+      setVisible(ui.toast, false);
+    }
     const map = { map: ui.map, question: ui.question, selection: ui.selection, shop: ui.shop, outcome: ui.outcome, pause: ui.pause };
     Object.entries(map).forEach(([key, element]) => setVisible(element, visible && key === name));
   }
@@ -597,6 +681,61 @@ import * as THREE from "./vendor/three.module.js";
     });
   }
 
+  function buildMine({ enemy = false, showWorkers = true } = {}) {
+    const targetKingdom = state.mineRaid?.target ?? state.stealth?.target ?? 1;
+    const minerCount = enemy ? state.kingdoms[targetKingdom]?.miners || 1 : state.miners;
+    box(0, -0.42, -38.25, 28, 0.72, 24.5, materials.rockDark, worldRoot, false, true);
+    box(0, 0.02, -34, 5.8, 0.08, 15, materials.sand, worldRoot, false, true);
+
+    const opening = box(0, 2.35, -45.2, 5.2, 4.7, 0.42, materials.rockDark, worldRoot, false, false);
+    opening.castShadow = false;
+    const rockSpots = [
+      [-5.7, 1.7, -44.9, 3.7], [-3.5, 3.7, -45.1, 3.2], [0, 5.2, -45.2, 3.7],
+      [3.5, 3.7, -45.1, 3.2], [5.7, 1.7, -44.9, 3.7], [-8, 0.8, -44, 3.2], [8, 0.8, -44, 3.2],
+    ];
+    rockSpots.forEach(([x, y, z, scale], index) => {
+      const rock = addMesh(new THREE.IcosahedronGeometry(scale, 1), index % 2 ? materials.rock : materials.stoneDark);
+      rock.position.set(x, y, z);
+      rock.scale.set(1.1, 0.85 + (index % 3) * 0.08, 0.78);
+      rock.rotation.set(index * 0.19, index * 0.37, index * 0.11);
+    });
+
+    box(-2.65, 2.25, -44.65, 0.42, 4.5, 0.42, materials.woodDark);
+    box(2.65, 2.25, -44.65, 0.42, 4.5, 0.42, materials.woodDark);
+    box(0, 4.45, -44.65, 5.7, 0.42, 0.42, materials.woodDark);
+    addCollider(-6, -44.3, 6.8, 4.2);
+    addCollider(6, -44.3, 6.8, 4.2);
+    addCollider(0, -45.25, 5.4, 0.7);
+    for (const x of [-1.25, 1.25]) box(x, 0.12, -37.4, 0.12, 0.13, 12.5, materials.ironDark);
+    for (let z = -43.2; z <= -31.4; z += 1.15) box(0, 0.08, z, 3.2, 0.1, 0.2, materials.woodDark);
+
+    const cart = new THREE.Group();
+    cart.position.set(5.2, 0, -34.8);
+    worldRoot.add(cart);
+    box(0, 0.85, 0, 2.5, 1.15, 1.65, materials.wood, cart);
+    for (const x of [-0.83, 0.83]) for (const z of [-0.65, 0.65]) {
+      const wheel = cylinder(x, 0.28, z, 0.32, 0.16, materials.ironDark, cart, 12);
+      wheel.rotation.z = Math.PI / 2;
+    }
+    for (let i = 0; i < 7; i++) {
+      const nuggetMaterial = i === 5 ? materials.gold : i === 6 ? materials.gem : materials.rock;
+      const nuggetGeometry = i === 6 ? new THREE.OctahedronGeometry(0.34, 0) : new THREE.DodecahedronGeometry(0.22 + (i % 3) * 0.05, 0);
+      const nugget = addMesh(nuggetGeometry, nuggetMaterial, cart);
+      nugget.position.set(-0.85 + (i % 4) * 0.55, 1.48 + (i % 2) * 0.16, -0.45 + Math.floor(i / 4) * 0.75);
+    }
+    addCollider(5.2, -34.8, 2.8, 2);
+
+    for (let index = 0; index < minerCount && showWorkers; index++) {
+      const [x, z] = MINE_WORKER_SPOTS[index];
+      const data = { id: `${enemy ? "enemy" : "home"}-miner-${index}`, team: enemy ? 1 : 0, type: "miner", x, z, hp: 100, alive: true, color: enemy ? KINGDOM_COLORS[targetKingdom] : 0xc58832 };
+      const model = makeActor(data);
+      model.rotation.y = index % 2 ? 0.22 : -0.22;
+      minerVisuals.push({ data, model, phase: index * 0.83, enemy });
+    }
+
+    interactables.push({ kind: "mine", x: 0, z: -34.5, radius: 5.5, label: `${enemy ? "FIENDENS GRUVA" : "GRUVAN"} · ${minerCount}/${MAX_MINERS} MINERS` });
+  }
+
   function buildVillage() {
     box(0, -0.45, 48, 70, 0.8, 45, materials.grass, worldRoot, false, true);
     box(0, 0.01, 43, 7, 0.08, 42, materials.sand, worldRoot, false, true);
@@ -643,6 +782,7 @@ import * as THREE from "./vendor/three.module.js";
     buildCastle({ enemy });
     buildVillage();
     buildSkyDecor();
+    buildMine({ enemy, showWorkers: state.scene !== "mineRaid" });
     if (!enemy) buildHomeGuards();
   }
 
@@ -692,10 +832,11 @@ import * as THREE from "./vendor/three.module.js";
     colliders.length = 0;
     interactables.length = 0;
     homeGuardVisuals.length = 0;
+    minerVisuals.length = 0;
     towerMarkers.length = 0;
     actorModels.clear();
     if (state.scene === "battle") buildArena();
-    else buildHomeWorld(state.scene === "stealth");
+    else buildHomeWorld(state.scene === "stealth" || state.scene === "mineRaid");
     state.units.forEach((unit) => {
       const model = makeActor(unit);
       actorModels.set(unit.id, model);
@@ -801,6 +942,15 @@ import * as THREE from "./vendor/three.module.js";
       bow.scale.setScalar(0.82 * scale);
       bow.position.set(-0.05, -0.45, -0.35);
       bow.rotation.y = Math.PI / 2;
+    } else if (data.type === "miner") {
+      const pickaxe = new THREE.Group();
+      rightArm.add(pickaxe);
+      pickaxe.position.set(0.02, -0.7, -0.18);
+      pickaxe.rotation.z = -0.24;
+      box(0, 0.55, 0, 0.09, 1.5, 0.09, materials.woodDark, pickaxe);
+      box(0, 1.28, 0, 0.82, 0.12, 0.14, materials.iron, pickaxe);
+      const lamp = cylinder(0, 2.62 * scale, -0.31 * scale, 0.12 * scale, 0.16 * scale, materials.gold, parent, 10);
+      lamp.rotation.x = Math.PI / 2;
     }
     parent.userData.leftArm = leftArm;
     parent.userData.rightArm = rightArm;
@@ -864,13 +1014,20 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function buildHomeGuards() {
-    const assignedArchers = state.towerSlots.filter(Boolean).length;
-    const floorGuardTotal = UNIT_TYPES.reduce((total, type) => total + Math.max(0, state.guards[type] - (type === "archer" ? assignedArchers : 0)), 0);
+    const reserved = { sword: 0, archer: 0, cavalry: 0 };
+    if (state.scene === "mineDefense") {
+      state.units.filter((unit) => unit.team === 0 && unit.alive && UNIT_TYPES.includes(unit.sourceType)).forEach((unit) => reserved[unit.sourceType]++);
+    }
+    const remaining = Object.fromEntries(UNIT_TYPES.map((type) => [type, Math.max(0, state.guards[type] - reserved[type])]));
+    const filledTowerIndices = state.towerSlots.map((filled, index) => filled ? index : -1).filter((index) => index >= 0);
+    const visibleTowerIndices = filledTowerIndices.slice(0, remaining.archer);
+    const assignedArchers = visibleTowerIndices.length;
+    const floorGuardTotal = UNIT_TYPES.reduce((total, type) => total + Math.max(0, remaining[type] - (type === "archer" ? assignedArchers : 0)), 0);
     const spots = makeHomeGuardSpots(floorGuardTotal);
     let spot = 0;
     UNIT_TYPES.forEach((type) => {
       const assigned = type === "archer" ? assignedArchers : 0;
-      const count = Math.max(0, state.guards[type] - assigned);
+      const count = Math.max(0, remaining[type] - assigned);
       for (let i = 0; i < count; i++) {
         const [x, z] = spots[spot++];
         const data = { id: `home-${type}-${i}`, team: 0, type, x, z, hp: 100, alive: true, color: KINGDOM_COLORS[0] };
@@ -879,7 +1036,7 @@ import * as THREE from "./vendor/three.module.js";
       }
     });
     state.towerSlots.forEach((filled, index) => {
-      if (!filled) return;
+      if (!filled || !visibleTowerIndices.includes(index)) return;
       const [x, z] = [[-20, -14], [20, -14], [-20, 14], [20, 14]][index];
       const data = { id: `tower-${index}`, team: 0, type: "archer", x, z, y: 5.55, hp: 100, alive: true, color: KINGDOM_COLORS[0] };
       const model = makeActor(data);
@@ -915,7 +1072,9 @@ import * as THREE from "./vendor/three.module.js";
     resetPlayerForHome();
     rebuildWorld();
     canvas.focus();
-    showToast("VÄLKOMMEN, ERS MAJESTÄT!", 2200);
+    const startNotice = state.loadNotice;
+    state.loadNotice = "";
+    showToast(startNotice || "VÄLKOMMEN, ERS MAJESTÄT!", startNotice ? 3400 : 2200);
     updateHud();
     sfx("click");
   }
@@ -926,16 +1085,22 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function selectionAvailable(type, selection = state.selection) {
-    if (type === "archer" && (selection?.kind === "attack" || selection?.kind === "stealth")) return state.guards.archer;
+    if (type === "archer" && ["attack", "stealth", "mineRaid", "mineDefense"].includes(selection?.kind)) return state.guards.archer;
     return availableGuards(type);
   }
 
-  function showQuestion(title, text, yes, no, yesLabel = "JA", noLabel = "NEJ") {
-    state.question = { yes, no };
+  function showQuestion(title, text, yes, no, yesLabel = "JA", noLabel = "NEJ", options = {}) {
+    state.question = { yes, no, back: options.back || null };
     if (ui.questionTitle) ui.questionTitle.textContent = title;
     if (ui.questionText) ui.questionText.textContent = text;
     if (ui.questionYes) ui.questionYes.textContent = yesLabel;
     if (ui.questionNo) ui.questionNo.textContent = noLabel;
+    if (ui.question) ui.question.dataset.mode = options.mode || "confirm";
+    ui.questionActions?.classList.toggle("mission-choice", options.mode === "mission");
+    if (ui.questionBack) {
+      ui.questionBack.textContent = options.backLabel || "TILLBAKA";
+      setVisible(ui.questionBack, Boolean(options.back));
+    }
     setModal("question", true);
   }
 
@@ -946,6 +1111,13 @@ import * as THREE from "./vendor/three.module.js";
     sfx("click");
     if (!question) return;
     (answer ? question.yes : question.no)?.();
+  }
+
+  function backQuestion() {
+    const question = state.question;
+    state.question = null;
+    setModal(null, false);
+    question?.back?.();
   }
 
   function openWorldMap() {
@@ -963,10 +1135,30 @@ import * as THREE from "./vendor/three.module.js";
       button.type = "button";
       button.className = `kingdom-node${kingdom.player ? " player-kingdom" : " enemy-kingdom"}`;
       button.dataset.kingdom = String(kingdom.index);
-      button.innerHTML = `<span class="castle-symbol" aria-hidden="true">♜</span><strong>${kingdom.player ? "DIN BORG" : `FIENDEBORG ${kingdom.index}`}</strong><small>${kingdom.player ? "DU ÄR HÄR" : `BORG + BY · ${kingdom.towerArchers} TORNSKYTTAR`}</small>`;
+      const miners = kingdom.player ? state.miners : kingdom.miners;
+      const minerLabel = miners === 1 ? "MINER" : "MINERS";
+      const archerLabel = kingdom.towerArchers === 1 ? "TORNSKYTT" : "TORNSKYTTAR";
+      button.setAttribute("aria-label", kingdom.player
+        ? `Din borg, du har ${miners} ${minerLabel.toLowerCase()}`
+        : `Fiendeborg ${kingdom.index}, ${miners} ${minerLabel.toLowerCase()}, ${kingdom.towerArchers} ${archerLabel.toLowerCase()}`);
+      button.innerHTML = kingdom.player
+        ? `<span class="castle-symbol" aria-hidden="true">♜</span><strong>DIN BORG</strong><small>DU ÄR HÄR · ${miners} ${minerLabel}</small>`
+        : `<span class="castle-symbol" aria-hidden="true">♜</span><strong>FIENDEBORG ${kingdom.index}</strong><small class="kingdom-stats"><span class="kingdom-stat">⛏ ${miners} ${minerLabel}</span><span class="kingdom-stat">➶ ${kingdom.towerArchers} ${archerLabel}</span></small>`;
       button.addEventListener("click", () => chooseKingdom(kingdom.index));
       ui.mapGrid.append(button);
     });
+  }
+
+  function showNightMissionChoice(index) {
+    showQuestion(
+      "VÄLJ NATTLIGT UPPDRAG",
+      `Fienderike ${index} har ${state.kingdoms[index].miners} miners. Smyg till borgen efter skatter eller gör en räd mot gruvan.`,
+      () => openSelection("stealth", index, 5, false),
+      () => openSelection("mineRaid", index, 5, false),
+      "SMYGUPPDRAG",
+      "GRUVUPPDRAG",
+      { mode: "mission", back: openWorldMap, backLabel: "TILLBAKA TILL KARTAN" },
+    );
   }
 
   function chooseKingdom(index) {
@@ -983,12 +1175,7 @@ import * as THREE from "./vendor/three.module.js";
         () => openWorldMap(),
       );
     } else {
-      showQuestion(
-        "VILL DU PÅ SMYGUPPDRAG?",
-        "Du får ta med noll till fem av dina egna vakter.",
-        () => openSelection("stealth", index, 5, false),
-        () => openWorldMap(),
-      );
+      showNightMissionChoice(index);
     }
   }
 
@@ -1008,8 +1195,34 @@ import * as THREE from "./vendor/three.module.js";
       }
     }
     state.selection = { kind, target, max, counts, minimums, incoming };
-    if (ui.selectionTitle) ui.selectionTitle.textContent = incoming ? "VÄLJ DIN ARMÉ" : kind === "attack" ? "VÄLJ DIN ARMÉ" : "VÄLJ SMYGGRUPP";
-    if (ui.selectionCopy) ui.selectionCopy.textContent = kind === "attack" ? "Högst 20 av dina egna vakter får följa med." : "Högst fem vakter. Du får också gå helt ensam.";
+    if (ui.selectionTitle) {
+      ui.selectionTitle.textContent = kind === "attack"
+        ? "VÄLJ DIN ARMÉ"
+        : kind === "stealth"
+          ? "VÄLJ SMYGGRUPP"
+          : kind === "mineDefense"
+            ? "FÖRSVARA GRUVAN"
+            : "VÄLJ GRUVGRUPP";
+    }
+    if (ui.selectionCopy) {
+      ui.selectionCopy.textContent = kind === "attack"
+        ? "Högst 20 av dina egna vakter får följa med."
+        : kind === "mineDefense"
+          ? "En fiendekung anfaller din gruva. Välj högst fem vakter som försvar."
+          : kind === "mineRaid"
+            ? "Högst fem vakter får följa med för att besegra gruvans försvar och stjäla miners."
+            : "Högst fem vakter. Du får också gå helt ensam.";
+    }
+    if (ui.selectionConfirm) {
+      ui.selectionConfirm.textContent = kind === "attack"
+        ? "STARTA KRIGET"
+        : kind === "stealth"
+          ? "STARTA SMYGUPPDRAG"
+          : kind === "mineDefense"
+            ? "FÖRSVARA GRUVAN"
+            : "STARTA GRUVUPPDRAG";
+    }
+    if (ui.selectionCancel) ui.selectionCancel.textContent = incoming ? "STRID UTAN FLER VAKTER" : "TILLBAKA";
     updateSelectionUi();
     setModal("selection", true);
   }
@@ -1053,7 +1266,9 @@ import * as THREE from "./vendor/three.module.js";
     state.selection = null;
     setModal(null, false);
     if (selection.kind === "attack") startBattle(selection.target, selection.counts, selection.incoming);
-    else startStealth(selection.target, selection.counts);
+    else if (selection.kind === "stealth") startStealth(selection.target, selection.counts);
+    else if (selection.kind === "mineRaid") startMineRaid(selection.target, selection.counts);
+    else if (selection.kind === "mineDefense") startMineDefense(selection.target, selection.counts);
   }
 
   function openShop() {
@@ -1072,6 +1287,14 @@ import * as THREE from "./vendor/three.module.js";
       const buy = $(`[data-buy="${type}"]`);
       if (buy) buy.disabled = state.money < UNIT_PRICES[type];
     });
+    const minersOwned = $('[data-owned="miner"]');
+    if (minersOwned) minersOwned.textContent = String(state.miners);
+    const buyMinerButton = $('[data-buy="miner"]');
+    if (buyMinerButton) {
+      buyMinerButton.disabled = state.money < MINER_PRICE || state.miners >= MAX_MINERS;
+      const label = buyMinerButton.querySelector("span");
+      if (label) label.textContent = state.miners >= MAX_MINERS ? "MAX 9" : "KÖP 1";
+    }
     if (ui.sellDiamond) {
       ui.sellDiamond.disabled = state.diamonds < 1;
       ui.sellDiamond.textContent = state.diamonds ? "SÄLJ 1 DIAMANT · +10" : "INGA DIAMANTER ATT SÄLJA";
@@ -1093,6 +1316,25 @@ import * as THREE from "./vendor/three.module.js";
     updateShopUi();
     sfx("coin");
     showToast(`TVÅ VAKTER MED ${UNIT_LABELS[type]} ÄR REDO`);
+  }
+
+  function buyMiner() {
+    if (state.miners >= MAX_MINERS) {
+      showToast("GRUVAN HAR REDAN MAX NIO MINERS");
+      return;
+    }
+    if (state.money < MINER_PRICE) {
+      showToast("DU HAR INTE NOG MED PENGAR");
+      return;
+    }
+    if (state.miners === 0) state.mineElapsed = 0;
+    state.money -= MINER_PRICE;
+    state.miners++;
+    saveProgress();
+    rebuildWorld();
+    updateShopUi();
+    sfx("coin");
+    showToast(`EN MINER JOBBAR NU I GRUVAN (${state.miners}/${MAX_MINERS})`);
   }
 
   function sellDiamond() {
@@ -1120,7 +1362,37 @@ import * as THREE from "./vendor/three.module.js";
     );
   }
 
+  function chooseMineRaider() {
+    const candidates = state.kingdoms.slice(1).filter((kingdom) => kingdom.miners < MAX_MINERS);
+    if (!candidates.length) return null;
+    return candidates[Math.floor(seeded() * candidates.length)].index;
+  }
+
+  function resolveSleepingMineRaid(attackerOverride = null, requestedOverride = null) {
+    if (state.phase !== "night" || state.nightMineRaidTriggered || state.miners <= 0) return null;
+    state.nightMineRaidTriggered = true;
+    const attacker = Number.isInteger(attackerOverride) ? attackerOverride : chooseMineRaider();
+    if (!attacker || !state.kingdoms[attacker] || state.kingdoms[attacker].player || state.kingdoms[attacker].miners >= MAX_MINERS) return null;
+    const requested = Number.isFinite(requestedOverride) ? requestedOverride : 1 + Math.floor(seeded() * 3);
+    const transfer = applyMineTransfer("incoming", attacker, requested);
+    state.sleepRaidMessage = transfer.transferred > 0
+      ? `MEDAN DU SOV STAL FIENDEKUNG ${attacker} ${transfer.transferred} ${transfer.transferred === 1 ? "MINER" : "MINERS"}!`
+      : `FIENDEKUNG ${attacker} FÖRSÖKTE PLUNDRA GRUVAN MEN KUNDE INTE TA NÅGON MINER`;
+    return transfer;
+  }
+
+  function triggerIncomingMineRaid(attacker = chooseMineRaider()) {
+    if (state.phase !== "night" || state.scene !== "home" || state.modal || state.nightMineRaidTriggered || state.miners <= 0 || !attacker) return false;
+    state.nightMineRaidTriggered = true;
+    state.pendingMineDefense = { attacker, requested: 1 + Math.floor(seeded() * 3) };
+    saveProgress();
+    showToast(`FIENDEKUNG ${attacker} KOMMER FÖR ATT STJÄLA DINA MINERS!`, 2200);
+    openSelection("mineDefense", attacker, 5, true);
+    return true;
+  }
+
   function sleepOneSecond() {
+    resolveSleepingMineRaid();
     setModal(null, false);
     state.sleeping = 1;
     showToast("DU SOVER...", 1100);
@@ -1130,7 +1402,7 @@ import * as THREE from "./vendor/three.module.js";
     state.askedNight = true;
     showQuestion(
       "VILL DU VARA VAKEN?",
-      "Välj Ja för att vara vaken och kunna gå på smyguppdrag.",
+      "Välj Ja för att vara vaken och kunna gå på smyg- eller gruvuppdrag. Fiendekungar kan också anfalla din gruva.",
       () => showToast("NATTEN HAR BÖRJAT"),
       () => sleepOneSecond(),
     );
@@ -1147,6 +1419,8 @@ import * as THREE from "./vendor/three.module.js";
       hp: 100,
       alive: true,
       king: Boolean(extra.king),
+      worker: Boolean(extra.worker),
+      kingdom: Number.isInteger(extra.kingdom) ? extra.kingdom : team === 0 ? 0 : 1,
       weapon: extra.weapon || (type === "king" ? (seeded() > 0.5 ? "sword" : "bow") : null),
       fixed: Boolean(extra.fixed),
       towerSlot: Number.isInteger(extra.towerSlot) ? extra.towerSlot : null,
@@ -1157,6 +1431,7 @@ import * as THREE from "./vendor/three.module.js";
       salute: 0,
       color: KINGDOM_COLORS[team === 0 ? 0 : extra.kingdom || 1],
       sourceType: extra.sourceType || type,
+      lossRecorded: false,
     };
   }
 
@@ -1191,6 +1466,8 @@ import * as THREE from "./vendor/three.module.js";
       enemyKingRespawnedAtHome: false,
     };
     state.stealth = null;
+    state.mineRaid = null;
+    state.mineDefense = null;
     Object.assign(state.player, { x: 0, y: 0, z: 27, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0 });
     let friendIndex = 0;
     UNIT_TYPES.forEach((type) => {
@@ -1229,6 +1506,8 @@ import * as THREE from "./vendor/three.module.js";
     state.units = [];
     state.loot = [];
     state.battle = null;
+    state.mineRaid = null;
+    state.mineDefense = null;
     state.stealth = { target, counts: { ...counts }, deadFollowers: { sword: 0, archer: 0, cavalry: 0 }, result: null, enemyKingRespawnsAfterMission: false };
     state.quickStealth = { sword: 0, archer: 0, cavalry: 0 };
     state.quickStealthIds = [];
@@ -1262,6 +1541,240 @@ import * as THREE from "./vendor/three.module.js";
     rebuildWorld();
     showToast("SMYG IN, TA FYNDEN OCH ÅTERVÄND ÖVER BRON", 2800);
     updateHud();
+  }
+
+  function guardCountsLimitedTo(counts, max) {
+    const safe = Object.fromEntries(UNIT_TYPES.map((type) => [type, clamp(Math.floor(Number(counts?.[type]) || 0), 0, state.guards[type])]));
+    while (Object.values(safe).reduce((sum, value) => sum + value, 0) > max) {
+      const reducible = UNIT_TYPES.find((type) => safe[type] > 0);
+      if (!reducible) break;
+      safe[reducible]--;
+    }
+    return safe;
+  }
+
+  function calculateMineTransfer(direction, playerMiners, enemyMiners, requested) {
+    const playerBefore = clamp(Math.floor(Number(playerMiners) || 0), 0, MAX_MINERS);
+    const enemyBefore = clamp(Math.floor(Number(enemyMiners) || 0), 1, MAX_MINERS);
+    const wanted = Math.max(0, Math.floor(Number(requested) || 0));
+    const transferred = direction === "incoming"
+      ? Math.min(wanted, playerBefore, MAX_MINERS - enemyBefore)
+      : Math.min(wanted, Math.max(0, enemyBefore - 1), MAX_MINERS - playerBefore);
+    return {
+      direction,
+      requested: wanted,
+      transferred,
+      playerBefore,
+      enemyBefore,
+      playerAfter: direction === "incoming" ? playerBefore - transferred : playerBefore + transferred,
+      enemyAfter: direction === "incoming" ? enemyBefore + transferred : enemyBefore - transferred,
+    };
+  }
+
+  function applyMineTransfer(direction, enemyKingdomIndex, requested) {
+    const enemyKingdom = state.kingdoms[enemyKingdomIndex];
+    if (!["outgoing", "incoming"].includes(direction) || !enemyKingdom || enemyKingdom.player) return null;
+    const transfer = calculateMineTransfer(direction, state.miners, enemyKingdom.miners, requested);
+    state.miners = transfer.playerAfter;
+    enemyKingdom.miners = transfer.enemyAfter;
+    state.mineTransferId++;
+    state.lastMineTransfer = {
+      id: state.mineTransferId,
+      source: direction === "outgoing" ? enemyKingdomIndex : 0,
+      target: direction === "outgoing" ? 0 : enemyKingdomIndex,
+      enemyKingdom: enemyKingdomIndex,
+      ...transfer,
+    };
+    if (transfer.playerBefore === 0 && transfer.playerAfter > 0) state.mineElapsed = 0;
+    if (state.miners === 0) state.mineElapsed = 0;
+    saveProgress();
+    return transfer;
+  }
+
+  function startMineRaid(target, counts) {
+    target = clamp(Math.floor(Number(target) || 1), 1, state.kingdoms.length - 1);
+    const safeCounts = guardCountsLimitedTo(counts, 5);
+    state.scene = "mineRaid";
+    state.units = [];
+    state.loot = [];
+    state.battle = null;
+    state.stealth = null;
+    state.mineDefense = null;
+    state.mineRaid = {
+      target,
+      counts: { ...safeCounts },
+      incoming: false,
+      defeatedMiners: 0,
+      stolenMiners: 0,
+      result: null,
+      resolved: false,
+      enemyKingRespawnedAtHome: false,
+    };
+    Object.assign(state.player, { x: 0, y: 0, z: -27.5, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0 });
+
+    let friendIndex = 0;
+    UNIT_TYPES.forEach((type) => {
+      for (let index = 0; index < safeCounts[type]; index++) {
+        state.units.push(makeUnit(0, type, -4 + (friendIndex % 5) * 2, -25.8 + Math.floor(friendIndex / 5) * 1.8, { sourceType: type }));
+        friendIndex++;
+      }
+    });
+
+    const defenderCount = 2 + Math.ceil(state.kingdoms[target].miners / 3);
+    for (let index = 0; index < defenderCount; index++) {
+      const type = UNIT_TYPES[(target + index) % UNIT_TYPES.length];
+      const [x, z] = MINE_GUARD_SPOTS[index];
+      state.units.push(makeUnit(1, type, x, z, { kingdom: target }));
+    }
+    if (seeded() < 0.5) state.units.push(makeUnit(1, "king", 5.8, -39.5, { king: true, kingdom: target }));
+    for (let index = 0; index < state.kingdoms[target].miners; index++) {
+      const [x, z] = MINE_WORKER_SPOTS[index];
+      state.units.push(makeUnit(1, "miner", x, z, { worker: true, kingdom: target }));
+    }
+
+    rebuildWorld();
+    showToast("BESEGRA GRUVANS FÖRSVAR OCH STJÄL MINERS!", 2800);
+    updateHud();
+  }
+
+  function startMineDefense(attacker, counts) {
+    attacker = clamp(Math.floor(Number(attacker) || 1), 1, state.kingdoms.length - 1);
+    const safeCounts = guardCountsLimitedTo(counts, 5);
+    state.scene = "mineDefense";
+    state.units = [];
+    state.loot = [];
+    state.battle = null;
+    state.stealth = null;
+    state.mineRaid = null;
+    if (!state.pendingMineDefense || state.pendingMineDefense.attacker !== attacker) {
+      state.pendingMineDefense = { attacker, requested: 1 + Math.floor(seeded() * 3) };
+      saveProgress();
+    }
+    state.mineDefense = {
+      attacker,
+      counts: { ...safeCounts },
+      over: false,
+      result: null,
+      resultTimer: 0,
+      stolenMiners: 0,
+      resolved: false,
+      playerKingRespawnedAtHome: false,
+      enemyKingRespawnedAtHome: false,
+      theftRequested: state.pendingMineDefense.requested,
+    };
+    Object.assign(state.player, { x: 0, y: 0, z: -27.5, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0 });
+
+    let friendIndex = 0;
+    UNIT_TYPES.forEach((type) => {
+      for (let index = 0; index < safeCounts[type]; index++) {
+        state.units.push(makeUnit(0, type, -4 + (friendIndex % 5) * 2, -25.5 + Math.floor(friendIndex / 5) * 1.8, { sourceType: type }));
+        friendIndex++;
+      }
+    });
+
+    const enemyGuardCount = 4 + Math.floor(seeded() * 3);
+    for (let index = 0; index < enemyGuardCount; index++) {
+      const type = UNIT_TYPES[(attacker + index) % UNIT_TYPES.length];
+      const [x, z] = MINE_GUARD_SPOTS[index];
+      state.units.push(makeUnit(1, type, x, z, { kingdom: attacker }));
+    }
+    state.units.push(makeUnit(1, "king", 0, -32, { king: true, kingdom: attacker }));
+    rebuildWorld();
+    showToast(`FIENDEKUNG ${attacker} ANFALLER DIN GRUVA!`, 2500);
+    updateHud();
+  }
+
+  function finishMineRaid(title, text) {
+    if (!state.mineRaid || state.mineRaid.resolved) return;
+    state.mineRaid.resolved = true;
+    const dead = { sword: 0, archer: 0, cavalry: 0 };
+    state.units.filter((unit) => unit.team === 0 && !unit.alive && !unit.lossRecorded && UNIT_TYPES.includes(unit.sourceType)).forEach((unit) => dead[unit.sourceType]++);
+    UNIT_TYPES.forEach((type) => { state.guards[type] = Math.max(0, state.guards[type] - dead[type]); });
+    normalizeTowerSlots();
+    state.mineRaid = null;
+    state.units = [];
+    state.loot = [];
+    state.scene = "home";
+    resetPlayerForHome();
+    saveProgress();
+    rebuildWorld();
+    showOutcome(title, text);
+  }
+
+  function stealFromEnemyMine(requestedOverride = null) {
+    const raid = state.mineRaid;
+    if (!raid || raid.incoming) return;
+    const defendersAlive = state.units.some((unit) => unit.team === 1 && unit.alive && !unit.worker);
+    if (defendersAlive) {
+      showToast("BESEGRA GRUVANS VAKTER FÖRST");
+      return;
+    }
+    const enemyKingdom = state.kingdoms[raid.target];
+    const requested = Number.isFinite(requestedOverride) ? requestedOverride : 1 + Math.floor(seeded() * 3);
+    const transfer = applyMineTransfer("outgoing", raid.target, requested);
+    if (!transfer) return;
+    const stolen = transfer.transferred;
+    raid.stolenMiners = stolen;
+    if (stolen > 0) {
+      finishMineRaid(
+        "GRUVUPPDRAGET LYCKADES!",
+        `Du stal ${stolen} ${stolen === 1 ? "miner" : "miners"}. Fienderiket har ${enemyKingdom.miners} kvar och du har ${state.miners}.`,
+      );
+      sfx("win");
+      return;
+    }
+    const reason = transfer.playerBefore >= MAX_MINERS
+      ? "Din egen gruva är full med nio miners."
+      : "Fienderikets sista miner måste stanna kvar.";
+    finishMineRaid("INGEN MINER KUNDE STJÄLAS", reason);
+  }
+
+  function finishMineDefense(result) {
+    if (!state.mineDefense || state.mineDefense.over) return;
+    state.mineDefense.over = true;
+    state.mineDefense.result = result;
+    state.mineDefense.resultTimer = 1.5;
+    if (result === "win") {
+      state.pendingMineDefense = null;
+      saveProgress();
+    }
+  }
+
+  function resolveMineDefense(requestedOverride = null) {
+    const defense = state.mineDefense;
+    if (!defense || defense.resolved) return;
+    defense.resolved = true;
+    const dead = { sword: 0, archer: 0, cavalry: 0 };
+    state.units.filter((unit) => unit.team === 0 && !unit.alive && !unit.lossRecorded && UNIT_TYPES.includes(unit.sourceType)).forEach((unit) => dead[unit.sourceType]++);
+    UNIT_TYPES.forEach((type) => { state.guards[type] = Math.max(0, state.guards[type] - dead[type]); });
+    normalizeTowerSlots();
+
+    let stolen = 0;
+    if (defense.result === "lose") {
+      const requested = Number.isFinite(requestedOverride) ? requestedOverride : defense.theftRequested;
+      state.pendingMineDefense = null;
+      const transfer = applyMineTransfer("incoming", defense.attacker, requested);
+      stolen = transfer.transferred;
+      defense.stolenMiners = stolen;
+    } else {
+      state.pendingMineDefense = null;
+    }
+
+    const won = defense.result === "win";
+    const title = won ? "GRUVAN ÄR RÄDDAD!" : "FIENDEN TOG SIG IN I GRUVAN";
+    const text = won
+      ? "Fiendekungen och vakterna besegrades. Alla dina överlevande miners är kvar."
+      : stolen > 0
+        ? `Fiendekung ${defense.attacker} stal ${stolen} ${stolen === 1 ? "miner" : "miners"}. Du har ${state.miners} kvar.`
+        : "Fienden vann striden men kunde inte bära bort någon miner.";
+    state.mineDefense = null;
+    state.units = [];
+    state.scene = "home";
+    resetPlayerForHome();
+    saveProgress();
+    rebuildWorld();
+    showOutcome(title, text);
+    sfx(won ? "win" : "lose");
   }
 
   function finishStealth(playerDied = false) {
@@ -1414,11 +1927,11 @@ import * as THREE from "./vendor/three.module.js";
     fpBow.visible = state.player.alive && state.weapon === "bow";
   }
 
-  function nearestEnemyTo(x, z, team, maxRange = Infinity) {
+  function nearestEnemyTo(x, z, team, maxRange = Infinity, excludeWorkers = false) {
     let best = null;
     let bestDistance = maxRange;
     state.units.forEach((unit) => {
-      if (!unit.alive || unit.team === team) return;
+      if (!unit.alive || unit.team === team || (excludeWorkers && unit.worker)) return;
       const distance = Math.hypot(unit.x - x, unit.z - z);
       if (distance < bestDistance) { best = unit; bestDistance = distance; }
     });
@@ -1448,7 +1961,7 @@ import * as THREE from "./vendor/three.module.js";
   function moveUnit(unit, dx, dz) {
     const nextX = unit.x + dx;
     const nextZ = unit.z + dz;
-    if (state.scene === "stealth") {
+    if (["stealth", "mineRaid", "mineDefense"].includes(state.scene)) {
       if (!collides(nextX, unit.z, unit.y || 0)) unit.x = nextX;
       if (!collides(unit.x, nextZ, unit.y || 0)) unit.z = nextZ;
     } else {
@@ -1461,6 +1974,28 @@ import * as THREE from "./vendor/three.module.js";
     }
   }
 
+  function unitAvoidance(unit) {
+    let x = 0;
+    let z = 0;
+    state.units.forEach((other) => {
+      if (other === unit || !other.alive || other.team !== unit.team) return;
+      const dx = unit.x - other.x;
+      const dz = unit.z - other.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance >= 1.3) return;
+      if (distance < 0.001) {
+        const side = unit.id < other.id ? -1 : 1;
+        x += side;
+        z -= side * 0.5;
+        return;
+      }
+      const strength = (1.3 - distance) / 1.3;
+      x += dx / distance * strength;
+      z += dz / distance * strength;
+    });
+    return { x, z };
+  }
+
   function fireTracer(from, to, color = 0xffd45a) {
     const points = [new THREE.Vector3(from.x, (from.y || 0) + 1.45, from.z), new THREE.Vector3(to.x, (to.y || 0) + 1.2, to.z)];
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 }));
@@ -1470,10 +2005,31 @@ import * as THREE from "./vendor/three.module.js";
 
   function damageUnit(unit, amount) {
     if (!unit?.alive) return;
+    if (unit.worker && state.mineRaid && !state.mineRaid.incoming) {
+      const kingdom = state.kingdoms[state.mineRaid.target];
+      if (unit.hp - amount <= 0 && kingdom.miners <= 1) {
+        unit.hp = 1;
+        showToast("FIENDERIKETS SISTA MINER KAN INTE TAS BORT", 1500);
+        sfx("hit");
+        return;
+      }
+    }
     unit.hp = Math.max(0, unit.hp - amount);
     if (unit.hp <= 0) {
       unit.alive = false;
       unit.cooldown = 999;
+      if (unit.team === 0 && ["mineRaid", "mineDefense"].includes(state.scene) && UNIT_TYPES.includes(unit.sourceType) && !unit.lossRecorded) {
+        unit.lossRecorded = true;
+        state.guards[unit.sourceType] = Math.max(0, state.guards[unit.sourceType] - 1);
+        normalizeTowerSlots();
+        saveProgress();
+      }
+      if (unit.worker && state.mineRaid && !state.mineRaid.incoming) {
+        const kingdom = state.kingdoms[state.mineRaid.target];
+        kingdom.miners = Math.max(1, kingdom.miners - 1);
+        state.mineRaid.defeatedMiners++;
+        saveProgress();
+      }
       if (unit.king && state.battle && unit.team === 1) {
         state.battle.enemyKingRespawnedAtHome = true;
         Object.assign(unit, { respawned: true, hp: 100, x: 0, y: 0, z: -38.5 });
@@ -1481,6 +2037,14 @@ import * as THREE from "./vendor/three.module.js";
       if (unit.king && state.stealth && unit.team === 1) {
         state.stealth.enemyKingRespawnsAfterMission = true;
         Object.assign(unit, { respawned: true, hp: 100, x: -13.2, y: 0, z: 1.2 });
+      }
+      if (unit.king && state.mineRaid && unit.team === 1) {
+        state.mineRaid.enemyKingRespawnedAtHome = true;
+        Object.assign(unit, { respawned: true, hp: 100, x: 0, y: 0, z: 9 });
+      }
+      if (unit.king && state.mineDefense && unit.team === 1) {
+        state.mineDefense.enemyKingRespawnedAtHome = true;
+        Object.assign(unit, { respawned: true, hp: 100, x: 0, y: 0, z: -52 });
       }
       const model = actorModels.get(unit.id);
       if (model) model.userData.fall = unit.respawned ? 0 : 0.01;
@@ -1496,6 +2060,18 @@ import * as THREE from "./vendor/three.module.js";
       if (state.scene === "stealth") {
         showToast("DU FÖLLER OCH BÖRJAR OM I DIN BORG", 1800);
         finishStealth(true);
+      } else if (state.scene === "mineRaid") {
+        finishMineRaid(
+          "GRUVUPPDRAGET MISSLYCKADES",
+          "Du började om i din borg. Besegrade miners förblir borta, men du lyckades inte stjäla någon.",
+        );
+      } else if (state.scene === "mineDefense") {
+        state.mineDefense.playerKingRespawnedAtHome = true;
+        state.player.x = 0;
+        state.player.z = 9;
+        state.player.y = 0;
+        state.player.hp = 100;
+        showToast("DU ÄR I BORGEN TILLS GRUVSTRIDEN ÄR ÖVER", 2300);
       } else if (state.scene === "battle") {
         state.battle.playerKingRespawnedAtHome = true;
         showToast("DU ÄR TILLBAKA I BORGEN TILLS KRIGET ÄR ÖVER", 2300);
@@ -1508,6 +2084,17 @@ import * as THREE from "./vendor/three.module.js";
     updateHud();
   }
 
+  function unitUsesRangedWeapon(unit) {
+    return unit.type === "archer" || (unit.king && unit.weapon === "bow");
+  }
+
+  function unitAttackRange(unit) {
+    if (unit.king) return unit.weapon === "bow" ? COMBAT_RANGES.kingBow : COMBAT_RANGES.kingSword;
+    if (unit.type === "archer") return COMBAT_RANGES.archerBow;
+    if (unit.type === "cavalry") return COMBAT_RANGES.cavalrySpear;
+    return COMBAT_RANGES.swordGuard;
+  }
+
   function playerAttack() {
     enableSound();
     if (state.screen !== "playing" || state.modal || state.paused || !state.player.alive || state.player.attackCooldown > 0) return;
@@ -1518,7 +2105,7 @@ import * as THREE from "./vendor/three.module.js";
       return;
     }
     const forward = { x: -Math.sin(state.player.yaw), z: -Math.cos(state.player.yaw) };
-    const range = state.weapon === "sword" ? 3.1 : 34;
+    const range = state.weapon === "sword" ? COMBAT_RANGES.kingSword : COMBAT_RANGES.kingBow;
     let target = null;
     let best = range;
     state.units.forEach((unit) => {
@@ -1540,7 +2127,7 @@ import * as THREE from "./vendor/three.module.js";
       damageUnit(target, state.weapon === "sword" ? 34 : 25);
       if (state.weapon === "bow") fireTracer(state.player, target, 0x8fe8ff);
     } else if (state.weapon === "bow") {
-      fireTracer(state.player, { x: state.player.x + forward.x * 32, z: state.player.z + forward.z * 32, y: state.player.y }, 0x8fe8ff);
+      fireTracer(state.player, { x: state.player.x + forward.x * range, z: state.player.z + forward.z * range, y: state.player.y }, 0x8fe8ff);
     }
   }
 
@@ -1561,10 +2148,18 @@ import * as THREE from "./vendor/three.module.js";
         return;
       }
       unit.cooldown -= dt;
-      const detectionRange = state.scene === "stealth" ? (unit.team === 0 ? 12 : 15) : Infinity;
-      const target = nearestEnemyTo(unit.x, unit.z, unit.team, detectionRange);
+      if (unit.worker) {
+        unit.walk += dt * 4.6;
+        if (model) animateActor(model, unit, dt);
+        return;
+      }
+      const ranged = unitUsesRangedWeapon(unit);
+      const range = unitAttackRange(unit);
+      const stealthAwareness = unit.team === 0 ? 12 : 15;
+      const detectionRange = state.scene === "stealth" ? Math.max(stealthAwareness, range) : Infinity;
+      const target = nearestEnemyTo(unit.x, unit.z, unit.team, detectionRange, state.scene === "mineRaid" && unit.team === 0);
       if (!target) {
-        if (state.scene === "stealth" && unit.team === 0 && !unit.fixed) {
+        if (["stealth", "mineRaid"].includes(state.scene) && unit.team === 0 && !unit.fixed) {
           const followDistance = dist(unit, state.player);
           if (followDistance > 2.6) {
             const followSpeed = unit.type === "cavalry" ? 3.1 : 2.15;
@@ -1583,13 +2178,21 @@ import * as THREE from "./vendor/three.module.js";
       const distance = Math.hypot(dx, dz) || 1;
       const dirX = dx / distance;
       const dirZ = dz / distance;
-      const ranged = unit.type === "archer" || (unit.king && unit.weapon === "bow");
-      const range = ranged ? 13.5 : unit.type === "cavalry" ? 3.2 : 2.15;
       const speed = unit.fixed ? 0 : unit.type === "cavalry" ? 3.1 : unit.king ? 2.1 : 1.75;
       unit.facing = Math.atan2(dirX, dirZ);
-      if (distance > range * 0.82) {
+      if (distance > range) {
         if (speed > 0) {
-          moveUnit(unit, dirX * speed * dt, dirZ * speed * dt);
+          let moveX = dirX;
+          let moveZ = dirZ;
+          if (["mineRaid", "mineDefense"].includes(state.scene)) {
+            const avoidance = unitAvoidance(unit);
+            moveX += avoidance.x * 1.15;
+            moveZ += avoidance.z * 1.15;
+            const moveLength = Math.hypot(moveX, moveZ) || 1;
+            moveX /= moveLength;
+            moveZ /= moveLength;
+          }
+          moveUnit(unit, moveX * speed * dt, moveZ * speed * dt);
           unit.walk += dt * speed * 3.2;
         }
       } else if (unit.cooldown <= 0) {
@@ -1616,6 +2219,13 @@ import * as THREE from "./vendor/three.module.js";
     const rightLeg = body.userData.rightLeg;
     const leftArm = body.userData.leftArm;
     const rightArm = body.userData.rightArm;
+    if (unit.worker) {
+      const miningSwing = Math.sin(unit.walk);
+      if (rightArm) rightArm.rotation.x = -0.72 + miningSwing * 0.78;
+      if (leftArm) leftArm.rotation.x = 0.22 - miningSwing * 0.22;
+      body.position.y = Math.max(0, miningSwing) * 0.025;
+      return;
+    }
     if (leftLeg) leftLeg.rotation.x = stride;
     if (rightLeg) rightLeg.rotation.x = -stride;
     if (leftArm) leftArm.rotation.x = -stride * 0.55;
@@ -1639,6 +2249,55 @@ import * as THREE from "./vendor/three.module.js";
         entry.model.rotation.y = Math.atan2(state.player.x - entry.data.x, state.player.z - entry.data.z) + Math.PI;
       }
     });
+  }
+
+  function updateMinerVisuals() {
+    minerVisuals.forEach((entry) => {
+      const body = entry.model.userData.body;
+      const rightArm = body?.userData.rightArm;
+      const leftArm = body?.userData.leftArm;
+      const swing = Math.sin(state.time * 4.6 + entry.phase);
+      if (rightArm) rightArm.rotation.x = -0.72 + swing * 0.78;
+      if (leftArm) leftArm.rotation.x = 0.22 - swing * 0.22;
+      if (body) body.position.y = Math.max(0, swing) * 0.025;
+    });
+  }
+
+  function mineIncomeFor(miners = state.miners) {
+    return MINE_INCOME[clamp(Math.floor(Number(miners) || 0), 0, MAX_MINERS)];
+  }
+
+  function updateMine(dt) {
+    if (state.miners <= 0) {
+      state.mineElapsed = 0;
+      return;
+    }
+    state.mineElapsed += dt;
+    while (state.mineElapsed + 1e-9 >= MINE_PAYOUT_SECONDS) {
+      state.mineElapsed = Math.max(0, state.mineElapsed - MINE_PAYOUT_SECONDS);
+      state.minePayouts++;
+      const income = mineIncomeFor();
+      const foundDiamond = state.minePayouts % MINE_DIAMOND_EVERY_PAYOUTS === 0;
+      state.money += income;
+      if (foundDiamond) state.diamonds++;
+      saveProgress();
+      updateHud();
+      sfx("coin");
+      showToast(foundDiamond ? `GRUVAN GAV ${income} PENGAR OCH 1 DIAMANT!` : `GRUVAN GAV ${income} PENGAR!`, 2300);
+    }
+  }
+
+  function updateEnemyMines(dt) {
+    let paid = false;
+    state.kingdoms.slice(1).forEach((kingdom) => {
+      kingdom.mineElapsed += dt;
+      while (kingdom.mineElapsed + 1e-9 >= MINE_PAYOUT_SECONDS) {
+        kingdom.mineElapsed = Math.max(0, kingdom.mineElapsed - MINE_PAYOUT_SECONDS);
+        kingdom.money += mineIncomeFor(kingdom.miners);
+        paid = true;
+      }
+    });
+    if (paid) saveProgress();
   }
 
   function updateEffects(dt) {
@@ -1671,6 +2330,16 @@ import * as THREE from "./vendor/three.module.js";
         state.battle.resultTimer -= dt;
         if (state.battle.resultTimer <= 0) resolveBattle();
       }
+    } else if (state.scene === "mineDefense" && state.mineDefense) {
+      if (!state.mineDefense.over) {
+        const friendsAlive = (state.player.alive ? 1 : 0) + state.units.filter((unit) => unit.team === 0 && unit.alive).length;
+        const enemiesAlive = state.units.filter((unit) => unit.team === 1 && unit.alive).length;
+        if (enemiesAlive === 0) finishMineDefense("win");
+        else if (friendsAlive === 0) finishMineDefense("lose");
+      } else {
+        state.mineDefense.resultTimer -= dt;
+        if (state.mineDefense.resultTimer <= 0) resolveMineDefense();
+      }
     }
   }
 
@@ -1693,6 +2362,15 @@ import * as THREE from "./vendor/three.module.js";
         const distance = dist(loot, state.player);
         if (distance < 2.2 && (!state.nearest || distance < state.nearest.distance)) state.nearest = { kind: "loot", loot, distance, label: loot.kind === "diamond" ? "TA DIAMANTEN" : "TA PENGARNA" };
       });
+    } else if (state.scene === "mineRaid") {
+      const mine = interactables.find((item) => item.kind === "mine");
+      if (mine) {
+        const distance = Math.hypot(mine.x - state.player.x, mine.z - state.player.z);
+        if (distance <= mine.radius) {
+          const defendersAlive = state.units.some((unit) => unit.team === 1 && unit.alive && !unit.worker);
+          state.nearest = { ...mine, distance, label: defendersAlive ? "BESEGRA GRUVANS VAKTER" : "STJÄL MINERS" };
+        }
+      }
     }
     if (ui.prompt) {
       const visible = Boolean(state.nearest) && !state.modal;
@@ -1710,6 +2388,11 @@ import * as THREE from "./vendor/three.module.js";
       if (state.phase === "night") showQuestion("VILL DU SOVA?", "Efter en sekund blir det morgon.", () => sleepOneSecond(), () => {});
       else showToast("DET ÄR DAG. DU BEHÖVER INTE SOVA ÄN.");
     } else if (item.kind === "shop") openShop();
+    else if (item.kind === "mine") {
+      if (state.scene === "mineRaid") stealFromEnemyMine();
+      else if (state.miners <= 0) showToast("KÖP EN MINER I AFFÄREN FÖR ATT STARTA GRUVAN");
+      else showToast(`${state.miners} MINERS JOBBAR · ${mineIncomeFor()} PENGAR VAR 30:E SEKUND`);
+    }
     else if (item.kind === "tower") placeTowerArcher(item.slot);
     else if (item.kind === "guard") {
       const total = Object.values(state.quickStealth).reduce((sum, value) => sum + value, 0);
@@ -1739,7 +2422,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function updateCycle(dt) {
-    if (state.scene === "battle" || state.scene === "stealth") return;
+    if (["battle", "stealth", "mineRaid", "mineDefense"].includes(state.scene)) return;
     if (state.sleeping > 0) {
       state.sleeping -= dt;
       if (state.sleeping <= 0) {
@@ -1752,7 +2435,10 @@ import * as THREE from "./vendor/three.module.js";
         state.quickStealth = { sword: 0, archer: 0, cavalry: 0 };
         state.quickStealthIds = [];
         rebuildWorld();
-        showToast("GOD MORGON!", 1800);
+        const hadSleepingRaid = Boolean(state.sleepRaidMessage);
+        const morningMessage = state.sleepRaidMessage || "GOD MORGON!";
+        state.sleepRaidMessage = "";
+        showToast(morningMessage, hadSleepingRaid ? 3200 : 1800);
       }
       return;
     }
@@ -1763,6 +2449,9 @@ import * as THREE from "./vendor/three.module.js";
       if (state.phase === "day") {
         state.phase = "night";
         state.askedNight = false;
+        state.nightMineRaidTriggered = false;
+        state.nightMineRaidAt = 35 + seeded() * 55;
+        state.sleepRaidMessage = "";
         rebuildWorld();
         startNightChoice();
       } else {
@@ -1772,6 +2461,8 @@ import * as THREE from "./vendor/three.module.js";
         state.aiAttackAt = 35 + seeded() * 35;
         state.quickStealth = { sword: 0, archer: 0, cavalry: 0 };
         state.quickStealthIds = [];
+        state.nightMineRaidTriggered = false;
+        state.sleepRaidMessage = "";
         rebuildWorld();
         showToast("SOLEN GÅR UPP ÖVER RIKET");
       }
@@ -1786,6 +2477,13 @@ import * as THREE from "./vendor/three.module.js";
       showToast(`FIENDEKUNG ${attacker} KOMMER MOT DIN BORG!`, 2100);
       openSelection("attack", attacker, 20, true);
     }
+    if (state.phase === "night" && !state.nightMineRaidTriggered && state.phaseElapsed >= state.nightMineRaidAt && !state.modal) {
+      if (state.miners > 0) {
+        const attacker = chooseMineRaider();
+        if (attacker) triggerIncomingMineRaid(attacker);
+        else state.nightMineRaidTriggered = true;
+      } else state.nightMineRaidTriggered = true;
+    }
   }
 
   function update(dt) {
@@ -1798,9 +2496,12 @@ import * as THREE from "./vendor/three.module.js";
     }
     if (!state.modal || state.sleeping > 0) {
       updateCycle(dt);
+      updateMine(dt);
+      updateEnemyMines(dt);
       movePlayer(dt);
       updateUnits(dt);
       updateHomeVisuals(dt);
+      updateMinerVisuals();
       checkSceneResults(dt);
     }
     updateEffects(dt);
@@ -1821,7 +2522,9 @@ import * as THREE from "./vendor/three.module.js";
     if (ui.clock) ui.clock.textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
     if (ui.weapon) ui.weapon.textContent = state.weapon === "sword" ? "SVÄRD" : "PILBÅGE";
     if (ui.followers) {
-      const followers = state.scene === "stealth" ? state.units.filter((unit) => unit.team === 0 && unit.alive).length : state.scene === "battle" ? state.units.filter((unit) => unit.team === 0 && unit.alive).length : Object.values(state.quickStealth).reduce((sum, value) => sum + value, 0);
+      const followers = ["battle", "stealth", "mineRaid", "mineDefense"].includes(state.scene)
+        ? state.units.filter((unit) => unit.team === 0 && unit.alive).length
+        : Object.values(state.quickStealth).reduce((sum, value) => sum + value, 0);
       ui.followers.textContent = String(followers);
     }
   }
@@ -1862,17 +2565,28 @@ import * as THREE from "./vendor/three.module.js";
 
   function setPaused(paused) {
     if (state.screen !== "playing") return;
-    state.paused = paused;
-    if (paused) setModal("pause", true);
-    else setModal(null, false);
+    if (paused) {
+      state.pausedModal = state.modal;
+      state.paused = true;
+      setModal("pause", true);
+    } else {
+      const returnModal = state.pausedModal;
+      state.pausedModal = null;
+      state.paused = false;
+      if (returnModal) setModal(returnModal, true);
+      else setModal(null, false);
+    }
   }
 
   function resetGame() {
     Object.assign(state, {
-      screen: "playing", scene: "home", paused: false, modal: null, time: 0, phase: "day", phaseElapsed: 0, day: 1,
+      screen: "playing", scene: "home", paused: false, pausedModal: null, modal: null, time: 0, phase: "day", phaseElapsed: 0, day: 1,
       sleeping: 0, askedNight: false, aiAttackTriggered: false, aiAttackAt: 42, money: 50, diamonds: 0,
       guards: { sword: 0, archer: 0, cavalry: 0 }, towerSlots: [false, false, false, false],
-      quickStealth: { sword: 0, archer: 0, cavalry: 0 }, quickStealthIds: [], weapon: "sword", units: [], loot: [], battle: null, stealth: null,
+      miners: 0, mineElapsed: 0, minePayouts: 0,
+      kingdoms: makeKingdoms(),
+      quickStealth: { sword: 0, archer: 0, cavalry: 0 }, quickStealthIds: [], weapon: "sword", units: [], loot: [], battle: null, stealth: null, mineRaid: null, mineDefense: null, pendingMineDefense: null, loadNotice: "",
+      nightMineRaidTriggered: false, nightMineRaidAt: 52, sleepRaidMessage: "", mineTransferId: 0, lastMineTransfer: null,
       selection: null, question: null, nearest: null, enteredEnemyCastle: false, deterministicSeed: INITIAL_SEED,
     });
     manualRemainderMs = 0;
@@ -1894,7 +2608,7 @@ import * as THREE from "./vendor/three.module.js";
     const nearbyUnits = state.units
       .filter((unit) => unit.alive && dist(unit, state.player) < 18)
       .slice(0, 16)
-      .map((unit) => ({ id: unit.id, team: unit.team, type: unit.type, king: unit.king, x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, distance: rounded(dist(unit, state.player)) }));
+      .map((unit) => ({ id: unit.id, team: unit.team, type: unit.type, king: unit.king, worker: unit.worker, x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, distance: rounded(dist(unit, state.player)) }));
     const duration = state.phase === "day" ? DAY_SECONDS : NIGHT_SECONDS;
     return JSON.stringify({
       coordinateSystem: "origin is the castle courtyard center; x increases east/right, z increases south/toward the drawbridge; y is height; yaw 0 looks north (-z)",
@@ -1902,15 +2616,37 @@ import * as THREE from "./vendor/three.module.js";
       screen: state.screen,
       scene: state.scene,
       paused: state.paused,
+      pausedModal: state.pausedModal,
       modal: state.modal,
       dialog: state.modal ? {
         type: state.modal,
         title: state.modal === "question" ? ui.questionTitle?.textContent : state.modal === "selection" ? ui.selectionTitle?.textContent : state.modal === "outcome" ? ui.outcomeTitle?.textContent : null,
         text: state.modal === "question" ? ui.questionText?.textContent : state.modal === "selection" ? ui.selectionCopy?.textContent : state.modal === "outcome" ? ui.outcomeText?.textContent : null,
+        mode: state.modal === "question" ? ui.question?.dataset.mode || "confirm" : null,
+        actions: state.modal === "question" ? {
+          yes: ui.questionYes?.textContent,
+          no: ui.questionNo?.textContent,
+          back: ui.questionBack && !ui.questionBack.hidden ? ui.questionBack.textContent : null,
+          actionIds: ui.question?.dataset.mode === "mission" ? ["castleStealth", "mineRaid"] : null,
+        } : null,
       } : null,
-      dayNight: { phase: state.phase, day: state.day, elapsedSeconds: rounded(state.phaseElapsed), remainingSeconds: rounded(duration - state.phaseElapsed), durationSeconds: duration, sleepingSeconds: rounded(state.sleeping) },
+      dayNight: { phase: state.phase, day: state.day, elapsedSeconds: rounded(state.phaseElapsed), remainingSeconds: rounded(duration - state.phaseElapsed), durationSeconds: duration, sleepingSeconds: rounded(state.sleeping), mineRaidTriggered: state.nightMineRaidTriggered, mineRaidAtSeconds: rounded(state.nightMineRaidAt) },
       player: { x: rounded(state.player.x), y: rounded(state.player.y), z: rounded(state.player.z), yaw: rounded(state.player.yaw), pitch: rounded(state.player.pitch), hp: state.player.hp, alive: state.player.alive, weapon: state.weapon },
       resources: { money: state.money, diamonds: state.diamonds, diamondSellValue: 10 },
+      mine: {
+        behindPlayerCastle: true,
+        miners: state.miners,
+        maxMiners: MAX_MINERS,
+        minerPrice: MINER_PRICE,
+        incomePer30Seconds: mineIncomeFor(),
+        incomeTable: MINE_INCOME.slice(1),
+        elapsedSeconds: rounded(state.mineElapsed),
+        secondsUntilPayout: state.miners > 0 ? rounded(MINE_PAYOUT_SECONDS - state.mineElapsed) : null,
+        payouts: state.minePayouts,
+        diamondEveryPayouts: MINE_DIAMOND_EVERY_PAYOUTS,
+        visibleMiners: ["home", "mineDefense"].includes(state.scene) ? minerVisuals.filter((entry) => !entry.enemy).length : state.miners,
+      },
+      combatRanges: { ...COMBAT_RANGES },
       guards: {
         owned: { ...state.guards },
         available: Object.fromEntries(UNIT_TYPES.map((type) => [type, availableGuards(type)])),
@@ -1920,10 +2656,45 @@ import * as THREE from "./vendor/three.module.js";
         quickStealthIds: [...state.quickStealthIds],
         unnamed: true,
       },
-      kingdoms: { total: 7, player: 1, bots: 6, castlesIdentical: true, villagesPerKingdom: 1 },
+      kingdoms: {
+        total: 7,
+        player: 1,
+        bots: 6,
+        castlesIdentical: true,
+        villagesPerKingdom: 1,
+        entries: state.kingdoms.map((kingdom) => ({ index: kingdom.index, player: kingdom.player, miners: kingdom.index === 0 ? state.miners : kingdom.miners, money: kingdom.index === 0 ? state.money : kingdom.money, towerArchers: kingdom.towerArchers })),
+      },
       nearestInteraction: state.nearest ? { kind: state.nearest.kind, label: state.nearest.label, distance: rounded(state.nearest.distance) } : null,
       battle: state.battle ? { target: state.battle.target, incoming: state.battle.incoming, selected: state.battle.counts, over: state.battle.over, result: state.battle.result, playerKingRespawnedAtHome: state.battle.playerKingRespawnedAtHome, enemyKingRespawnedAtHome: state.battle.enemyKingRespawnedAtHome, friendlyAlive: state.units.filter((unit) => unit.team === 0 && unit.alive).length + (state.player.alive ? 1 : 0), enemyAlive: state.units.filter((unit) => unit.team === 1 && unit.alive).length } : null,
       stealth: state.stealth ? { target: state.stealth.target, selected: state.stealth.counts, enteredCastle: state.enteredEnemyCastle, enemyKingRespawnsAfterMission: state.stealth.enemyKingRespawnsAfterMission, lootRemaining: state.loot.filter((loot) => !loot.taken).map((loot) => loot.kind) } : null,
+      mineRaid: state.mineRaid ? {
+        direction: "outgoing",
+        target: state.mineRaid.target,
+        selected: state.mineRaid.counts,
+        defeatedMiners: state.mineRaid.defeatedMiners,
+        stolenMiners: state.mineRaid.stolenMiners,
+        resolved: state.mineRaid.resolved,
+        enemyKingRespawnedAtHome: state.mineRaid.enemyKingRespawnedAtHome,
+        enemyMinersRemaining: state.kingdoms[state.mineRaid.target].miners,
+        workersAlive: state.units.filter((unit) => unit.worker && unit.alive).length,
+        defendersAlive: state.units.filter((unit) => unit.team === 1 && !unit.worker && unit.alive).length,
+        transferable: Math.min(Math.max(0, state.kingdoms[state.mineRaid.target].miners - 1), MAX_MINERS - state.miners),
+      } : null,
+      mineDefense: state.mineDefense ? {
+        direction: "incoming",
+        attacker: state.mineDefense.attacker,
+        selected: state.mineDefense.counts,
+        over: state.mineDefense.over,
+        result: state.mineDefense.result,
+        stolenMiners: state.mineDefense.stolenMiners,
+        theftRequested: state.mineDefense.theftRequested,
+        playerKingRespawnedAtHome: state.mineDefense.playerKingRespawnedAtHome,
+        enemyKingRespawnedAtHome: state.mineDefense.enemyKingRespawnedAtHome,
+        friendlyAlive: state.units.filter((unit) => unit.team === 0 && unit.alive).length + (state.player.alive ? 1 : 0),
+        enemyAlive: state.units.filter((unit) => unit.team === 1 && unit.alive).length,
+      } : null,
+      pendingMineDefense: state.pendingMineDefense ? { ...state.pendingMineDefense } : null,
+      lastMineTransfer: state.lastMineTransfer ? { ...state.lastMineTransfer } : null,
       selection: state.selection ? { kind: state.selection.kind, target: state.selection.target, max: state.selection.max, counts: { ...state.selection.counts }, minimums: { ...state.selection.minimums }, incoming: state.selection.incoming } : null,
       loot: state.loot.filter((loot) => !loot.taken).map((loot) => ({ kind: loot.kind, amount: loot.amount, x: loot.x, z: loot.z })),
       fallenUnits: state.units.filter((unit) => !unit.alive && !unit.respawned).map((unit) => ({ team: unit.team, type: unit.type, x: rounded(unit.x), z: rounded(unit.z) })),
@@ -2018,16 +2789,22 @@ import * as THREE from "./vendor/three.module.js";
     ui.start?.addEventListener("click", startGame);
     ui.questionYes?.addEventListener("click", () => answerQuestion(true));
     ui.questionNo?.addEventListener("click", () => answerQuestion(false));
+    ui.questionBack?.addEventListener("click", backQuestion);
     ui.closeMap?.addEventListener("click", () => setModal(null, false));
     ui.selectionConfirm?.addEventListener("click", confirmSelection);
     ui.selectionCancel?.addEventListener("click", () => {
       const selection = state.selection;
       state.selection = null;
       setModal(null, false);
-      if (selection?.incoming) startBattle(selection.target, { ...selection.minimums }, true);
+      if (selection?.kind === "mineDefense" && selection.incoming) startMineDefense(selection.target, { sword: 0, archer: 0, cavalry: 0 });
+      else if (selection?.incoming) startBattle(selection.target, { ...selection.minimums }, true);
+      else if (selection && ["stealth", "mineRaid"].includes(selection.kind)) showNightMissionChoice(selection.target);
     });
     $$('[data-unit][data-delta]').forEach((button) => button.addEventListener("click", () => adjustSelection(button.dataset.unit, Number(button.dataset.delta))));
-    $$('[data-buy]').forEach((button) => button.addEventListener("click", () => buyGuards(button.dataset.buy)));
+    $$('[data-buy]').forEach((button) => button.addEventListener("click", () => {
+      if (button.dataset.buy === "miner") buyMiner();
+      else buyGuards(button.dataset.buy);
+    }));
     ui.sellDiamond?.addEventListener("click", sellDiamond);
     ui.closeShop?.addEventListener("click", () => setModal(null, false));
     ui.outcomeContinue?.addEventListener("click", () => setModal(null, false));
@@ -2052,6 +2829,8 @@ import * as THREE from "./vendor/three.module.js";
     });
     window.addEventListener("keyup", (event) => { keys[event.code] = false; });
     window.addEventListener("blur", resetControls);
+    window.addEventListener("pagehide", saveProgress);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) saveProgress(); });
     window.addEventListener("resize", resize);
     document.addEventListener("fullscreenchange", resize);
     canvas.addEventListener("webglcontextlost", handleWebGLContextLost, false);
@@ -2084,8 +2863,22 @@ import * as THREE from "./vendor/three.module.js";
     },
     startBattle: (target = 1, counts = { sword: 1, archer: 1, cavalry: 1 }, incoming = false) => startBattle(target, counts, incoming),
     startStealth: (target = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startStealth(target, counts),
+    startMineRaid: (target = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startMineRaid(target, counts),
+    startMineDefense: (attacker = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startMineDefense(attacker, counts),
+    finishMineDefense,
+    resolveMineDefense,
+    stealFromEnemyMine,
+    triggerIncomingMineRaid,
+    resolveSleepingMineRaid,
+    calculateMineTransfer,
+    applyMineTransfer,
     damagePlayer,
     damageUnit,
+    playerAttack,
+    unitAttackRange,
+    mineIncomeFor,
+    buyMiner,
+    combatRanges: COMBAT_RANGES,
     useInteraction,
     resetGame,
   };

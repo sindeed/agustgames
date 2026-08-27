@@ -14,7 +14,7 @@
     <link rel="icon" href="../favicon.ico">
     <link rel="apple-touch-icon" href="../apple-touch-icon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="stylesheet" href="style.css?v=20260826-zero-guards">
+    <link rel="stylesheet" href="style.css?v=20260827-night-mine-raids">
   </head>
   <body>
     <main class="game-shell" id="game-shell">
@@ -105,7 +105,7 @@
             <ul class="feature-list" aria-label="Det här kan du göra i spelet">
               <li><span aria-hidden="true">⚔</span> Börja ensam och köp din egen armé</li>
               <li><span aria-hidden="true">☀</span> Kriga på dagen och smyg på natten</li>
-              <li><span aria-hidden="true">◆</span> Hitta skatter och försvara ditt rike</li>
+              <li><span aria-hidden="true">◆</span> Anställ miners och hitta skatter i gruvan</li>
             </ul>
             <button class="primary-button start-button" id="start-btn" type="button">
               <span class="button-crown" aria-hidden="true">♛</span>
@@ -131,7 +131,7 @@
             <div>
               <p class="eyebrow">DE SJU RIKENA</p>
               <h2 id="map-title">VÄRLDSKARTAN</h2>
-              <p>Välj en borg. På dagen kan du anfalla, på natten kan du smyga.</p>
+              <p>Välj en borg. På dagen kan du anfalla. På natten väljer du smyg- eller gruvuppdrag.</p>
             </div>
             <button class="close-button" id="close-map-btn" type="button" aria-label="Stäng världskartan">×</button>
           </header>
@@ -141,7 +141,7 @@
             <span class="map-mountain mountain-two" aria-hidden="true"></span>
             <div class="map-grid" id="map-grid" aria-label="Kungarikets sju borgar"></div>
           </div>
-          <p class="dialog-tip"><span aria-hidden="true">☀</span> DAG: ATTACKERA &nbsp; · &nbsp; <span aria-hidden="true">☾</span> NATT: SMYGUPPDRAG</p>
+          <p class="dialog-tip"><span aria-hidden="true">☀</span> DAG: ATTACKERA &nbsp; · &nbsp; <span aria-hidden="true">☾</span> NATT: SMYG- ELLER GRUVUPPDRAG</p>
         </div>
       </section>
 
@@ -151,10 +151,11 @@
           <p class="eyebrow">KUNGEN BESTÄMMER</p>
           <h2 id="question-title">VILL DU ATTACKERA?</h2>
           <p id="question-text">Är du säker?</p>
-          <div class="dialog-actions">
+          <div class="dialog-actions" id="question-actions">
             <button class="primary-button" id="question-yes" type="button">JA</button>
             <button class="secondary-button" id="question-no" type="button">NEJ</button>
           </div>
+          <button class="secondary-button question-back" id="question-back" type="button" hidden>TILLBAKA TILL KARTAN</button>
         </div>
       </section>
 
@@ -217,7 +218,7 @@
             <div>
               <p class="eyebrow">BYNS AFFÄR</p>
               <h2 id="shop-title">KUNGENS MARKNAD</h2>
-              <p>Varje köp ger två namnlösa vakter.</p>
+              <p>Vaktköp ger två vakter. En köpt miner går direkt till gruvan bakom din borg.</p>
             </div>
             <button class="close-button" id="close-shop-btn" type="button" aria-label="Stäng affären">×</button>
           </header>
@@ -237,6 +238,11 @@
               <div class="shop-icon" aria-hidden="true">♞</div>
               <div><small>DU HAR <strong data-owned="cavalry">0</strong></small><h3>SPJUT + HÄST</h3><p>Två snabba ryttare med sköld.</p></div>
               <button type="button" data-buy="cavalry"><span>KÖP 2</span><strong>● 20</strong></button>
+            </article>
+            <article class="shop-card miner-card">
+              <div class="shop-icon" aria-hidden="true">⛏</div>
+              <div><small>DU HAR <strong data-owned="miner">0</strong> AV 9</small><h3>MINER</h3><p>Jobbar i gruvan och hittar pengar och diamanter.</p></div>
+              <button type="button" data-buy="miner"><span>KÖP 1</span><strong>● 15</strong></button>
             </article>
           </div>
 
@@ -301,6 +307,6 @@
       </noscript>
     </main>
 
-    <script type="module" src="game.js?v=20260826-zero-guards"></script>
+    <script type="module" src="game.js?v=20260827-night-mine-raids"></script>
   </body>
 </html>
