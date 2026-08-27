@@ -1461,7 +1461,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function battleTowerPosition(team, slot) {
-    const x = [-20.9, -19.1, 19.1, 20.9][clamp(slot, 0, 3)];
+    const x = [-20.5, -19.1, 19.1, 20.5][clamp(slot, 0, 3)];
     return { x, y: 6.72, z: team === 0 ? 33.25 : -33.25 };
   }
 
@@ -1838,13 +1838,6 @@ import * as THREE from "./vendor/three.module.js";
     const dead = { sword: 0, archer: 0, cavalry: 0 };
     state.units.filter((unit) => unit.team === 0 && !unit.alive && UNIT_TYPES.includes(unit.sourceType)).forEach((unit) => dead[unit.sourceType]++);
     UNIT_TYPES.forEach((type) => { state.guards[type] = Math.max(0, state.guards[type] - dead[type]); });
-    const deadTowerArchers = state.units.filter((unit) => unit.team === 0 && unit.type === "archer" && unit.fixed && !unit.alive).length;
-    if (deadTowerArchers) {
-      let remaining = deadTowerArchers;
-      for (let i = state.towerSlots.length - 1; i >= 0 && remaining > 0; i--) {
-        if (state.towerSlots[i]) { state.towerSlots[i] = false; remaining--; }
-      }
-    }
     normalizeTowerSlots();
     if (battle.result === "win") state.money += 50;
     else state.money = Math.max(0, state.money - 20);
@@ -1961,7 +1954,7 @@ import * as THREE from "./vendor/three.module.js";
     let best = null;
     let bestDistance = maxRange;
     state.units.forEach((unit) => {
-      if (!unit.alive || unit.team === team || (excludeWorkers && unit.worker)) return;
+      if (!unit.alive || unit.team === team || isTowerArcher(unit) || (excludeWorkers && unit.worker)) return;
       const distance = Math.hypot(unit.x - x, unit.z - z);
       if (distance < bestDistance) { best = unit; bestDistance = distance; }
     });
@@ -1973,17 +1966,23 @@ import * as THREE from "./vendor/three.module.js";
     return best;
   }
 
-  function hasLineOfSight(from, to) {
+  function hasLineOfSight(from, to, ignoreOriginCollider = false) {
     const distance = Math.hypot(to.x - from.x, to.z - from.z);
     const steps = Math.max(1, Math.ceil(distance / 0.65));
     const fromY = (from.y || 0) + 1.45;
     const toY = (to.y || 0) + 1.25;
+    const originColliders = ignoreOriginCollider
+      ? new Set(colliders.filter((wall) => {
+          const compactTowerFootprint = wall.maxX - wall.minX <= 7.1 && wall.maxZ - wall.minZ <= 7.1;
+          return compactTowerFootprint && from.x > wall.minX && from.x < wall.maxX && from.z > wall.minZ && from.z < wall.maxZ;
+        }))
+      : null;
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
       const x = lerp(from.x, to.x, t);
       const z = lerp(from.z, to.z, t);
       const y = lerp(fromY, toY, t);
-      if (colliders.some((wall) => y >= wall.minY && y <= wall.maxY && x > wall.minX && x < wall.maxX && z > wall.minZ && z < wall.maxZ)) return false;
+      if (colliders.some((wall) => !originColliders?.has(wall) && y >= wall.minY && y <= wall.maxY && x > wall.minX && x < wall.maxX && z > wall.minZ && z < wall.maxZ)) return false;
     }
     return true;
   }
@@ -2050,8 +2049,15 @@ import * as THREE from "./vendor/three.module.js";
     effectRoot.add(line);
   }
 
+  function isTowerArcher(unit) {
+    return Boolean(unit?.fixed && unit.type === "archer");
+  }
+
   function damageUnit(unit, amount) {
     if (!unit?.alive) return;
+    // Tornskyttar stannar i tornen hela striden. De kan skjuta, men kan inte
+    // skadas och räknas därför inte heller som markstridande i resultatet.
+    if (isTowerArcher(unit)) return;
     if (unit.worker && state.mineRaid && !state.mineRaid.incoming) {
       const kingdom = state.kingdoms[state.mineRaid.target];
       if (unit.hp - amount <= 0 && kingdom.miners <= 1) {
@@ -2229,7 +2235,7 @@ import * as THREE from "./vendor/three.module.js";
       const dirZ = dz / distance;
       const speed = unit.fixed ? 0 : unit.type === "cavalry" ? 3.1 : unit.king ? 2.1 : 1.75;
       unit.facing = Math.atan2(dirX, dirZ);
-      const lineOfSight = distance <= range && hasLineOfSight(unit, target);
+      const lineOfSight = distance <= range && hasLineOfSight(unit, target, isTowerArcher(unit));
       if (distance > range || !lineOfSight) {
         if (speed > 0) {
           const waypoint = rearBridgeWaypoint(unit, target);
@@ -2375,10 +2381,11 @@ import * as THREE from "./vendor/three.module.js";
   function checkSceneResults(dt) {
     if (state.scene === "battle" && state.battle) {
       if (!state.battle.over) {
-        const friendsAlive = (state.player.alive ? 1 : 0) + state.units.filter((unit) => unit.team === 0 && unit.alive).length;
-        const enemiesAlive = state.units.filter((unit) => unit.team === 1 && unit.alive).length;
-        if (enemiesAlive === 0) finishBattle("win");
-        else if (friendsAlive === 0) finishBattle("lose");
+        const friendlyGroundCombatants = (state.player.alive ? 1 : 0)
+          + state.units.filter((unit) => unit.team === 0 && unit.alive && !isTowerArcher(unit)).length;
+        const enemyGroundCombatants = state.units.filter((unit) => unit.team === 1 && unit.alive && !isTowerArcher(unit)).length;
+        if (enemyGroundCombatants === 0) finishBattle("win");
+        else if (friendlyGroundCombatants === 0) finishBattle("lose");
       } else {
         state.battle.resultTimer -= dt;
         if (state.battle.resultTimer <= 0) resolveBattle();
@@ -2722,7 +2729,22 @@ import * as THREE from "./vendor/three.module.js";
         entries: state.kingdoms.map((kingdom) => ({ index: kingdom.index, player: kingdom.player, miners: kingdom.index === 0 ? state.miners : kingdom.miners, money: kingdom.index === 0 ? state.money : kingdom.money, towerArchers: kingdom.towerArchers })),
       },
       nearestInteraction: state.nearest ? { kind: state.nearest.kind, label: state.nearest.label, distance: rounded(state.nearest.distance) } : null,
-      battle: state.battle ? { target: state.battle.target, incoming: state.battle.incoming, selected: state.battle.counts, over: state.battle.over, result: state.battle.result, playerKingRespawnedAtHome: state.battle.playerKingRespawnedAtHome, enemyKingRespawnedAtHome: state.battle.enemyKingRespawnedAtHome, friendlyAlive: state.units.filter((unit) => unit.team === 0 && unit.alive).length + (state.player.alive ? 1 : 0), enemyAlive: state.units.filter((unit) => unit.team === 1 && unit.alive).length } : null,
+      battle: state.battle ? {
+        target: state.battle.target,
+        incoming: state.battle.incoming,
+        selected: state.battle.counts,
+        over: state.battle.over,
+        result: state.battle.result,
+        playerKingRespawnedAtHome: state.battle.playerKingRespawnedAtHome,
+        enemyKingRespawnedAtHome: state.battle.enemyKingRespawnedAtHome,
+        friendlyAlive: state.units.filter((unit) => unit.team === 0 && unit.alive).length + (state.player.alive ? 1 : 0),
+        enemyAlive: state.units.filter((unit) => unit.team === 1 && unit.alive).length,
+        friendlyGroundCombatantsAlive: state.units.filter((unit) => unit.team === 0 && unit.alive && !isTowerArcher(unit)).length + (state.player.alive ? 1 : 0),
+        enemyGroundCombatantsAlive: state.units.filter((unit) => unit.team === 1 && unit.alive && !isTowerArcher(unit)).length,
+        towerArchersAlive: state.units.filter((unit) => unit.alive && isTowerArcher(unit)).length,
+        towerArchersInvulnerable: true,
+        towerArchersCountTowardOutcome: false,
+      } : null,
       stealth: state.stealth ? { target: state.stealth.target, selected: state.stealth.counts, enteredCastle: state.enteredEnemyCastle, enemyKingRespawnsAfterMission: state.stealth.enemyKingRespawnsAfterMission, lootRemaining: state.loot.filter((loot) => !loot.taken).map((loot) => loot.kind) } : null,
       mineRaid: state.mineRaid ? {
         direction: "outgoing",
@@ -2931,6 +2953,7 @@ import * as THREE from "./vendor/three.module.js";
     applyMineTransfer,
     damagePlayer,
     damageUnit,
+    isTowerArcher,
     playerAttack,
     unitAttackRange,
     mineIncomeFor,
