@@ -102,9 +102,11 @@ import * as THREE from "./vendor/three.module.js";
   const ABANDONED_STATUE_RESPAWN_SECONDS = 30;
   const ABANDONED_MONEY_ROOM_ID = "small-3";
   const ABANDONED_MONEY_PER_TAKE = 10;
+  const ABANDONED_MAX_MONEY_PER_VISIT = 1000;
   const ABANDONED_TREASURE_SECONDS = 30;
   const ABANDONED_GUARD_MONEY_PER_SECOND = 10;
   const ABANDONED_STATUE_ATTACK_SECONDS = 3;
+  const ABANDONED_LARGE_STATUE_ATTACK_SECONDS = 2;
   const ABANDONED_HEAL_SECONDS = 3;
   const TREASURE_FOUND_TEXT = "Skattkammaren är här borta!";
   const ABANDONED_CASTLE = Object.freeze({
@@ -123,9 +125,12 @@ import * as THREE from "./vendor/three.module.js";
     statueRespawnSeconds: ABANDONED_STATUE_RESPAWN_SECONDS,
     infiniteMoneyRoomId: ABANDONED_MONEY_ROOM_ID,
     moneyPerTake: ABANDONED_MONEY_PER_TAKE,
+    maxMoneyPerVisit: ABANDONED_MAX_MONEY_PER_VISIT,
     guardMoneyPerSecond: ABANDONED_GUARD_MONEY_PER_SECOND,
     treasureSecondsPerVisit: ABANDONED_TREASURE_SECONDS,
     statueAttackSeconds: ABANDONED_STATUE_ATTACK_SECONDS,
+    smallStatueAttackSeconds: ABANDONED_STATUE_ATTACK_SECONDS,
+    largeStatueAttackSeconds: ABANDONED_LARGE_STATUE_ATTACK_SECONDS,
     labyrinth: true,
     rivalKing: true,
     attackable: false,
@@ -1837,6 +1842,7 @@ import * as THREE from "./vendor/three.module.js";
       searchTargetRoomId: null,
       roomId: extra.roomId || null,
       awake: Boolean(extra.awake),
+      attackEverySeconds: Number.isFinite(extra.attackEverySeconds) ? extra.attackEverySeconds : null,
       respawnTimer: Number(extra.respawnTimer) || 0,
       abandonedDamagedAt: null,
       abandonedHealSecondsRemaining: 0,
@@ -1919,6 +1925,7 @@ import * as THREE from "./vendor/three.module.js";
       treasureStartedAt: null,
       treasureSecondsRemaining: ABANDONED_TREASURE_SECONDS,
       treasureAvailable: true,
+      treasureMaxReached: false,
       treasureUnlocked: false,
       allFriendlyInsideTreasure: false,
       friendlySearch: makeAbandonedSearchState(Object.values(safeCounts).reduce((sum, value) => sum + value, 0)),
@@ -1954,6 +1961,7 @@ import * as THREE from "./vendor/three.module.js";
         statue: true,
         roomId: room.id,
         hp: ABANDONED_STATUE_HP,
+        attackEverySeconds: room.type === "large" ? ABANDONED_LARGE_STATUE_ATTACK_SECONDS : ABANDONED_STATUE_ATTACK_SECONDS,
         y: 0.26,
         color: 0x7b8183,
       }));
@@ -2989,7 +2997,7 @@ import * as THREE from "./vendor/three.module.js";
       visit.treasureUnlocked = true;
       visit.treasureTimerStarted = true;
       visit.treasureStartedAt = state.time;
-      if (moneyInteraction) moneyInteraction.label = `TA ${ABANDONED_MONEY_PER_TAKE} PENGAR · 30 SEKUNDER`;
+      if (moneyInteraction) moneyInteraction.label = `TA ${ABANDONED_MONEY_PER_TAKE} PENGAR · MAX 1 000`;
       if (visit.friendlySearch.foundAt !== state.time) showToast("ALLA ÄR INNE · SKATTKAMMAREN ÄR ÖPPEN I 30 SEKUNDER!", 2600);
     } else if (moneyInteraction && !visit.treasureTimerStarted) {
       const missing = Math.max(0, livingGuards.length - guardsInside.length);
@@ -2997,6 +3005,26 @@ import * as THREE from "./vendor/three.module.js";
         ? missing > 0 ? `VÄNTA PÅ ${missing} ${missing === 1 ? "VAKT" : "VAKTER"}` : "KUNGEN MÅSTE VARA I SKATTKAMMAREN"
         : visit.playerFoundTreasure ? "VÄNTA PÅ ATT EN VAKT HITTAR HIT" : "HITTA SKATTKAMMAREN I LABYRINTEN";
     }
+  }
+
+  function closeAbandonedTreasure(reason = "time") {
+    const visit = state.abandonedCastleVisit;
+    if (!visit || !visit.treasureAvailable) return false;
+    visit.treasureAvailable = false;
+    visit.treasureMaxReached = reason === "max";
+    visit.treasureSecondsRemaining = 0;
+    if (abandonedMoneyGroup) abandonedMoneyGroup.visible = false;
+    for (let index = interactables.length - 1; index >= 0; index--) {
+      if (interactables[index].kind === "infiniteMoney") interactables.splice(index, 1);
+    }
+    if (state.nearest?.kind === "infiniteMoney") state.nearest = null;
+    showToast(
+      reason === "max"
+        ? "NI HAR TAGIT MAX 1 000 PENGAR · SKATTEN ÄR SLUT FÖR DET HÄR BESÖKET"
+        : "DE 30 SEKUNDERNA ÄR SLUT · ALLA PENGAR FÖRSVANN",
+      2800,
+    );
+    return true;
   }
 
   function updateAbandonedTreasure(dt) {
@@ -3009,7 +3037,8 @@ import * as THREE from "./vendor/three.module.js";
       visit.guardPayoutAccumulator = Math.max(0, visit.guardPayoutAccumulator - 1);
       const helpingGuards = abandonedPartyMembers("friendly")
         .filter((unit) => abandonedRoomAt(unit.x, unit.z)?.id === ABANDONED_MONEY_ROOM_ID);
-      const payout = helpingGuards.length * ABANDONED_GUARD_MONEY_PER_SECOND;
+      const remaining = Math.max(0, ABANDONED_MAX_MONEY_PER_VISIT - visit.totalMoneyTaken);
+      const payout = Math.min(remaining, helpingGuards.length * ABANDONED_GUARD_MONEY_PER_SECOND);
       if (payout > 0) {
         state.money += payout;
         visit.guardMoneyTaken += payout;
@@ -3018,23 +3047,22 @@ import * as THREE from "./vendor/three.module.js";
         saveProgress();
         updateHud();
       }
+      if (visit.totalMoneyTaken >= ABANDONED_MAX_MONEY_PER_VISIT) {
+        closeAbandonedTreasure("max");
+        break;
+      }
     }
+    if (!visit.treasureAvailable) return;
     visit.treasureSecondsRemaining = Math.max(0, visit.treasureSecondsRemaining - activeDt);
     if (visit.treasureSecondsRemaining > 1e-9) return;
-    visit.treasureSecondsRemaining = 0;
-    visit.treasureAvailable = false;
-    if (abandonedMoneyGroup) abandonedMoneyGroup.visible = false;
-    for (let index = interactables.length - 1; index >= 0; index--) {
-      if (interactables[index].kind === "infiniteMoney") interactables.splice(index, 1);
-    }
-    if (state.nearest?.kind === "infiniteMoney") state.nearest = null;
-    showToast("DE 30 SEKUNDERNA ÄR SLUT · ALLA PENGAR FÖRSVANN", 2500);
+    closeAbandonedTreasure("time");
   }
 
   function updateStatues(dt) {
     if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
     state.units.filter((unit) => unit.statue).forEach((unit) => {
       if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
+      const attackEverySeconds = unit.attackEverySeconds || ABANDONED_STATUE_ATTACK_SECONDS;
       const model = actorModels.get(unit.id);
       const statueEyes = model?.userData.body?.userData.statueEyes;
       if (!unit.alive) {
@@ -3053,7 +3081,7 @@ import * as THREE from "./vendor/three.module.js";
             awake: false,
             x: unit.originX,
             z: unit.originZ,
-            cooldown: ABANDONED_STATUE_ATTACK_SECONDS,
+            cooldown: attackEverySeconds,
             walk: 0,
           });
           if (model) {
@@ -3088,7 +3116,7 @@ import * as THREE from "./vendor/three.module.js";
 
       if (target && !unit.awake) {
         unit.awake = true;
-        unit.cooldown = Math.max(unit.cooldown, ABANDONED_STATUE_ATTACK_SECONDS);
+        unit.cooldown = Math.max(unit.cooldown, attackEverySeconds);
         if (abandonedRoomAt(state.player.x, state.player.z)?.id === room.id && state.abandonedCastleVisit?.friendlySearch?.foundAt !== state.time) showToast(`STATYN I ${room.name} VAKNAR!`, 1600);
       }
       if (statueEyes) statueEyes.visible = unit.awake;
@@ -3120,7 +3148,7 @@ import * as THREE from "./vendor/three.module.js";
         unit.z = clamp(unit.z + dz / distance * move, room.z - room.depth / 2 + 0.8, room.z + room.depth / 2 - 0.8);
         unit.walk += dt * 4.5;
       } else if (unit.cooldown <= 1e-9) {
-        unit.cooldown = ABANDONED_STATUE_ATTACK_SECONDS;
+        unit.cooldown = attackEverySeconds;
         if (target.player) damagePlayer(32);
         else damageUnit(target, 32);
         if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
@@ -3505,18 +3533,29 @@ import * as THREE from "./vendor/three.module.js";
     else if (item.kind === "infiniteMoney") {
       const visit = state.abandonedCastleVisit;
       if (!visit?.treasureTimerStarted || !visit.treasureAvailable) {
+        if (visit?.treasureMaxReached) {
+          showToast("MAX 1 000 PENGAR ÄR REDAN TAGNA DET HÄR BESÖKET");
+          return;
+        }
         const living = abandonedPartyMembers("friendly");
         const inside = living.filter((unit) => abandonedRoomAt(unit.x, unit.z)?.id === ABANDONED_MONEY_ROOM_ID);
         const missing = Math.max(0, living.length - inside.length);
         showToast(missing > 0 ? `VÄNTA PÅ ${missing} ${missing === 1 ? "VAKT" : "VAKTER"}` : "HELA GRUPPEN MÅSTE VARA I SKATTKAMMAREN");
         return;
       }
-      state.money += ABANDONED_MONEY_PER_TAKE;
+      const remaining = Math.max(0, ABANDONED_MAX_MONEY_PER_VISIT - visit.totalMoneyTaken);
+      const payout = Math.min(ABANDONED_MONEY_PER_TAKE, remaining);
+      if (payout <= 0) {
+        closeAbandonedTreasure("max");
+        return;
+      }
+      state.money += payout;
       visit.moneyTakes++;
-      visit.totalMoneyTaken += ABANDONED_MONEY_PER_TAKE;
+      visit.totalMoneyTaken += payout;
       saveProgress();
       sfx("coin");
-      showToast(`DU TOG ${ABANDONED_MONEY_PER_TAKE} PENGAR · TA MER INNAN TIDEN ÄR SLUT`, 1600);
+      if (visit.totalMoneyTaken >= ABANDONED_MAX_MONEY_PER_VISIT) closeAbandonedTreasure("max");
+      else showToast(`DU TOG ${payout} PENGAR · ${visit.totalMoneyTaken} / 1 000`, 1600);
       updateHud();
     }
     else if (item.kind === "guard") {
@@ -3803,7 +3842,7 @@ import * as THREE from "./vendor/three.module.js";
     const friendlyInsideTreasure = friendlyAlive.filter((unit) => abandonedRoomAt(unit.x, unit.z)?.id === ABANDONED_MONEY_ROOM_ID);
     const playerInsideTreasure = abandonedRoomAt(state.player.x, state.player.z)?.id === ABANDONED_MONEY_ROOM_ID;
     const abandonedCastleState = abandonedVisitState ? {
-      phase: !abandonedVisitState.treasureAvailable ? "expired" : abandonedVisitState.treasureTimerStarted ? "earning" : abandonedVisitState.friendlySearch.treasureFound ? "gathering" : "searching",
+      phase: abandonedVisitState.treasureMaxReached ? "maxed" : !abandonedVisitState.treasureAvailable ? "expired" : abandonedVisitState.treasureTimerStarted ? "earning" : abandonedVisitState.friendlySearch.treasureFound ? "gathering" : "searching",
       enteredCastle: abandonedVisitState.enteredCastle,
       playerFoundTreasure: abandonedVisitState.playerFoundTreasure,
       playerEscaping: abandonedVisitState.playerEscaping,
@@ -3842,6 +3881,9 @@ import * as THREE from "./vendor/three.module.js";
         timerStarted: abandonedVisitState.treasureTimerStarted,
         secondsRemaining: rounded(abandonedVisitState.treasureSecondsRemaining),
         available: abandonedVisitState.treasureAvailable,
+        maxReached: abandonedVisitState.treasureMaxReached,
+        maxMoneyPerVisit: ABANDONED_MAX_MONEY_PER_VISIT,
+        moneyRemaining: Math.max(0, ABANDONED_MAX_MONEY_PER_VISIT - abandonedVisitState.totalMoneyTaken),
         moneyPerPlayerUse: ABANDONED_MONEY_PER_TAKE,
         moneyPerGuardPerSecond: ABANDONED_GUARD_MONEY_PER_SECOND,
         guardPayoutAccumulator: rounded(abandonedVisitState.guardPayoutAccumulator),
@@ -3871,7 +3913,7 @@ import * as THREE from "./vendor/three.module.js";
       statues: state.units.filter((unit) => unit.statue).map((unit) => ({
         id: unit.id, roomId: unit.roomId, hp: unit.hp, maxHp: unit.maxHp, alive: unit.alive,
         awake: unit.awake, respawnSecondsRemaining: rounded(unit.respawnTimer), weapon: unit.weapon,
-        shield: unit.shield, attackEverySeconds: ABANDONED_STATUE_ATTACK_SECONDS,
+        shield: unit.shield, attackEverySeconds: unit.attackEverySeconds || ABANDONED_STATUE_ATTACK_SECONDS,
       })),
       statuesDefeated: abandonedVisitState.statuesDefeated,
       statueRespawns: abandonedVisitState.statueRespawns,
