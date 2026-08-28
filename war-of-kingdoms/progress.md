@@ -56,7 +56,8 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-08-28: Fiendekungen söker samma labyrintväg, tar exakt 100 pengar när hans grupp hittar skatten och flyr fysiskt tillbaka över vindbryggan. Spelarens och fiendens överlevande följeslagare lämnar på samma sätt; spelarens överlevare återvänder med 100 liv och döda egna vakter förblir förlorade.
 - 2026-08-28: Två av de sex fiendekungarna kan starta ett eget dagskrig. Båda borgarna märks `KRIG MOT RIKE ...` på kartan och kan inte attackeras av spelaren förrän deras krig är slut; övriga fiendeborgar är fortsatt valbara.
 - 2026-08-28: Slutlig lokal Chromium-QA godkänd: jätteslottets helhetssvit 32/32, tornskyttarnas arenasvit 39/39, fysisk labyrintsökning, exakt timer/utbetalning för 0, 1 och 10 vakter, statyrespawn, egen och fientlig flykt genom alla sju barriärer samt säker hemrespawn utan webbläsarfel. Den obligatoriska spelklienten startade ett tomt nytt kungarike i iPad-anpassad vy; bilden granskades visuellt utan renderingsfel.
+- 2026-08-28: Version `ec8fd30` publicerades via GitHub Pages. Den riktiga August Games-menyn, cacheversionen, spelfilerna och ett nytt tomt startläge verifierades direkt mot liveadressen utan konsol-, sid- eller resursfel.
 
 ## Nästa kontroll
 
-- Publicera och verifiera liveversionens filer, meny-länk och startläge på GitHub Pages.
+- Ingen blockerande kontroll återstår för den här versionen.
