@@ -108,6 +108,33 @@ import * as THREE from "./vendor/three.module.js";
   const ABANDONED_STATUE_ATTACK_SECONDS = 3;
   const ABANDONED_LARGE_STATUE_ATTACK_SECONDS = 2;
   const ABANDONED_HEAL_SECONDS = 3;
+  const ABANDONED_FRONT_BRIDGE = Object.freeze({
+    side: "front",
+    x: 0,
+    z: 103.5,
+    width: 7,
+    length: 27,
+    gateZ: 90,
+    facadeZ: 92,
+    insideWaypointZ: 86.4,
+    bridgeWaypointZ: 116,
+    spawnZ: 144,
+    exitZ: 145,
+  });
+  const ABANDONED_REAR_BRIDGE = Object.freeze({
+    side: "rear",
+    x: 0,
+    z: -103.5,
+    width: 7,
+    length: 27,
+    gateZ: -90,
+    facadeZ: -92,
+    insideWaypointZ: -86.4,
+    bridgeWaypointZ: -116,
+    spawnZ: -144,
+    exitZ: -145,
+  });
+  const ABANDONED_DRAWBRIDGES = Object.freeze([ABANDONED_FRONT_BRIDGE, ABANDONED_REAR_BRIDGE]);
   const TREASURE_FOUND_TEXT = "Skattkammaren är här borta!";
   const ABANDONED_CASTLE = Object.freeze({
     id: "abandoned-giant-castle",
@@ -986,6 +1013,23 @@ import * as THREE from "./vendor/three.module.js";
     addSegment(cursor, end);
   }
 
+  function buildAbandonedDrawbridgeEntrance(bridge, abandonedStone) {
+    box(bridge.x, 0.16, bridge.z, bridge.width, 0.36, bridge.length, materials.wood, worldRoot, true, true);
+    for (let offset = -13; offset <= 13; offset += 1.25) {
+      box(bridge.x, 0.42, bridge.z + offset, bridge.width + 0.25, 0.16, 0.12, materials.woodDark);
+    }
+    const railX = bridge.width / 2 + 0.12;
+    box(-railX, 1.05, bridge.z, 0.2, 1.8, bridge.length, materials.woodDark);
+    box(railX, 1.05, bridge.z, 0.2, 1.8, bridge.length, materials.woodDark);
+
+    buildAbandonedSegmentedWall("horizontal", bridge.facadeZ, -33, 33, [{ center: 0, width: bridge.width }], abandonedStone);
+    box(0, 7.25, bridge.facadeZ, 8.5, 2.5, 1.1, materials.stoneDark);
+    buildTower(-36, bridge.facadeZ);
+    buildTower(36, bridge.facadeZ);
+    addCollider(-36, bridge.facadeZ, 7, 7, -0.2, 7.5);
+    addCollider(36, bridge.facadeZ, 7, 7, -0.2, 7.5);
+  }
+
   function buildAbandonedRoom(room, abandonedStone, abandonedFloor) {
     const doors = { north: [], south: [], east: [], west: [] };
     const skippedSides = new Set();
@@ -1054,7 +1098,7 @@ import * as THREE from "./vendor/three.module.js";
     const leftGaps = ABANDONED_WINGS.filter((wing) => wing.side < 0).map((wing) => ({ center: wing.z, width: 3.4 }));
     buildAbandonedSegmentedWall("vertical", 5, -90, 90, rightGaps, abandonedStone);
     buildAbandonedSegmentedWall("vertical", -5, -90, 90, leftGaps, abandonedStone);
-    buildAbandonedSegmentedWall("horizontal", -90, -5, 5, [], abandonedStone);
+    buildAbandonedSegmentedWall("horizontal", -90, -5, 5, [{ center: 0, width: 6.4 }], abandonedStone);
     buildAbandonedSegmentedWall("horizontal", 90, -5, 5, [{ center: 0, width: 6.4 }], abandonedStone);
     ABANDONED_MAZE_BARRIERS.forEach((barrier) => {
       buildAbandonedSegmentedWall(
@@ -1080,32 +1124,43 @@ import * as THREE from "./vendor/three.module.js";
 
     ABANDONED_ROOMS.forEach((room) => buildAbandonedRoom(room, abandonedStone, abandonedFloor));
 
-    // The enormous castle is reached physically from a forest, across one
-    // lowered drawbridge and a moat that surrounds the entire ruin.
+    // Forest floor surrounds the whole ruin. The player party approaches from
+    // the south/front while the rival party gets an equally real north/rear
+    // route, with one lowered drawbridge through each side of the moat.
     box(0, -0.62, 139, 122, 1.15, 58, materials.grass, worldRoot, false, true);
+    box(0, -0.62, -139, 122, 1.15, 58, materials.grass, worldRoot, false, true);
+    box(-78, -0.62, 0, 58, 1.15, 220, materials.grass, worldRoot, false, true);
+    box(78, -0.62, 0, 58, 1.15, 220, materials.grass, worldRoot, false, true);
     box(0, 0.015, 132, 7.2, 0.08, 45, materials.sand, worldRoot, false, true);
-    box(-27, -0.27, 103.5, 42, 0.44, 15, materials.water, worldRoot, false, true);
-    box(27, -0.27, 103.5, 42, 0.44, 15, materials.water, worldRoot, false, true);
+    box(0, 0.015, -132, 7.2, 0.08, 45, materials.sand, worldRoot, false, true);
+    box(-27, -0.27, ABANDONED_FRONT_BRIDGE.z, 42, 0.44, 15, materials.water, worldRoot, false, true);
+    box(27, -0.27, ABANDONED_FRONT_BRIDGE.z, 42, 0.44, 15, materials.water, worldRoot, false, true);
     box(-43, -0.27, 0, 12, 0.44, 192, materials.water, worldRoot, false, true);
     box(43, -0.27, 0, 12, 0.44, 192, materials.water, worldRoot, false, true);
-    box(0, -0.27, -102, 98, 0.44, 14, materials.water, worldRoot, false, true);
+    box(-27, -0.27, ABANDONED_REAR_BRIDGE.z, 42, 0.44, 15, materials.water, worldRoot, false, true);
+    box(27, -0.27, ABANDONED_REAR_BRIDGE.z, 42, 0.44, 15, materials.water, worldRoot, false, true);
 
-    box(0, 0.16, 103.5, 7, 0.36, 27, materials.wood, worldRoot, true, true);
-    for (let z = 90.5; z <= 116.5; z += 1.25) box(0, 0.42, z, 7.25, 0.16, 0.12, materials.woodDark);
-    box(-3.62, 1.05, 103.5, 0.2, 1.8, 27, materials.woodDark);
-    box(3.62, 1.05, 103.5, 0.2, 1.8, 27, materials.woodDark);
-
-    buildAbandonedSegmentedWall("horizontal", 92, -33, 33, [{ center: 0, width: 7 }], abandonedStone);
-    box(0, 7.25, 92, 8.5, 2.5, 1.1, materials.stoneDark);
-    buildTower(-36, 92);
-    buildTower(36, 92);
-    addCollider(-36, 92, 7, 7, -0.2, 7.5);
-    addCollider(36, 92, 7, 7, -0.2, 7.5);
+    ABANDONED_DRAWBRIDGES.forEach((bridge) => buildAbandonedDrawbridgeEntrance(bridge, abandonedStone));
 
     const forestTrees = [
       [-50, 122, 1.25], [-39, 137, 1.05], [-54, 151, 1.2], [-25, 126, 0.9], [-22, 148, 1.15],
       [50, 122, 1.25], [39, 137, 1.05], [54, 151, 1.2], [25, 126, 0.9], [22, 148, 1.15],
       [-12, 157, 0.92], [13, 158, 1.08], [-46, 158, 0.95], [47, 157, 1.12],
+      [-16, 134, 0.95], [16, 135, 1.05], [-10, 164, 1], [10, 166, 0.9],
+      [-32, 160, 1.2], [33, 161, 0.98], [-57, 132, 0.9], [57, 134, 1.12],
+      [-50, -122, 1.25], [-39, -137, 1.05], [-54, -151, 1.2], [-25, -126, 0.9], [-22, -148, 1.15],
+      [50, -122, 1.25], [39, -137, 1.05], [54, -151, 1.2], [25, -126, 0.9], [22, -148, 1.15],
+      [-12, -157, 0.92], [13, -158, 1.08], [-46, -158, 0.95], [47, -157, 1.12],
+      [-16, -134, 0.95], [16, -135, 1.05], [-10, -164, 1], [10, -166, 0.9],
+      [-32, -160, 1.2], [33, -161, 0.98], [-57, -132, 0.9], [57, -134, 1.12],
+      [-58, -88, 1.05], [-76, -67, 1.2], [-95, -42, 0.98], [-61, -18, 1.14], [-89, 7, 1.04],
+      [-64, 31, 1.22], [-96, 54, 1.08], [-72, 78, 1.16], [-56, 96, 0.95],
+      [-68, -96, 1.08], [-84, -82, 0.96], [-59, -55, 1.14], [-102, -15, 1.02],
+      [-73, 13, 1.2], [-101, 31, 0.94], [-58, 61, 1.08], [-85, 95, 1.16],
+      [58, -88, 1.05], [76, -67, 1.2], [95, -42, 0.98], [61, -18, 1.14], [89, 7, 1.04],
+      [64, 31, 1.22], [96, 54, 1.08], [72, 78, 1.16], [56, 96, 0.95],
+      [68, -96, 1.08], [84, -82, 0.96], [59, -55, 1.14], [102, -15, 1.02],
+      [73, 13, 1.2], [101, 31, 0.94], [58, 61, 1.08], [85, 95, 1.16],
     ];
     forestTrees.forEach(([x, z, scale]) => buildTree(x, z, scale));
     buildSkyDecor();
@@ -1940,16 +1995,17 @@ import * as THREE from "./vendor/three.module.js";
       enteredCastle: false,
       playerFoundTreasure: false,
       playerEscaping: false,
+      playerEscapeSide: null,
       playerEscapeWaitingNotice: false,
       playerKingRespawnedAtHome: false,
     };
-    Object.assign(state.player, { x: -6, y: 0, z: 144, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
+    Object.assign(state.player, { x: -6, y: 0, z: ABANDONED_FRONT_BRIDGE.spawnZ, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
 
     let followerIndex = 0;
     UNIT_TYPES.forEach((type) => {
       for (let index = 0; index < safeCounts[type]; index++) {
         const x = -10 + (followerIndex % 4) * 2.05;
-        const z = 146.3 + Math.floor(followerIndex / 4) * 1.55;
+        const z = ABANDONED_FRONT_BRIDGE.spawnZ + 2.3 + Math.floor(followerIndex / 4) * 1.55;
         state.units.push(makeUnit(0, type, x, z, { sourceType: type, broughtGuard: true, searchParty: "friendly" }));
         followerIndex++;
       }
@@ -1967,12 +2023,12 @@ import * as THREE from "./vendor/three.module.js";
       }));
     });
 
-    const rival = makeUnit(1, "king", 6, 144, { king: true, rival: true, rivalParty: true, searchParty: "rival", kingdom: rivalKingdom });
+    const rival = makeUnit(1, "king", 6, ABANDONED_REAR_BRIDGE.spawnZ, { king: true, rival: true, rivalParty: true, searchParty: "rival", kingdom: rivalKingdom });
     state.units.push(rival);
     state.abandonedCastleVisit.rivalKingId = rival.id;
     const rivalGuardTypes = ["sword", "archer", "cavalry", "sword", "archer", "cavalry", "sword", "archer", "cavalry", "sword"];
     rivalGuardTypes.forEach((type, index) => {
-      const guard = makeUnit(1, type, 3.8 + (index % 3) * 2.2, 146.4 + Math.floor(index / 3) * 1.7, { rivalParty: true, searchParty: "rival", kingdom: rivalKingdom });
+      const guard = makeUnit(1, type, 10 - (index % 4) * 2.05, ABANDONED_REAR_BRIDGE.spawnZ - 2.3 - Math.floor(index / 4) * 1.55, { rivalParty: true, searchParty: "rival", kingdom: rivalKingdom });
       state.units.push(guard);
       state.abandonedCastleVisit.rivalGuardIds.push(guard.id);
     });
@@ -2430,9 +2486,12 @@ import * as THREE from "./vendor/three.module.js";
   function isMoat(x, z) {
     if (state.scene === "battle") return false;
     if (state.scene === "abandonedCastle") {
-      const onGiantBridge = Math.abs(x) < 3.45 && z > 89.5 && z < 117.5;
+      const onGiantBridge = ABANDONED_DRAWBRIDGES.some((bridge) => (
+        Math.abs(x - bridge.x) < bridge.width / 2 - 0.05
+        && Math.abs(z - bridge.z) < bridge.length / 2 + 0.5
+      ));
       const frontMoat = Math.abs(x) < 49 && z > 96 && z < 111;
-      const rearMoat = Math.abs(x) < 49 && z > -109 && z < -95;
+      const rearMoat = Math.abs(x) < 49 && z > -111 && z < -96;
       const sideMoat = Math.abs(x) > 37 && Math.abs(x) < 49 && z > -109 && z < 111;
       return (frontMoat || rearMoat || sideMoat) && !onGiantBridge;
     }
@@ -2485,15 +2544,21 @@ import * as THREE from "./vendor/three.module.js";
       if (state.enteredEnemyCastle && (leftByFrontBridge || leftByRearBridge)) finishStealth(false);
     } else if (state.scene === "abandonedCastle" && state.abandonedCastleVisit) {
       const visit = state.abandonedCastleVisit;
-      if (state.player.z < 87.5) visit.enteredCastle = true;
-      if (visit.enteredCastle && !visit.playerEscaping && state.player.z > 91) {
+      if (abandonedNavigationZoneAt(state.player.x, state.player.z)) visit.enteredCastle = true;
+      const crossedFrontGate = Math.abs(state.player.x) < 4.2 && state.player.z > 91;
+      const crossedRearGate = Math.abs(state.player.x) < 4.2 && state.player.z < -91;
+      if (visit.enteredCastle && !visit.playerEscaping && (crossedFrontGate || crossedRearGate)) {
         visit.playerEscaping = true;
+        visit.playerEscapeSide = crossedRearGate ? "rear" : "front";
         visit.friendlySearch.claims = {};
         abandonedPartyMembers("friendly").forEach((unit) => { unit.searchTargetRoomId = null; });
-        showToast("FLY TILLBAKA ÖVER VINDBRYGGAN · VAKTERNA FÖLJER!", 2400);
+        showToast(`FLY UT ÖVER DEN ${visit.playerEscapeSide === "rear" ? "BAKRE" : "FRÄMRE"} VINDBRYGGAN · VAKTERNA FÖLJER!`, 2400);
       }
-      if (visit.playerEscaping && state.player.z > 138) {
-        const guardsStillReturning = abandonedPartyMembers("friendly").filter((unit) => unit.z <= 138);
+      const playerReachedForest = visit.playerEscapeSide === "rear" ? state.player.z < -138 : state.player.z > 138;
+      if (visit.playerEscaping && playerReachedForest) {
+        const guardsStillReturning = abandonedPartyMembers("friendly").filter((unit) => (
+          visit.playerEscapeSide === "rear" ? unit.z >= -138 : unit.z <= 138
+        ));
         if (!guardsStillReturning.length) {
           finishAbandonedCastle(false);
           return;
@@ -2524,7 +2589,7 @@ import * as THREE from "./vendor/three.module.js";
     let best = null;
     let bestDistance = maxRange;
     state.units.forEach((unit) => {
-      if (!unit.alive || unit.team === team || isTowerArcher(unit) || (unit.statue && !unit.awake) || (unit.rivalParty && state.scene === "abandonedCastle" && unit.z > 90) || (excludeWorkers && unit.worker)) return;
+      if (!unit.alive || unit.team === team || isTowerArcher(unit) || (unit.statue && !unit.awake) || (unit.rivalParty && state.scene === "abandonedCastle" && Math.abs(unit.z) > 90) || (excludeWorkers && unit.worker)) return;
       const distance = Math.hypot(unit.x - x, unit.z - z);
       if (distance < bestDistance) { best = unit; bestDistance = distance; }
     });
@@ -2613,15 +2678,21 @@ import * as THREE from "./vendor/three.module.js";
     const fromZone = abandonedNavigationZoneAt(from.x, from.z);
     const targetZone = abandonedNavigationZoneAt(target.x, target.z);
     if (!fromZone && targetZone && from.z > 87) {
-      if (from.z > 118) return { x: 0, z: 116 };
+      if (from.z > 118) return { x: 0, z: ABANDONED_FRONT_BRIDGE.bridgeWaypointZ };
       if (from.z > 90) return { x: 0, z: 89.7 };
-      return { x: 0, z: 86.4 };
+      return { x: 0, z: ABANDONED_FRONT_BRIDGE.insideWaypointZ };
+    }
+    if (!fromZone && targetZone && from.z < -87) {
+      if (from.z < -118) return { x: 0, z: ABANDONED_REAR_BRIDGE.bridgeWaypointZ };
+      if (from.z < -90) return { x: 0, z: -89.7 };
+      return { x: 0, z: ABANDONED_REAR_BRIDGE.insideWaypointZ };
     }
     if (!fromZone || !targetZone) return target;
     // Two points in the long main corridor still need to pass every alternating
     // maze wall through its opening. Only ordinary rooms can take a direct path.
     if (fromZone.id === targetZone.id && fromZone.type !== "corridor") return target;
     if (fromZone.type === "corridor" && from.z > 88 && target.z < 88) return { x: 0, z: 87.2 };
+    if (fromZone.type === "corridor" && from.z < -88 && target.z > -88) return { x: 0, z: -87.2 };
 
     if (fromZone.type === "small") {
       const exitDoor = ABANDONED_DOORS.find((door) => door.connects.includes(fromZone.id));
@@ -3216,7 +3287,7 @@ import * as THREE from "./vendor/three.module.js";
       const range = unitAttackRange(unit);
       const stealthAwareness = unit.team === 0 ? 12 : 15;
       const detectionRange = state.scene === "abandonedCastle"
-        ? unit.rivalParty && unit.z > 90 ? 0 : 16
+        ? unit.rivalParty && Math.abs(unit.z) > 90 ? 0 : 16
         : state.scene === "stealth"
           ? Math.max(stealthAwareness, range)
           : Infinity;
@@ -3228,7 +3299,11 @@ import * as THREE from "./vendor/three.module.js";
           let stopDistance = 0.42;
           if (unit.broughtGuard) {
             if (visit.playerEscaping) {
-              goal = unit.z < 87 ? { x: 0, z: 88 } : { x: 0, z: 145 };
+              if (visit.playerEscapeSide === "rear") {
+                goal = unit.z > -87 ? { x: 0, z: -88 } : { x: 0, z: ABANDONED_REAR_BRIDGE.exitZ };
+              } else {
+                goal = unit.z < 87 ? { x: 0, z: 88 } : { x: 0, z: ABANDONED_FRONT_BRIDGE.exitZ };
+              }
               stopDistance = 0.4;
             } else {
               goal = visit.enteredCastle ? abandonedSearchGoal(unit, "friendly") : state.player;
@@ -3242,9 +3317,9 @@ import * as THREE from "./vendor/three.module.js";
               visit.rivalStolenMoney = 100;
               showToast(`FIENDEKUNG ${unit.kingdom} TOG 100 PENGAR OCH FLYR!`, 2600);
             }
-            if (visit.rivalEscaping) goal = unit.z < 87 ? { x: 0, z: 88 } : { x: 0, z: 145 };
-            else if (unit.z > 118) goal = { x: 0, z: 116 };
-            else if (unit.z > 87) goal = { x: 0, z: 86.4 };
+            if (visit.rivalEscaping) goal = unit.z > -87 ? { x: 0, z: -88 } : { x: 0, z: ABANDONED_REAR_BRIDGE.exitZ };
+            else if (unit.z < -118) goal = { x: 0, z: ABANDONED_REAR_BRIDGE.bridgeWaypointZ };
+            else if (unit.z < -87) goal = { x: 0, z: ABANDONED_REAR_BRIDGE.insideWaypointZ };
             else goal = abandonedSearchGoal(unit, "rival");
           }
           if (goal) {
@@ -3254,7 +3329,7 @@ import * as THREE from "./vendor/three.module.js";
               const waypointDistance = Math.hypot(moveTarget.x - unit.x, moveTarget.z - unit.z) || 1;
               let moveX = (moveTarget.x - unit.x) / waypointDistance;
               let moveZ = (moveTarget.z - unit.z) / waypointDistance;
-              const inNarrowLabyrinthPassage = Math.abs(unit.x) < 5.25 && unit.z > -92 && unit.z < 120;
+              const inNarrowLabyrinthPassage = Math.abs(unit.x) < 5.25 && Math.abs(unit.z) < 120;
               const avoidance = inNarrowLabyrinthPassage ? { x: 0, z: 0 } : unitAvoidance(unit);
               moveX += avoidance.x * 0.72;
               moveZ += avoidance.z * 0.72;
@@ -3267,7 +3342,7 @@ import * as THREE from "./vendor/three.module.js";
               unit.walk += dt * speed * 3.2;
             }
           }
-          if (visit.rivalEscaping && unit.rivalParty && unit.z > 138) {
+          if (visit.rivalEscaping && unit.rivalParty && unit.z < -138) {
             unit.escaped = true;
             unit.alive = false;
             unit.respawned = true;
@@ -3313,7 +3388,7 @@ import * as THREE from "./vendor/three.module.js";
           let moveZ = (moveTarget.z - unit.z) / moveDistance;
           unit.facing = Math.atan2(moveX, moveZ);
           if (["mineRaid", "mineDefense", "abandonedCastle"].includes(state.scene)) {
-            const inNarrowLabyrinthPassage = state.scene === "abandonedCastle" && Math.abs(unit.x) < 5.25 && unit.z > -92 && unit.z < 120;
+            const inNarrowLabyrinthPassage = state.scene === "abandonedCastle" && Math.abs(unit.x) < 5.25 && Math.abs(unit.z) < 120;
             const avoidance = inNarrowLabyrinthPassage ? { x: 0, z: 0 } : unitAvoidance(unit);
             moveX += avoidance.x * 1.15;
             moveZ += avoidance.z * 1.15;
@@ -3786,13 +3861,54 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function getAbandonedCastleLayout() {
+    const frontEntrance = { side: "front", x: 0, z: ABANDONED_FRONT_BRIDGE.gateZ, width: 6.4 };
+    const rearEntrance = { side: "rear", x: 0, z: ABANDONED_REAR_BRIDGE.gateZ, width: 6.4 };
+    const drawbridges = ABANDONED_DRAWBRIDGES.map((bridge) => ({
+      side: bridge.side,
+      x: bridge.x,
+      z: bridge.z,
+      width: bridge.width,
+      length: bridge.length,
+      lowered: true,
+    }));
     return {
       kind: "physical-serpentine-labyrinth",
-      entrance: { x: 0, z: 90, width: 6.4 },
-      forestSpawn: { player: { x: -6, z: 144 }, rivalKing: { x: 6, z: 144 } },
-      exitToHome: { x: 0, z: 120, requiresPriorEntry: true },
-      drawbridge: { x: 0, z: 103.5, width: 7, length: 27, lowered: true },
-      moat: { surroundsCastle: true, bridgeIsOnlySafeFrontCrossing: true },
+      entrance: { ...frontEntrance },
+      frontEntrance,
+      rearEntrance,
+      entrances: { front: { ...frontEntrance }, rear: { ...rearEntrance } },
+      forest: {
+        surroundsEntireCastle: true,
+        frontBand: { x: 0, z: 139, width: 122, depth: 58 },
+        rearBand: { x: 0, z: -139, width: 122, depth: 58 },
+        leftBand: { x: -78, z: 0, width: 58, depth: 220 },
+        rightBand: { x: 78, z: 0, width: 58, depth: 220 },
+        treeCountByRegion: { front: 22, rear: 22, left: 17, right: 17 },
+      },
+      forestSpawn: {
+        player: { side: "front", x: -6, z: ABANDONED_FRONT_BRIDGE.spawnZ },
+        friendlyGuards: { side: "front", z: ABANDONED_FRONT_BRIDGE.spawnZ + 2.3 },
+        rivalKing: { side: "rear", x: 6, z: ABANDONED_REAR_BRIDGE.spawnZ },
+        rivalGuards: { side: "rear", z: ABANDONED_REAR_BRIDGE.spawnZ - 2.3 },
+      },
+      exitToHome: {
+        primarySide: "front",
+        side: "front",
+        x: 0,
+        z: 138,
+        sides: ["front", "rear"],
+        front: { x: 0, z: 138, direction: "z > 138" },
+        rear: { x: 0, z: -138, direction: "z < -138" },
+        requiresPriorEntry: true,
+      },
+      exitRoutes: {
+        front: { x: 0, z: 138, direction: "z > 138", requiresPriorEntry: true },
+        rear: { x: 0, z: -138, direction: "z < -138", requiresPriorEntry: true },
+      },
+      rivalExit: { side: "rear", x: 0, z: -138, direction: "z < -138" },
+      drawbridge: { ...drawbridges[0] },
+      drawbridges,
+      moat: { surroundsCastle: true, bridgesAreOnlySafeCrossings: true, bridgeIsOnlySafeFrontCrossing: false },
       rooms: ABANDONED_ROOMS.map((room) => ({
         id: room.id,
         name: room.name,
@@ -3846,6 +3962,7 @@ import * as THREE from "./vendor/three.module.js";
       enteredCastle: abandonedVisitState.enteredCastle,
       playerFoundTreasure: abandonedVisitState.playerFoundTreasure,
       playerEscaping: abandonedVisitState.playerEscaping,
+      playerEscapeSide: abandonedVisitState.playerEscapeSide,
       currentRoomId: abandonedVisitState.currentRoomId,
       visitedRoomIds: [...abandonedVisitState.visitedRoomIds],
       visitedRoomCount: abandonedVisitState.visitedRoomIds.length,
@@ -3922,14 +4039,32 @@ import * as THREE from "./vendor/three.module.js";
         kingId: abandonedVisitState.rivalKingId,
         guardIds: [...abandonedVisitState.rivalGuardIds],
         guardCount: abandonedVisitState.rivalGuardIds.length,
+        spawnSide: "rear",
+        entryBridge: "rear",
+        exitBridge: "rear",
+        members: state.units.filter((unit) => unit.rivalParty).map((unit) => ({
+          id: unit.id,
+          king: unit.rival,
+          type: unit.type,
+          x: rounded(unit.x),
+          z: rounded(unit.z),
+          alive: unit.alive,
+          escaped: Boolean(unit.escaped),
+          roomId: abandonedRoomAt(unit.x, unit.z)?.id || null,
+        })),
         reachedMoney: abandonedVisitState.rivalReachedMoney,
         escaping: abandonedVisitState.rivalEscaping,
         escaped: abandonedVisitState.rivalEscaped,
+        kingEscaped: abandonedVisitState.rivalEscaped,
+        allMembersEscaped: state.units.filter((unit) => unit.rivalParty).every((unit) => Boolean(unit.escaped) || !unit.alive),
+        membersEscaped: state.units.filter((unit) => unit.rivalParty && unit.escaped).length,
+        membersDefeated: state.units.filter((unit) => unit.rivalParty && !unit.alive && !unit.escaped).length,
+        membersRemaining: state.units.filter((unit) => unit.rivalParty && unit.alive).length,
         stolenMoney: abandonedVisitState.rivalStolenMoney,
       },
     } : null;
     return JSON.stringify({
-      coordinateSystem: "origin is the castle courtyard center; x increases east/right, z increases south/toward the drawbridge; y is height; yaw 0 looks north (-z)",
+      coordinateSystem: "origin is the castle center; x increases east/right, +z is the player's front drawbridge, -z is the rival's rear drawbridge; y is height; yaw 0 looks north (-z)",
       graphics: "real-time WebGL 3D, Paint War 2 Deluxe inspired low-poly PBR",
       screen: state.screen,
       scene: state.scene,
