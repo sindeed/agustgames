@@ -104,7 +104,8 @@ import * as THREE from "./vendor/three.module.js";
   const ABANDONED_MONEY_PER_TAKE = 10;
   const ABANDONED_TREASURE_SECONDS = 30;
   const ABANDONED_GUARD_MONEY_PER_SECOND = 10;
-  const ABANDONED_STATUE_ATTACK_SECONDS = 50;
+  const ABANDONED_STATUE_ATTACK_SECONDS = 3;
+  const ABANDONED_HEAL_SECONDS = 3;
   const TREASURE_FOUND_TEXT = "Skattkammaren är här borta!";
   const ABANDONED_CASTLE = Object.freeze({
     id: "abandoned-giant-castle",
@@ -239,6 +240,8 @@ import * as THREE from "./vendor/three.module.js";
       attackCooldown: 0,
       swing: 0,
       moving: 0,
+      abandonedDamagedAt: null,
+      abandonedHealSecondsRemaining: 0,
     },
     kingdoms: makeKingdoms(),
     units: [],
@@ -1389,7 +1392,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function resetPlayerForHome() {
-    Object.assign(state.player, { x: 0, y: 0, z: 9, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0 });
+    Object.assign(state.player, { x: 0, y: 0, z: 9, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
   }
 
   function startGame() {
@@ -1835,6 +1838,8 @@ import * as THREE from "./vendor/three.module.js";
       roomId: extra.roomId || null,
       awake: Boolean(extra.awake),
       respawnTimer: Number(extra.respawnTimer) || 0,
+      abandonedDamagedAt: null,
+      abandonedHealSecondsRemaining: 0,
       originX: Number.isFinite(extra.originX) ? extra.originX : x,
       originZ: Number.isFinite(extra.originZ) ? extra.originZ : z,
       kingdom: Number.isInteger(extra.kingdom) ? extra.kingdom : team === 0 ? 0 : 1,
@@ -1931,7 +1936,7 @@ import * as THREE from "./vendor/three.module.js";
       playerEscapeWaitingNotice: false,
       playerKingRespawnedAtHome: false,
     };
-    Object.assign(state.player, { x: -6, y: 0, z: 144, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0 });
+    Object.assign(state.player, { x: -6, y: 0, z: 144, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
 
     let followerIndex = 0;
     UNIT_TYPES.forEach((type) => {
@@ -2820,6 +2825,15 @@ import * as THREE from "./vendor/three.module.js";
       }
     }
     unit.hp = Math.max(0, unit.hp - amount);
+    const healsInAbandonedCastle = state.scene === "abandonedCastle"
+      && !unit.statue
+      && !unit.worker
+      && (unit.king || UNIT_TYPES.includes(unit.type))
+      && unit.hp > 0;
+    if (healsInAbandonedCastle) {
+      unit.abandonedDamagedAt = state.time;
+      unit.abandonedHealSecondsRemaining = ABANDONED_HEAL_SECONDS;
+    }
     if (unit.hp <= 0) {
       unit.alive = false;
       unit.cooldown = 999;
@@ -2865,6 +2879,10 @@ import * as THREE from "./vendor/three.module.js";
   function damagePlayer(amount) {
     if (!state.player.alive) return;
     state.player.hp = Math.max(0, state.player.hp - amount);
+    if (state.scene === "abandonedCastle" && state.player.hp > 0) {
+      state.player.abandonedDamagedAt = state.time;
+      state.player.abandonedHealSecondsRemaining = ABANDONED_HEAL_SECONDS;
+    }
     if (state.player.hp <= 0) {
       state.player.alive = false;
       if (state.scene === "stealth") {
@@ -3101,7 +3119,7 @@ import * as THREE from "./vendor/three.module.js";
         unit.x = clamp(unit.x + dx / distance * move, room.x - room.width / 2 + 0.8, room.x + room.width / 2 - 0.8);
         unit.z = clamp(unit.z + dz / distance * move, room.z - room.depth / 2 + 0.8, room.z + room.depth / 2 - 0.8);
         unit.walk += dt * 4.5;
-      } else if (unit.cooldown <= 0) {
+      } else if (unit.cooldown <= 1e-9) {
         unit.cooldown = ABANDONED_STATUE_ATTACK_SECONDS;
         if (target.player) damagePlayer(32);
         else damageUnit(target, 32);
@@ -3109,6 +3127,32 @@ import * as THREE from "./vendor/three.module.js";
       }
       if (model) animateActor(model, unit, dt);
     });
+  }
+
+  function updateAbandonedCombatantHealing() {
+    if (state.scene !== "abandonedCastle") return;
+    state.units.forEach((unit) => {
+      const isLivingCombatant = unit.alive
+        && !unit.statue
+        && !unit.worker
+        && (unit.king || UNIT_TYPES.includes(unit.type));
+      if (!isLivingCombatant || !Number.isFinite(unit.abandonedDamagedAt) || unit.hp >= unit.maxHp) return;
+      const elapsed = Math.max(0, state.time - unit.abandonedDamagedAt);
+      unit.abandonedHealSecondsRemaining = Math.max(0, ABANDONED_HEAL_SECONDS - elapsed);
+      if (unit.abandonedHealSecondsRemaining > 1e-9) return;
+      unit.hp = unit.maxHp;
+      unit.abandonedDamagedAt = null;
+      unit.abandonedHealSecondsRemaining = 0;
+    });
+    if (state.player.alive && Number.isFinite(state.player.abandonedDamagedAt) && state.player.hp < 100) {
+      const elapsed = Math.max(0, state.time - state.player.abandonedDamagedAt);
+      state.player.abandonedHealSecondsRemaining = Math.max(0, ABANDONED_HEAL_SECONDS - elapsed);
+      if (state.player.abandonedHealSecondsRemaining <= 1e-9) {
+        state.player.hp = 100;
+        state.player.abandonedDamagedAt = null;
+        state.player.abandonedHealSecondsRemaining = 0;
+      }
+    }
   }
 
   function updateUnits(dt) {
@@ -3593,6 +3637,7 @@ import * as THREE from "./vendor/three.module.js";
       updateAbandonedSearchDiscoveries();
       updateStatues(dt);
       updateUnits(dt);
+      updateAbandonedCombatantHealing();
       updateAbandonedSearchDiscoveries();
       updateAbandonedCastleVisit();
       updateAbandonedTreasure(dt);
@@ -3746,6 +3791,7 @@ import * as THREE from "./vendor/three.module.js";
         id: unit.id, team: unit.team, type: unit.type, king: unit.king, worker: unit.worker,
         statue: unit.statue, shield: unit.shield, weapon: unit.weapon, rivalParty: unit.rivalParty,
         broughtGuard: unit.broughtGuard, searchParty: unit.searchParty, searchTargetRoomId: unit.searchTargetRoomId,
+        abandonedHealSecondsRemaining: rounded(unit.abandonedHealSecondsRemaining || 0),
         roomId: abandonedRoomAt(unit.x, unit.z)?.id || null,
         x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, maxHp: unit.maxHp,
         distance: rounded(dist(unit, state.player)),
@@ -3805,6 +3851,23 @@ import * as THREE from "./vendor/three.module.js";
         totalMoneyTaken: abandonedVisitState.totalMoneyTaken,
         pileVisible: Boolean(abandonedMoneyGroup?.visible),
       },
+      combatantHealing: {
+        onlyInAbandonedCastle: true,
+        secondsAfterLastDamage: ABANDONED_HEAL_SECONDS,
+        restoresToFull: true,
+        appliesTo: ["friendlyGuards", "enemyGuards", "playerKing", "enemyKing"],
+        recovering: state.units.filter((unit) => unit.alive && Number.isFinite(unit.abandonedDamagedAt) && unit.hp < unit.maxHp).map((unit) => ({
+          id: unit.id,
+          hp: unit.hp,
+          maxHp: unit.maxHp,
+          secondsRemaining: rounded(unit.abandonedHealSecondsRemaining || 0),
+        })).concat(Number.isFinite(state.player.abandonedDamagedAt) && state.player.hp < 100 ? [{
+          id: "player-king",
+          hp: state.player.hp,
+          maxHp: 100,
+          secondsRemaining: rounded(state.player.abandonedHealSecondsRemaining || 0),
+        }] : []),
+      },
       statues: state.units.filter((unit) => unit.statue).map((unit) => ({
         id: unit.id, roomId: unit.roomId, hp: unit.hp, maxHp: unit.maxHp, alive: unit.alive,
         awake: unit.awake, respawnSecondsRemaining: rounded(unit.respawnTimer), weapon: unit.weapon,
@@ -3844,7 +3907,7 @@ import * as THREE from "./vendor/three.module.js";
         } : null,
       } : null,
       dayNight: { phase: state.phase, day: state.day, elapsedSeconds: rounded(state.phaseElapsed), remainingSeconds: rounded(duration - state.phaseElapsed), durationSeconds: duration, sleepingSeconds: rounded(state.sleeping), mineRaidTriggered: state.nightMineRaidTriggered, mineRaidAtSeconds: rounded(state.nightMineRaidAt), enemyWarTriggered: state.enemyWarTriggered, enemyWarAtSeconds: rounded(state.enemyWarAt) },
-      player: { x: rounded(state.player.x), y: rounded(state.player.y), z: rounded(state.player.z), yaw: rounded(state.player.yaw), pitch: rounded(state.player.pitch), hp: state.player.hp, alive: state.player.alive, weapon: state.weapon },
+      player: { x: rounded(state.player.x), y: rounded(state.player.y), z: rounded(state.player.z), yaw: rounded(state.player.yaw), pitch: rounded(state.player.pitch), hp: state.player.hp, alive: state.player.alive, weapon: state.weapon, abandonedHealSecondsRemaining: rounded(state.player.abandonedHealSecondsRemaining || 0) },
       resources: { money: state.money, diamonds: state.diamonds, diamondSellValue: 10 },
       mine: {
         behindPlayerCastle: true,
