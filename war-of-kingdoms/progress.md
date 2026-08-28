@@ -62,7 +62,8 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-08-28: Version `88d4887` publicerades och kontrollerades direkt på iPad-adressen. August Games-menyn laddar den nya cacheversionen, live-spelet startar korrekt och inga konsol-, sid- eller resursfel upptäcktes.
 - 2026-08-28: Skattkammaren fick en gemensam gräns på exakt 1 000 pengar per besök för spelarkungen och alla medföljande vakter. Manuella tag, automatiska vaktutbetalningar och blandade summor klampas till återstående belopp utan att kunna gå över gränsen. Ett nytt besök återställer hela gränsen; fiendekungens egen stöld är fortfarande 100 pengar.
 - 2026-08-28: De sju statyerna i de stora salarna fick två sekunder mellan slagen; de 28 smårumsstatyerna behåller tre sekunder. Riktad Chromium-QA godkände 22/22 skattkammartester och 11/11 statytidstester, inklusive exakt 1,999/2,000 respektive 2,999/3,000 sekunder, respawn, 30-sekundersutgång, nytt besök och tidigare tresekundersläkning. Oberoende omtest godkände ytterligare 20/20 skattkammarfall och 19/19 statyfall för samtliga 35 statyer samt fiendekungens separata 100 pengar. Den obligatoriska spelklienten och visuella iPad-kontroller passerade utan webbläsar- eller resursfel. Ny cacheversion är `20260828-treasure-cap-1000`.
+- 2026-08-28: Version `547f16e` publicerades och verifierades direkt på August Games-adressen. Menyn och live-spelet laddar den nya cacheversionen med max 1 000 pengar, stora statyer varannan sekund och små statyer var tredje sekund. Live-klienten startade spelet utan konsol-, sid- eller resursfel.
 
 ## Nästa kontroll
 
-- Publicera och verifiera liveversionen på iPad-adressen.
+- Ingen blockerande kontroll återstår för den här uppdateringen.
