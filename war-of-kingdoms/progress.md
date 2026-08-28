@@ -59,7 +59,8 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-08-28: Version `ec8fd30` publicerades via GitHub Pages. Den riktiga August Games-menyn, cacheversionen, spelfilerna och ett nytt tomt startläge verifierades direkt mot liveadressen utan konsol-, sid- eller resursfel.
 - 2026-08-28: Statyernas attacktid ändrades enligt nytt önskemål från 50 till exakt tre sekunder. Alla levande vanliga vakter samt spelarens och fiendens kung helas till fullt liv tre sekunder efter sin senaste skada i det övergivna slottet; en ny träff startar tiden på nytt. Statyer omfattas inte och ingen får denna heal utanför jätteslottet. Ny iPad-cacheversion är `20260828-statues-heal-3s`.
 - 2026-08-28: Exakt Chromium-QA godkänd för båda tresekundersreglerna: statyn slog vid 3,000 och 6,000 sekunder men inte vid 2,999 eller 5,999. Egen vakt, fiendevakt, spelarkung och fiendekung helades från skadat till fullt liv exakt efter 3,000 sekunder; en ny träff nollställde tiden. Döda vakter/kungar, statyer och en vakt utanför jätteslottet helades inte. Oberoende svit 21/21, obligatorisk spelklient och visuell iPad-kontroll passerade utan webbläsar- eller resursfel.
+- 2026-08-28: Version `88d4887` publicerades och kontrollerades direkt på iPad-adressen. August Games-menyn laddar den nya cacheversionen, live-spelet startar korrekt och inga konsol-, sid- eller resursfel upptäcktes.
 
 ## Nästa kontroll
 
-- Publicera och verifiera liveversionen på iPad-adressen.
+- Ingen blockerande kontroll återstår för den här uppdateringen.
