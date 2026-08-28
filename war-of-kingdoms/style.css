@@ -914,10 +914,10 @@ button:disabled {
   z-index: 2;
   display: grid;
   height: 100%;
-  grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 3%;
-  padding: 3% 4%;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 1.8% 1.5%;
+  padding: 2.2% 3%;
 }
 
 .kingdom-node {
@@ -938,13 +938,13 @@ button:disabled {
   transition: transform 0.13s ease, filter 0.13s ease;
 }
 
-.kingdom-node:nth-child(1) { grid-area: 2 / 4 / 3 / 5; }
+.kingdom-node:nth-child(1) { grid-area: 4 / 3 / 5 / 5; }
 .kingdom-node:nth-child(2) { grid-area: 1 / 1 / 2 / 3; }
-.kingdom-node:nth-child(3) { grid-area: 1 / 3 / 2 / 5; }
-.kingdom-node:nth-child(4) { grid-area: 1 / 6 / 2 / 8; }
-.kingdom-node:nth-child(5) { grid-area: 3 / 1 / 4 / 3; }
-.kingdom-node:nth-child(6) { grid-area: 3 / 3 / 4 / 5; }
-.kingdom-node:nth-child(7) { grid-area: 3 / 6 / 4 / 8; }
+.kingdom-node:nth-child(3) { grid-area: 1 / 4 / 2 / 6; }
+.kingdom-node:nth-child(4) { grid-area: 1 / 7 / 2 / 9; }
+.kingdom-node:nth-child(5) { grid-area: 4 / 1 / 5 / 3; }
+.kingdom-node:nth-child(6) { grid-area: 4 / 5 / 5 / 7; }
+.kingdom-node:nth-child(7) { grid-area: 4 / 7 / 5 / 9; }
 
 .kingdom-node:hover {
   filter: brightness(1.1);
@@ -961,6 +961,128 @@ button:disabled {
 .kingdom-node.enemy-kingdom:nth-child(even) {
   border-color: rgba(255, 127, 121, 0.66);
   background: linear-gradient(145deg, rgba(146, 39, 50, 0.96), rgba(70, 19, 32, 0.98));
+}
+
+.kingdom-node.kingdom-at-war {
+  border-color: #ffda67;
+  background:
+    linear-gradient(135deg, transparent 0 43%, rgba(255, 214, 83, 0.18) 44% 56%, transparent 57%),
+    linear-gradient(145deg, rgba(164, 45, 41, 0.98), rgba(66, 16, 24, 0.99));
+  box-shadow: 0 5px 0 #6f3518, 0 0 20px rgba(255, 94, 66, 0.58);
+  cursor: not-allowed;
+  animation: war-node-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.war-badge {
+  display: block;
+  margin-top: 0.26em;
+  padding: 0.22em 0.55em;
+  color: #2a1304;
+  border: 1px solid #fff0ad;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #ffe98c, #e4a42d);
+  font-size: clamp(7px, 0.73vw, 10px);
+  font-weight: 1000;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.kingdom-node.kingdom-at-war .kingdom-stats {
+  opacity: 0.52;
+}
+
+.kingdom-node.abandoned-castle {
+  grid-area: 2 / 2 / 4 / 9;
+  isolation: isolate;
+  overflow: hidden;
+  color: #e9e3d4;
+  border-color: rgba(213, 202, 174, 0.7);
+  background:
+    radial-gradient(ellipse at 50% 108%, rgba(184, 192, 184, 0.22), transparent 48%),
+    linear-gradient(145deg, rgba(73, 76, 82, 0.98), rgba(24, 27, 34, 0.99));
+  box-shadow:
+    0 7px 0 rgba(52, 39, 30, 0.82),
+    0 13px 24px rgba(24, 20, 17, 0.46),
+    inset 0 0 36px rgba(0, 0, 0, 0.34);
+}
+
+.kingdom-node.abandoned-castle::before,
+.kingdom-node.abandoned-castle::after {
+  position: absolute;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+}
+
+.kingdom-node.abandoned-castle::before {
+  inset: 0;
+  opacity: 0.3;
+  background:
+    linear-gradient(71deg, transparent 0 34%, #d8d0bc 34.4% 34.8%, transparent 35.2%),
+    linear-gradient(116deg, transparent 0 61%, #d8d0bc 61.4% 61.8%, transparent 62.2%),
+    repeating-linear-gradient(0deg, transparent 0 18px, rgba(238, 229, 205, 0.12) 19px 20px);
+}
+
+.kingdom-node.abandoned-castle::after {
+  right: -3%;
+  bottom: -34%;
+  left: -3%;
+  height: 58%;
+  border-radius: 50%;
+  background: rgba(213, 220, 211, 0.16);
+  filter: blur(8px);
+}
+
+.kingdom-node.abandoned-castle:hover {
+  filter: brightness(1.13);
+  transform: translateY(-2px) scale(1.008);
+}
+
+.abandoned-castle-art {
+  display: grid;
+  width: min(68%, 510px);
+  margin-bottom: 0.15em;
+  color: #c8c5bb;
+  font-family: Georgia, serif;
+  line-height: 0.62;
+  place-items: center;
+  text-shadow: 0 5px 0 rgba(0, 0, 0, 0.38), 0 0 16px rgba(225, 220, 203, 0.15);
+}
+
+.abandoned-castle-art::before {
+  content: "♜  ♜  ♜";
+  font-size: clamp(27px, 4.2vw, 58px);
+  letter-spacing: 0.12em;
+}
+
+.abandoned-castle-art::after {
+  content: "♜  ♜  ♜  ♜";
+  font-size: clamp(22px, 3.35vw, 48px);
+  letter-spacing: 0.04em;
+}
+
+.kingdom-node.abandoned-castle strong {
+  color: #fff5d9;
+  font-size: clamp(10px, 1.35vw, 19px);
+  letter-spacing: 0.1em;
+}
+
+.abandoned-castle-details {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em 1.1em;
+  color: #d4cec0;
+  font-size: clamp(7px, 0.78vw, 11px) !important;
+  opacity: 0.9 !important;
+}
+
+.abandoned-castle-details span {
+  padding: 0.25em 0.65em;
+  border: 1px solid rgba(233, 224, 199, 0.2);
+  border-radius: 999px;
+  background: rgba(5, 8, 13, 0.3);
 }
 
 .castle-symbol {
@@ -1582,6 +1704,11 @@ button:disabled {
   color: var(--ivory);
   background: var(--night);
   text-align: center;
+}
+
+@keyframes war-node-pulse {
+  from { box-shadow: 0 0 0 2px rgba(255, 83, 54, 0.55), 0 12px 24px rgba(20, 8, 5, 0.28); }
+  to { box-shadow: 0 0 0 5px rgba(255, 199, 79, 0.72), 0 15px 30px rgba(20, 8, 5, 0.38); }
 }
 
 @keyframes dialog-in {

@@ -3,7 +3,7 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 ## Krav som spelet följer
 
 - Spelaren är en kung i förstaperson och använder svärd eller pilbåge.
-- Sju likadana borgar finns: spelarens borg och sex datorstyrda kungars borgar, med varsin by.
+- Sju bebodda, likadana borgar finns: spelarens borg och sex datorstyrda kungars borgar, med varsin by. Världskartan har dessutom ett åttonde, övergivet jätteslott som är lika stort som sju vanliga slott tillsammans.
 - Borgarna har vallgrav, vindbrygga, karta, säng, trappa/murgång och fyra bågskytteplatser enligt ritningen.
 - Dag och natt varar tre minuter vardera. Spelaren kan sova över natten på en sekund.
 - Dagsattacker använder högst 20 egna vakter; nattliga smyguppdrag använder noll till fem.
@@ -48,7 +48,15 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-08-27: Pågående stridsregel: alla fasta tornskyttar är odödliga, står kvar och skjuter. De kan inte väljas som AI-mål och räknas inte när krigets vinnare avgörs; striden slutar när ena sidans kung och övriga markstridande är besegrade, även om sidans tornskyttar lever.
 - 2026-08-27: Tornskyttarnas siktlinje ignorerar endast kollidern för det egna torn de står på, så de kan faktiskt skjuta ner i arenan. Andra torn, murar och hinder fortsätter blockera pilar som vanligt.
 - 2026-08-27: Tornregeln godkänd i riktad Chromium-QA 17/17 och oberoende omtest: båda lagens tornskyttar behöll 100 liv, sköt markmål, ignorerades av mark-AI och överlevde både vinst och förlust. Alla åtta tornplatser sköt korrekt på markmål, medan kullen och portmuren fortfarande blockerade pilar. Kriget avgjordes med fyra levande tornskyttar kvar; pengar, ägda bågskyttar, tornplatser och omladdning blev rätt. Markbågskyttar, miners, smyg, gruvuppdrag och obligatorisk spelklient fungerar utan webbläsarfel.
+- 2026-08-28: Pågående uppdatering ger alla åtta tornplatser räckvidd över hela stridsarenan. I krig skjuter tornskyttarna från sin höga position över kullar och andra arenahinder till vilken plats som helst; vanliga bågskyttars räckvidd och siktregler är oförändrade.
+- 2026-08-28: Världskartan har sju riken men åtta slott: spelarens borg, sex fiendeborgar och ett övergivet jätteslott utan kung. Jätteslottets kartyta motsvarar sju normala slottsrutor tillsammans och kan utforskas med noll till tio egna vakter.
+- 2026-08-28: Jätteslottet är en fysisk förstapersonsplats som nås från en skog över en nedsänkt vindbrygga och en omgivande vallgrav. Inne finns en slalomlabyrint med exakt sju stora salar och 28 smårum. Alla 35 rum är fysiskt nåbara och har en levande staty med svärd, sköld, 200 liv, 30 sekunders återkomst och 50 sekunder mellan attackerna.
+- 2026-08-28: Varje besök innehåller en fiendekung och exakt tio fiendevakter. Spelarens vakter och fiendegruppen söker var för sig i ännu obesökta rum utan att känna skattens plats. Alla sökare undersöker först ett felaktigt rum. När en egen vakt hittar skatten visas exakt `Skattkammaren är här borta!` och alla överlevande egna vakter samlas där. Spelaren kan hitta rummet själv utan att magiskt avslöja vägen för vakterna. Mötande grupper slåss.
+- 2026-08-28: Skattens 30-sekunderstimer startar först när spelarkungen och samtliga överlevande medtagna vakter är inne i skattkammaren. Före dess är pengarna låsta. Under timern kan spelaren ta 10 pengar per användning och varje vakt i rummet ger automatiskt 10 pengar per hel sekund. Högen försvinner exakt efter 30 sekunder och återställs först vid en ny slottsvisit.
+- 2026-08-28: Fiendekungen söker samma labyrintväg, tar exakt 100 pengar när hans grupp hittar skatten och flyr fysiskt tillbaka över vindbryggan. Spelarens och fiendens överlevande följeslagare lämnar på samma sätt; spelarens överlevare återvänder med 100 liv och döda egna vakter förblir förlorade.
+- 2026-08-28: Två av de sex fiendekungarna kan starta ett eget dagskrig. Båda borgarna märks `KRIG MOT RIKE ...` på kartan och kan inte attackeras av spelaren förrän deras krig är slut; övriga fiendeborgar är fortsatt valbara.
+- 2026-08-28: Slutlig lokal Chromium-QA godkänd: jätteslottets helhetssvit 32/32, tornskyttarnas arenasvit 39/39, fysisk labyrintsökning, exakt timer/utbetalning för 0, 1 och 10 vakter, statyrespawn, egen och fientlig flykt genom alla sju barriärer samt säker hemrespawn utan webbläsarfel. Den obligatoriska spelklienten startade ett tomt nytt kungarike i iPad-anpassad vy; bilden granskades visuellt utan renderingsfel.
 
 ## Nästa kontroll
 
-- Kör slutlig regressionssvit och kodgranskning, publicera därefter och verifiera liveversionens filer, meny-länk och startläge på GitHub Pages.
+- Publicera och verifiera liveversionens filer, meny-länk och startläge på GitHub Pages.

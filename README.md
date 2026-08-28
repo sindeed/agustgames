@@ -14,7 +14,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
-| War of Kingdoms | [`war-of-kingdoms/`](war-of-kingdoms/) | Förstapersons-3D där du är kung över en borg med vallgrav och vindbrygga. Köp vakter, placera bågskyttar i tornen, kriga på dagen och gör smyguppdrag på natten. |
+| War of Kingdoms | [`war-of-kingdoms/`](war-of-kingdoms/) | Förstapersons-3D där du är kung. Bygg armén, försvara borg och gruva, kriga mot sex kungar och sök en skatt i det övergivna jätteslottets labyrint. |
 | Party Game | [`party-game/`](party-game/) | Färgglatt fysik-partyspel med spelaren och nio bottar. Utforska fredligt i Fred eller kör alla mot alla med kanoner, bilar och borgvapen i Fri. |
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |
 | Survivor of Days | [`survivor-blockshop/`](survivor-blockshop/) | Bygg en bas, handla block i Blockshop och skydda hjärtat i fem dygn. |
@@ -29,7 +29,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 ```
 agustgames/
 ├── index.html        ← arkad-meny som länkar till alla spel
-├── war-of-kingdoms/  ← Förstapersons-3D med sju borgar, arméer, dag, natt och smyguppdrag
+├── war-of-kingdoms/  ← Förstapersons-3D med sju riken, åtta slott, arméer, dag, natt och smyguppdrag
 ├── party-game/       ← Fysik-partyspel med Fred, Fri, 9 bottar och sex världar
 ├── puzzle-game/      ← Pixelgubben (index.html + style.css + game.js)
 ├── survivor-blockshop/ ← Survivor of Days and Blockshop of Building
