@@ -78,7 +78,8 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-08-29: Egna vakter, fiendevakter och fiendekungen planerar nu en fysisk omväg in i rätt stora rum, besegrar statyn och fortsätter därefter över fällan. Snabb rörelse över flera linjer behandlas i fysisk ordning och stannar vid den första låsta fällan. Att bara gå förbi eller igenom en statys plats ger ingen fälldöd.
 - 2026-08-29: Skattkammarens gemensamma tak för spelarkungen och medföljande vakter ändrades från 1 000 till exakt 500 pengar per besök. Manuella tag och automatiska vaktutbetalningar använder samma återstående pott; fiendekungens separata stöld är fortsatt 100 pengar.
 - 2026-08-29: Lokal riktad Chromium-QA godkände 52/52 fäll- och ekonomiregler, 10/10 AI-kontroller och ytterligare 7/7 exakta skattkammartester. Båda kungarna och sex vaktskategorier dog korrekt vid låst passage; alla tio riktningskopplingar, fel/rätt staty, säker motsatt sida, respawn, nytt besök, fysisk korsningsordning och max 500 passerade utan webbläsarfel. Regressionerna för två vindbryggor/flykt passerade 28/28, nollvakts-/köp-/migreringssviten passerade och statytiderna passerade 11/11. Fyra nya iPad-bilder och den obligatoriska spelklientens slutbild granskades visuellt. Ny cacheversion är `20260829-lethal-guardian-gates`.
+- 2026-08-29: Version `b49121f` publicerades framgångsrikt via GitHub Pages-körning `33263262180`. Live-menyn och spelsidan laddar cacheversion `20260829-lethal-guardian-gates`; live-spelfilens SHA-256 `e944da5535e8140b4245def1bb57d6ca053f5a780126394dae60ac211374991c` matchar den lokalt testade filen exakt. Liveversionen godkände därefter 52/52 fälltester, 10/10 AI-vägval, 7/7 exakta 500-pengarstester och den obligatoriska visuella spelstarten utan konsol-, sid- eller resursfel.
 
 ## Nästa kontroll
 
-- Publicera till August Games och köra samma riktade svit mot liveadressen.
+- Ingen blockerande kontroll återstår för den här uppdateringen.
