@@ -104,13 +104,13 @@ import * as THREE from "./vendor/three.module.js";
   const ABANDONED_S_GUARDIAN_ATTACK_SECONDS = 2;
   const ABANDONED_S_GUARDIAN_RANGE = 18;
   const ABANDONED_MONEY_PER_TAKE = 10;
-  const ABANDONED_MAX_MONEY_PER_VISIT = 1000;
+  const ABANDONED_MAX_MONEY_PER_VISIT = 500;
   const ABANDONED_TREASURE_SECONDS = 30;
   const ABANDONED_GUARD_MONEY_PER_SECOND = 10;
   const ABANDONED_STATUE_ATTACK_SECONDS = 3;
   const ABANDONED_LARGE_STATUE_ATTACK_SECONDS = 2;
   const ABANDONED_HEAL_SECONDS = 3;
-  const ABANDONED_ARROW_TRAP_DAMAGE = 20;
+  const ABANDONED_ARROW_TRAP_DAMAGE = "instant-death";
   const ABANDONED_FRONT_BRIDGE = Object.freeze({
     side: "front",
     x: 0,
@@ -144,11 +144,11 @@ import * as THREE from "./vendor/three.module.js";
     Object.freeze({ id: "s-front", name: "S-VAKTENS RUM VID V", x: -15, z: 82, width: 20, depth: 12, doorX: -5, doorZ: 82 }),
   ]);
   const ABANDONED_ARROW_TRAPS = Object.freeze([
-    Object.freeze({ id: "arrow-trap-1", z: -60, direction: 1 }),
-    Object.freeze({ id: "arrow-trap-2", z: -36, direction: -1 }),
-    Object.freeze({ id: "arrow-trap-3", z: -12, direction: 1 }),
-    Object.freeze({ id: "arrow-trap-4", z: 36, direction: -1 }),
-    Object.freeze({ id: "arrow-trap-5", z: 60, direction: 1 }),
+    Object.freeze({ id: "arrow-trap-1", z: -60, direction: 1, fromFrontGuardianRoomId: "large-2", fromRearGuardianRoomId: "large-1" }),
+    Object.freeze({ id: "arrow-trap-2", z: -36, direction: -1, fromFrontGuardianRoomId: "large-3", fromRearGuardianRoomId: "large-2" }),
+    Object.freeze({ id: "arrow-trap-3", z: -12, direction: 1, fromFrontGuardianRoomId: "large-4", fromRearGuardianRoomId: "large-3" }),
+    Object.freeze({ id: "arrow-trap-4", z: 36, direction: -1, fromFrontGuardianRoomId: "large-6", fromRearGuardianRoomId: "large-5" }),
+    Object.freeze({ id: "arrow-trap-5", z: 60, direction: 1, fromFrontGuardianRoomId: "large-7", fromRearGuardianRoomId: "large-6" }),
   ]);
   const TREASURE_FOUND_TEXT = "Skattkammaren är här borta!";
   const ABANDONED_CASTLE = Object.freeze({
@@ -170,6 +170,7 @@ import * as THREE from "./vendor/three.module.js";
     sGuardianRespawnSeconds: ABANDONED_S_GUARDIAN_RESPAWN_SECONDS,
     arrowTraps: ABANDONED_ARROW_TRAPS.length,
     arrowTrapDamage: ABANDONED_ARROW_TRAP_DAMAGE,
+    arrowTrapRule: "defeat-nearest-large-room-sword-shield-statue-before-crossing",
     treasureCandidateRoomIds: ABANDONED_TREASURE_ROOM_IDS,
     moneyPerTake: ABANDONED_MONEY_PER_TAKE,
     maxMoneyPerVisit: ABANDONED_MAX_MONEY_PER_VISIT,
@@ -308,6 +309,7 @@ import * as THREE from "./vendor/three.module.js";
     nearest: null,
     enteredEnemyCastle: false,
     abandonedCastleVisit: null,
+    lastAbandonedCastleOutcome: null,
     deterministicSeed: INITIAL_SEED,
   };
 
@@ -2059,6 +2061,7 @@ import * as THREE from "./vendor/three.module.js";
     state.stealth = null;
     state.mineRaid = null;
     state.mineDefense = null;
+    state.lastAbandonedCastleOutcome = null;
     state.abandonedCastleVisit = {
       counts: { ...safeCounts },
       currentRoomId: null,
@@ -2093,11 +2096,18 @@ import * as THREE from "./vendor/three.module.js";
       playerEscapeSide: null,
       playerEscapeWaitingNotice: false,
       playerKingRespawnedAtHome: false,
+      playerDeathCause: null,
+      clearedGuardianRoomIds: [],
       arrowTrapActorPositions: {},
       arrowTrapTriggers: Object.fromEntries(ABANDONED_ARROW_TRAPS.map((trap) => [trap.id, {
         count: 0,
+        crossingCount: 0,
+        lethalTriggerCount: 0,
+        safeCrossingCount: 0,
         lastTriggeredBy: null,
         lastTriggeredAt: null,
+        lastRequiredGuardianRoomId: null,
+        lastCrossingSide: null,
       }])),
     };
     Object.assign(state.player, { x: -6, y: 0, z: ABANDONED_FRONT_BRIDGE.spawnZ, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
@@ -2154,13 +2164,14 @@ import * as THREE from "./vendor/three.module.js";
       state.abandonedCastleVisit.rivalGuardIds.push(guard.id);
     });
     rebuildWorld();
-    showToast("35 RUM · 2 S-SKYTTAR · EN FIENDEKUNG OCH 10 VAKTER LETAR OCKSÅ", 3600);
+    showToast("PILFÄLLOR ÄR DÖDLIGA · BESEGRA STATYN MED SVÄRD OCH SKÖLD I STORA RUMMET BREDVID", 4200);
     updateHud();
   }
 
   function finishAbandonedCastle(playerDied = false) {
     const visit = state.abandonedCastleVisit;
     if (!visit) return;
+    const playerDiedInArrowTrap = playerDied && visit.playerDeathCause === "arrowTrap";
     const dead = { sword: 0, archer: 0, cavalry: 0 };
     state.units
       .filter((unit) => unit.team === 0 && !unit.alive && UNIT_TYPES.includes(unit.sourceType))
@@ -2169,6 +2180,15 @@ import * as THREE from "./vendor/three.module.js";
     normalizeTowerSlots();
     const visited = visit.visitedRoomIds.length;
     const moneyTaken = visit.totalMoneyTaken;
+    state.lastAbandonedCastleOutcome = {
+      playerDied,
+      deathCause: playerDied ? visit.playerDeathCause || "combat" : null,
+      arrowTrapId: visit.playerDeathTrapId || null,
+      requiredGuardianRoomId: visit.playerDeathGuardianRoomId || null,
+      visitedRoomCount: visited,
+      moneyTaken,
+      finishedAt: state.time,
+    };
     state.abandonedCastleVisit = null;
     state.units = [];
     state.loot = [];
@@ -2177,9 +2197,9 @@ import * as THREE from "./vendor/three.module.js";
     saveProgress();
     rebuildWorld();
     showOutcome(
-      playerDied ? "STATYERNA BESEGRADE KUNGEN" : "NI ÄR TILLBAKA FRÅN JÄTTESLOTTET",
+      playerDied ? playerDiedInArrowTrap ? "PILFÄLLAN BESEGRADE KUNGEN" : "STATYERNA BESEGRADE KUNGEN" : "NI ÄR TILLBAKA FRÅN JÄTTESLOTTET",
       playerDied
-        ? `Du började om i din borg. Gruppen hann besöka ${visited} av 35 rum och ta ${moneyTaken} pengar.`
+        ? `${playerDiedInArrowTrap ? "Statyn med svärd och sköld i rummet bredvid måste besegras före fällan. " : ""}Du började om i din borg. Gruppen hann besöka ${visited} av 35 rum och ta ${moneyTaken} pengar.`
         : `Ni besökte ${visited} av 35 rum och tog ${moneyTaken} pengar. Överlevande vakter är helade till 100 liv.`,
     );
   }
@@ -2871,6 +2891,64 @@ import * as THREE from "./vendor/three.module.js";
     return target;
   }
 
+  function abandonedTrapGuardianRoomId(trap, deltaZ) {
+    if (!trap || Math.abs(deltaZ) <= 1e-9) return null;
+    return deltaZ < 0 ? trap.fromFrontGuardianRoomId : trap.fromRearGuardianRoomId;
+  }
+
+  function abandonedGuardianRoomCleared(roomId) {
+    return Boolean(roomId && state.abandonedCastleVisit?.clearedGuardianRoomIds?.includes(roomId));
+  }
+
+  function abandonedCorridorRouteZ(position) {
+    const zone = abandonedNavigationZoneAt(position.x, position.z);
+    if (!zone) {
+      if (position.z > ABANDONED_FRONT_BRIDGE.gateZ) return ABANDONED_FRONT_BRIDGE.gateZ;
+      if (position.z < ABANDONED_REAR_BRIDGE.gateZ) return ABANDONED_REAR_BRIDGE.gateZ;
+      return position.z;
+    }
+    if (zone.type === "corridor") return position.z;
+    if (zone.type === "sAlcove") return zone.doorZ;
+    if (zone.type === "large") return zone.z;
+    if (zone.type === "small") return ABANDONED_WINGS[zone.wing - 1]?.z ?? zone.z;
+    return position.z;
+  }
+
+  function abandonedRequiredGuardianGate(from, target) {
+    if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit || !from || !target) return null;
+    const fromZ = abandonedCorridorRouteZ(from);
+    const targetZ = abandonedCorridorRouteZ(target);
+    const deltaZ = targetZ - fromZ;
+    if (Math.abs(deltaZ) <= 0.1) return null;
+    const direction = deltaZ < 0 ? -1 : 1;
+    const crossedTraps = ABANDONED_ARROW_TRAPS
+      .filter((trap) => direction < 0
+        ? trap.z < fromZ - 0.05 && trap.z > targetZ + 0.05
+        : trap.z > fromZ + 0.05 && trap.z < targetZ - 0.05)
+      .sort((a, b) => direction < 0 ? b.z - a.z : a.z - b.z);
+    for (const trap of crossedTraps) {
+      const guardianRoomId = abandonedTrapGuardianRoomId(trap, deltaZ);
+      if (abandonedGuardianRoomCleared(guardianRoomId)) continue;
+      const room = ABANDONED_ROOMS.find((entry) => entry.id === guardianRoomId);
+      if (room) return { trap, room, guardianRoomId, crossingSide: direction < 0 ? "front" : "rear" };
+    }
+    return null;
+  }
+
+  function abandonedGuardianAwareNavigationTarget(unit, target) {
+    const gate = unit?.statue ? null : abandonedRequiredGuardianGate(unit, target);
+    if (!gate) {
+      if (unit) {
+        unit.requiredGuardianRoomId = null;
+        unit.requiredArrowTrapId = null;
+      }
+      return abandonedNavigationTarget(unit, target);
+    }
+    unit.requiredGuardianRoomId = gate.guardianRoomId;
+    unit.requiredArrowTrapId = gate.trap.id;
+    return abandonedNavigationTarget(unit, gate.room);
+  }
+
   function abandonedMoneyPosition() {
     const room = ABANDONED_ROOMS.find((entry) => entry.id === activeAbandonedTreasureRoomId());
     return room ? { x: room.x + room.side * 4, z: room.z + 2.6 } : { x: 0, z: -84 };
@@ -3070,7 +3148,21 @@ import * as THREE from "./vendor/three.module.js";
         unit.awake = false;
         unit.lockedTargetId = null;
         unit.respawnTimer = unit.respawnAfterSeconds || ABANDONED_STATUE_RESPAWN_SECONDS;
-        if (state.abandonedCastleVisit) state.abandonedCastleVisit.statuesDefeated++;
+        if (state.abandonedCastleVisit) {
+          const visit = state.abandonedCastleVisit;
+          visit.statuesDefeated++;
+          const room = ABANDONED_ROOMS.find((entry) => entry.id === unit.roomId);
+          const isSwordShieldGuardian = !unit.sGuardian
+            && room?.type === "large"
+            && unit.weapon === "sword"
+            && unit.shield === true;
+          if (isSwordShieldGuardian && !visit.clearedGuardianRoomIds.includes(room.id)) {
+            visit.clearedGuardianRoomIds.push(room.id);
+            visit.lastClearedGuardianRoomId = room.id;
+            visit.lastClearedGuardianAt = state.time;
+            showToast(`STATYN I ${room.name} ÄR BESEGRAD · PILFÄLLAN ÄR SÄKER FRÅN DEN HÄR SIDAN!`, 2600);
+          }
+        }
       }
       if (unit.team === 0 && ["mineRaid", "mineDefense"].includes(state.scene) && UNIT_TYPES.includes(unit.sourceType) && !unit.lossRecorded) {
         unit.lossRecorded = true;
@@ -3219,7 +3311,7 @@ import * as THREE from "./vendor/three.module.js";
       visit.treasureUnlocked = true;
       visit.treasureTimerStarted = true;
       visit.treasureStartedAt = state.time;
-      if (moneyInteraction) moneyInteraction.label = `TA ${ABANDONED_MONEY_PER_TAKE} PENGAR · MAX 1 000`;
+      if (moneyInteraction) moneyInteraction.label = `TA ${ABANDONED_MONEY_PER_TAKE} PENGAR · MAX 500`;
       if (visit.friendlySearch.foundAt !== state.time) showToast("ALLA ÄR INNE · SKATTKAMMAREN ÄR ÖPPEN I 30 SEKUNDER!", 2600);
     } else if (moneyInteraction && !visit.treasureTimerStarted) {
       const missing = Math.max(0, livingGuards.length - guardsInside.length);
@@ -3242,7 +3334,7 @@ import * as THREE from "./vendor/three.module.js";
     if (state.nearest?.kind === "infiniteMoney") state.nearest = null;
     showToast(
       reason === "max"
-        ? "NI HAR TAGIT MAX 1 000 PENGAR · SKATTEN ÄR SLUT FÖR DET HÄR BESÖKET"
+        ? "NI HAR TAGIT MAX 500 PENGAR · SKATTEN ÄR SLUT FÖR DET HÄR BESÖKET"
         : "DE 30 SEKUNDERNA ÄR SLUT · ALLA PENGAR FÖRSVANN",
       2800,
     );
@@ -3466,12 +3558,29 @@ import * as THREE from "./vendor/three.module.js";
     });
   }
 
-  function fireAbandonedArrowTrap(trap, actor) {
+  function crossAbandonedArrowTrap(trap, actor, deltaZ) {
     const visit = state.abandonedCastleVisit;
-    if (!visit) return;
+    if (!visit) return { safe: false, lethal: false };
+    const guardianRoomId = abandonedTrapGuardianRoomId(trap, deltaZ);
+    const crossingSide = deltaZ < 0 ? "front" : "rear";
     const trigger = visit.arrowTrapTriggers[trap.id];
     if (trigger) {
+      trigger.crossingCount = (trigger.crossingCount || 0) + 1;
+      trigger.lastCrossedBy = actor.id;
+      trigger.lastCrossedAt = state.time;
+      trigger.lastRequiredGuardianRoomId = guardianRoomId;
+      trigger.lastCrossingSide = crossingSide;
+    }
+    visit.arrowTrapTotalCrossings = (visit.arrowTrapTotalCrossings || 0) + 1;
+    if (abandonedGuardianRoomCleared(guardianRoomId)) {
+      if (trigger) trigger.safeCrossingCount = (trigger.safeCrossingCount || 0) + 1;
+      visit.arrowTrapSafeCrossings = (visit.arrowTrapSafeCrossings || 0) + 1;
+      if (actor.player) showToast("STATYN ÄR BESEGRAD · DU KORSAR PILFÄLLAN SÄKERT!", 1500);
+      return { safe: true, lethal: false, guardianRoomId, crossingSide };
+    }
+    if (trigger) {
       trigger.count++;
+      trigger.lethalTriggerCount = (trigger.lethalTriggerCount || 0) + 1;
       trigger.lastTriggeredBy = actor.id;
       trigger.lastTriggeredAt = state.time;
     }
@@ -3480,9 +3589,13 @@ import * as THREE from "./vendor/three.module.js";
     const right = { x: 4.72, y: 0.1, z: trap.z };
     fireTracer(trap.direction > 0 ? left : right, trap.direction > 0 ? right : left, 0xffb14a);
     if (actor.player) {
-      showToast("PILFÄLLA! PILAR SKJUTER GENOM KORRIDOREN!", 1500);
-      damagePlayer(ABANDONED_ARROW_TRAP_DAMAGE);
-    } else damageUnit(actor, ABANDONED_ARROW_TRAP_DAMAGE);
+      visit.playerDeathCause = "arrowTrap";
+      visit.playerDeathTrapId = trap.id;
+      visit.playerDeathGuardianRoomId = guardianRoomId;
+      showToast("PILFÄLLAN ÄR LÅST! BESEGRA STATYN MED SVÄRD OCH SKÖLD I RUMMET BREDVID!", 1900);
+      damagePlayer(Math.max(1, state.player.hp));
+    } else damageUnit(actor, Math.max(1, actor.hp));
+    return { safe: false, lethal: true, guardianRoomId, crossingSide };
   }
 
   function updateAbandonedArrowTraps() {
@@ -3499,16 +3612,21 @@ import * as THREE from "./vendor/three.module.js";
       if (previous) {
         const deltaZ = entry.z - previous.z;
         if (Math.abs(deltaZ) > 1e-9) {
-          ABANDONED_ARROW_TRAPS.forEach((trap) => {
-            if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+          const crossings = ABANDONED_ARROW_TRAPS.map((trap) => {
             const crossing = (trap.z - previous.z) / deltaZ;
-            if (crossing <= 1e-6 || crossing > 1 + 1e-6) return;
+            if (crossing <= 1e-6 || crossing > 1 + 1e-6) return null;
             const crossingX = lerp(previous.x, entry.x, clamp(crossing, 0, 1));
             // The launchers only cover the long central corridor; crossing the
             // same z-coordinate inside a side room cannot trigger a volley.
-            if (Math.abs(crossingX) >= 4.55) return;
-            fireAbandonedArrowTrap(trap, entry.player ? entry : entry.actor);
-          });
+            if (Math.abs(crossingX) >= 4.55) return null;
+            return { trap, crossing };
+          }).filter(Boolean).sort((a, b) => a.crossing - b.crossing);
+          for (const crossing of crossings) {
+            if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) break;
+            const actor = entry.player ? entry : entry.actor;
+            const result = crossAbandonedArrowTrap(crossing.trap, actor, deltaZ);
+            if (result.lethal || (!entry.player && !actor.alive)) break;
+          }
         }
       }
       if (state.scene === "abandonedCastle" && state.abandonedCastleVisit === visit) {
@@ -3614,7 +3732,7 @@ import * as THREE from "./vendor/three.module.js";
           if (goal) {
             const goalDistance = Math.hypot(goal.x - unit.x, goal.z - unit.z);
             if (goalDistance > stopDistance) {
-              const moveTarget = abandonedNavigationTarget(unit, goal);
+              const moveTarget = abandonedGuardianAwareNavigationTarget(unit, goal);
               const waypointDistance = Math.hypot(moveTarget.x - unit.x, moveTarget.z - unit.z) || 1;
               let moveX = (moveTarget.x - unit.x) / waypointDistance;
               let moveZ = (moveTarget.z - unit.z) / waypointDistance;
@@ -3669,7 +3787,7 @@ import * as THREE from "./vendor/three.module.js";
       if (distance > range || !lineOfSight) {
         if (speed > 0) {
           const waypoint = state.scene === "abandonedCastle"
-            ? abandonedNavigationTarget(unit, target)
+            ? abandonedGuardianAwareNavigationTarget(unit, target)
             : rearBridgeWaypoint(unit, target);
           const moveTarget = waypoint || target;
           const moveDistance = Math.hypot(moveTarget.x - unit.x, moveTarget.z - unit.z) || 1;
@@ -3898,7 +4016,7 @@ import * as THREE from "./vendor/three.module.js";
       const visit = state.abandonedCastleVisit;
       if (!visit?.treasureTimerStarted || !visit.treasureAvailable) {
         if (visit?.treasureMaxReached) {
-          showToast("MAX 1 000 PENGAR ÄR REDAN TAGNA DET HÄR BESÖKET");
+          showToast("MAX 500 PENGAR ÄR REDAN TAGNA DET HÄR BESÖKET");
           return;
         }
         const living = abandonedPartyMembers("friendly");
@@ -3919,7 +4037,7 @@ import * as THREE from "./vendor/three.module.js";
       saveProgress();
       sfx("coin");
       if (visit.totalMoneyTaken >= ABANDONED_MAX_MONEY_PER_VISIT) closeAbandonedTreasure("max");
-      else showToast(`DU TOG ${payout} PENGAR · ${visit.totalMoneyTaken} / 1 000`, 1600);
+      else showToast(`DU TOG ${payout} PENGAR · ${visit.totalMoneyTaken} / 500`, 1600);
       updateHud();
     }
     else if (item.kind === "guard") {
@@ -4131,7 +4249,7 @@ import * as THREE from "./vendor/three.module.js";
       guards: { sword: 0, archer: 0, cavalry: 0 }, towerSlots: [false, false, false, false],
       miners: 0, mineElapsed: 0, minePayouts: 0,
       kingdoms: makeKingdoms(),
-      quickStealth: { sword: 0, archer: 0, cavalry: 0 }, quickStealthIds: [], weapon: "sword", units: [], loot: [], battle: null, stealth: null, mineRaid: null, mineDefense: null, abandonedCastleVisit: null, pendingMineDefense: null, loadNotice: "",
+      quickStealth: { sword: 0, archer: 0, cavalry: 0 }, quickStealthIds: [], weapon: "sword", units: [], loot: [], battle: null, stealth: null, mineRaid: null, mineDefense: null, abandonedCastleVisit: null, lastAbandonedCastleOutcome: null, pendingMineDefense: null, loadNotice: "",
       nightMineRaidTriggered: false, nightMineRaidAt: 52, sleepRaidMessage: "", mineTransferId: 0, lastMineTransfer: null,
       selection: null, question: null, nearest: null, enteredEnemyCastle: false, deterministicSeed: INITIAL_SEED,
     });
@@ -4229,6 +4347,9 @@ import * as THREE from "./vendor/three.module.js";
         x: 0,
         corridorOnly: true,
         damage: ABANDONED_ARROW_TRAP_DAMAGE,
+        requiresNearbyLargeRoomGuardian: true,
+        guardianWeapon: "sword",
+        guardianShield: true,
       })),
       treasureCandidateRoomIds: [...ABANDONED_TREASURE_ROOM_IDS],
       reachableRoomIds: ABANDONED_ROOMS.map((room) => room.id),
@@ -4248,6 +4369,7 @@ import * as THREE from "./vendor/three.module.js";
         id: unit.id, team: unit.team, type: unit.type, king: unit.king, worker: unit.worker,
         statue: unit.statue, sGuardian: unit.sGuardian, shield: unit.shield, weapon: unit.weapon, rivalParty: unit.rivalParty,
         broughtGuard: unit.broughtGuard, searchParty: unit.searchParty, searchTargetRoomId: unit.searchTargetRoomId,
+        requiredGuardianRoomId: unit.requiredGuardianRoomId || null, requiredArrowTrapId: unit.requiredArrowTrapId || null,
         abandonedHealSecondsRemaining: rounded(unit.abandonedHealSecondsRemaining || 0),
         roomId: abandonedRoomAt(unit.x, unit.z)?.id || null,
         x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, maxHp: unit.maxHp,
@@ -4268,6 +4390,9 @@ import * as THREE from "./vendor/three.module.js";
       currentRoomId: abandonedVisitState.currentRoomId,
       visitedRoomIds: [...abandonedVisitState.visitedRoomIds],
       visitedRoomCount: abandonedVisitState.visitedRoomIds.length,
+      clearedGuardianRoomIds: [...abandonedVisitState.clearedGuardianRoomIds],
+      lastClearedGuardianRoomId: abandonedVisitState.lastClearedGuardianRoomId || null,
+      lastClearedGuardianAt: abandonedVisitState.lastClearedGuardianAt ?? null,
       layout: getAbandonedCastleLayout(),
       friendlySearch: {
         order: [...abandonedVisitState.friendlySearch.order],
@@ -4353,11 +4478,23 @@ import * as THREE from "./vendor/three.module.js";
         x: 0,
         corridorOnly: true,
         damage: ABANDONED_ARROW_TRAP_DAMAGE,
+        requiresNearbyLargeRoomGuardian: true,
+        fromFrontGuardianCleared: abandonedGuardianRoomCleared(trap.fromFrontGuardianRoomId),
+        fromRearGuardianCleared: abandonedGuardianRoomCleared(trap.fromRearGuardianRoomId),
         triggerCount: abandonedVisitState.arrowTrapTriggers[trap.id]?.count || 0,
+        crossingCount: abandonedVisitState.arrowTrapTriggers[trap.id]?.crossingCount || 0,
+        lethalTriggerCount: abandonedVisitState.arrowTrapTriggers[trap.id]?.lethalTriggerCount || 0,
+        safeCrossingCount: abandonedVisitState.arrowTrapTriggers[trap.id]?.safeCrossingCount || 0,
         lastTriggeredBy: abandonedVisitState.arrowTrapTriggers[trap.id]?.lastTriggeredBy || null,
         lastTriggeredAt: abandonedVisitState.arrowTrapTriggers[trap.id]?.lastTriggeredAt ?? null,
+        lastCrossedBy: abandonedVisitState.arrowTrapTriggers[trap.id]?.lastCrossedBy || null,
+        lastCrossedAt: abandonedVisitState.arrowTrapTriggers[trap.id]?.lastCrossedAt ?? null,
+        lastRequiredGuardianRoomId: abandonedVisitState.arrowTrapTriggers[trap.id]?.lastRequiredGuardianRoomId || null,
+        lastCrossingSide: abandonedVisitState.arrowTrapTriggers[trap.id]?.lastCrossingSide || null,
       })),
       arrowTrapTotalTriggers: abandonedVisitState.arrowTrapTotalTriggers || 0,
+      arrowTrapTotalCrossings: abandonedVisitState.arrowTrapTotalCrossings || 0,
+      arrowTrapSafeCrossings: abandonedVisitState.arrowTrapSafeCrossings || 0,
       statueCounts: {
         total: state.units.filter((unit) => unit.statue).length,
         ordinaryRoomGuardians: state.units.filter((unit) => unit.statue && !unit.sGuardian).length,
@@ -4509,6 +4646,7 @@ import * as THREE from "./vendor/three.module.js";
         enemyAlive: state.units.filter((unit) => unit.team === 1 && unit.alive).length,
       } : null,
       pendingMineDefense: state.pendingMineDefense ? { ...state.pendingMineDefense } : null,
+      lastAbandonedCastleOutcome: state.lastAbandonedCastleOutcome ? { ...state.lastAbandonedCastleOutcome } : null,
       lastMineTransfer: state.lastMineTransfer ? { ...state.lastMineTransfer } : null,
       selection: state.selection ? { kind: state.selection.kind, target: state.selection.target, max: state.selection.max, counts: { ...state.selection.counts }, minimums: { ...state.selection.minimums }, incoming: state.selection.incoming } : null,
       loot: state.loot.filter((loot) => !loot.taken).map((loot) => ({ kind: loot.kind, amount: loot.amount, x: loot.x, z: loot.z })),
