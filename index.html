@@ -112,6 +112,25 @@
       letter-spacing: 0.08em;
     }
     .card.ikea-card:hover { border-color: #fff0a3; }
+    .card.where-exit-card {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 18%, rgba(255, 211, 79, 0.3), transparent 27%),
+        linear-gradient(150deg, rgba(47, 119, 118, 0.98), rgba(16, 60, 67, 0.99));
+      border-color: #f1a13d;
+    }
+    .card.where-exit-card::after {
+      position: absolute;
+      top: 15px;
+      right: 16px;
+      content: "7 VÅNINGAR";
+      color: #fff1b5;
+      font: 900 11px/1 monospace;
+      letter-spacing: 0.06em;
+      transform: rotate(4deg);
+    }
+    .card.where-exit-card:hover { border-color: #ffd34f; }
     .card.paint-war-card {
       position: relative;
       overflow: hidden;
@@ -327,6 +346,13 @@
       <span class="play">Spela ▶</span>
     </a>
 
+
+    <a class="card where-exit-card" href="where-is-exit/?v=20260830-2">
+      <div class="icon">🏭</div>
+      <h2>WHERE'S EXIT</h2>
+      <p>Utforska en enorm 3D-fabrik, klara fem uppdrag och ta dig förbi tre lekfulla monster.</p>
+      <span class="play">Spela ▶</span>
+    </a>
 
     <a class="card paint-war-card" href="paint-war/?v=20260816-camera-facing">
       <div class="icon">🎨</div>

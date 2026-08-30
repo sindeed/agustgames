@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="Where's Exit – ett lekfullt monsterspel i en jättestor fabrik."
+    />
+    <meta name="theme-color" content="#e48a27" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Where's Exit – Agust Games</title>
+    <link rel="stylesheet" href="style.css?v=20260830-2" />
+    <script type="module" src="game.js?v=20260830-2"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#startButton">Hoppa till startknappen</a>
+
+    <main class="game-page" aria-labelledby="gameTitle">
+      <section class="game-shell" aria-label="Spelruta för Where's Exit">
+        <div class="canvas-frame">
+          <canvas
+            id="gameCanvas"
+            width="1280"
+            height="720"
+            tabindex="0"
+            aria-label="Where's Exit. Utforska en stor fabrik, gör uppdrag och undvik de tre lekfulla monstren."
+          >
+            Din webbläsare kan inte visa spelet. Prova en nyare webbläsare.
+          </canvas>
+
+          <div id="crosshair" class="crosshair" aria-hidden="true" hidden>
+            <span></span>
+          </div>
+
+          <section id="gameHud" class="game-hud" aria-label="Spelstatus" hidden>
+            <div class="mission-card">
+              <span class="hud-label">UPPDRAG</span>
+              <strong id="hudMission">Hitta 10 gula lampor</strong>
+              <span id="hudProgress" class="hud-progress">0 / 10</span>
+              <ol id="missionList" class="mission-list" aria-label="Spelets fem uppdrag"></ol>
+            </div>
+
+            <div class="floor-card" aria-label="Nuvarande våning">
+              <span class="hud-label">VÅNING</span>
+              <strong id="hudFloor">1 / 7</strong>
+            </div>
+
+            <div
+              id="hudMessage"
+              class="hud-message"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              hidden
+            ></div>
+          </section>
+
+          <nav id="gameNav" class="game-nav" aria-label="Spelmeny" hidden>
+            <a class="utility-button" href="../" aria-label="Tillbaka till Agust Games">⌂</a>
+            <button
+              id="fullscreenButton"
+              class="utility-button"
+              type="button"
+              aria-label="Visa spelet i helskärm"
+            >
+              ⛶
+            </button>
+          </nav>
+
+          <section
+            id="elevatorOverlay"
+            class="elevator-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="elevatorTitle"
+            hidden
+          >
+            <div class="elevator-panel">
+              <div class="elevator-panel-top">
+                <h2 id="elevatorTitle">VÄLJ VÅNING</h2>
+                <button
+                  id="elevatorCloseButton"
+                  class="dialog-close-button"
+                  type="button"
+                  aria-label="Stäng hissens våningsval"
+                >
+                  ×
+                </button>
+              </div>
+              <div
+                id="elevatorFloorButtons"
+                class="elevator-floor-buttons"
+                role="group"
+                aria-label="Fabrikens sju våningar"
+              ></div>
+            </div>
+          </section>
+
+          <section
+            id="winOverlay"
+            class="win-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="winTitle"
+            hidden
+          >
+            <div class="win-panel">
+              <h2 id="winTitle">DU KLARADE SPELET!</h2>
+              <button id="winMenuButton" class="win-menu-button" type="button">
+                TILL MENYN
+              </button>
+            </div>
+          </section>
+
+          <div id="touchControls" class="touch-controls" aria-label="Pekkontroller" hidden>
+            <div
+              id="touchJoystick"
+              class="touch-joystick"
+              role="group"
+              aria-label="Dra för att gå"
+            >
+              <span class="joystick-arrows" aria-hidden="true">‹ · ›</span>
+              <span id="touchKnob" class="touch-knob" aria-hidden="true"></span>
+            </div>
+
+            <div class="touch-actions" role="group" aria-label="Spelknappar">
+              <button
+                class="touch-action touch-action-sprint"
+                data-action="sprint"
+                type="button"
+                aria-label="Spring"
+              >
+                <span class="action-icon" aria-hidden="true">»</span>
+                <span>SPRING</span>
+              </button>
+              <button
+                class="touch-action touch-action-interact"
+                data-action="interact"
+                type="button"
+                aria-label="Ta eller använd en sak"
+              >
+                <span class="action-icon" aria-hidden="true">✋</span>
+                <span>TA SAK</span>
+              </button>
+              <button
+                class="touch-action touch-action-jump"
+                data-action="jump"
+                type="button"
+                aria-label="Hoppa"
+              >
+                <span class="action-icon" aria-hidden="true">↑</span>
+                <span>HOPPA</span>
+              </button>
+            </div>
+          </div>
+
+          <section id="startOverlay" class="start-overlay" aria-labelledby="gameTitle">
+            <div class="start-panel">
+              <h1 id="gameTitle" class="game-title">
+                <span>WHERE'S</span>
+                <span class="title-exit">EXIT</span>
+              </h1>
+              <button id="startButton" class="start-button" type="button">
+                STARTA SPELET
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
