@@ -120,6 +120,7 @@ import * as THREE from "./vendor/three.module.js";
   const ABANDONED_DRAGON_REWARD = 1500;
   const ABANDONED_DRAGON_HAND_SECONDS = 2;
   const ABANDONED_DRAGON_HAND_DAMAGE = 32;
+  const ABANDONED_DRAGON_MELEE_RANGE = 5.1;
   const ABANDONED_DRAGON_FIRE_SECONDS = 4.5;
   const ABANDONED_DRAGON_FIRE_WARNING_SECONDS = 0.9;
   const ABANDONED_DRAGON_FIRE_DAMAGE = 24;
@@ -197,8 +198,9 @@ import * as THREE from "./vendor/three.module.js";
     roomsTotal: 35,
     explorable: true,
     maxPlayerGuards: ABANDONED_MAX_GUARDS,
-    statues: 41,
-    roomStatues: 35,
+    statues: 39,
+    roomStatues: 33,
+    stairRoomStatues: 0,
     sGuardianStatues: 2,
     statueHp: ABANDONED_STATUE_HP,
     statueRespawnSeconds: ABANDONED_STATUE_RESPAWN_SECONDS,
@@ -214,6 +216,9 @@ import * as THREE from "./vendor/three.module.js";
     alternativeUpperFloor: true,
     dragonHp: ABANDONED_DRAGON_HP,
     dragonReward: ABANDONED_DRAGON_REWARD,
+    dragonColor: "green",
+    dragonMeleeRange: ABANDONED_DRAGON_MELEE_RANGE,
+    dragonFireRange: `>${ABANDONED_DRAGON_MELEE_RANGE}`,
     upperTowerStatues: 4,
     upperTowerStatuesInvulnerable: true,
     statueAttackSeconds: ABANDONED_STATUE_ATTACK_SECONDS,
@@ -1427,9 +1432,9 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function buildDragonModel(parent) {
-    const scales = new THREE.MeshStandardMaterial({ color: 0x8f1f18, roughness: 0.6, metalness: 0.08 });
-    const darkScales = new THREE.MeshStandardMaterial({ color: 0x351419, roughness: 0.76 });
-    const belly = new THREE.MeshStandardMaterial({ color: 0xd1843e, emissive: 0x2f0b03, emissiveIntensity: 0.45, roughness: 0.72 });
+    const scales = new THREE.MeshStandardMaterial({ color: 0x36a443, roughness: 0.6, metalness: 0.08 });
+    const darkScales = new THREE.MeshStandardMaterial({ color: 0x123f22, roughness: 0.76 });
+    const belly = new THREE.MeshStandardMaterial({ color: 0xb1cf63, emissive: 0x18330c, emissiveIntensity: 0.32, roughness: 0.72 });
     const fire = new THREE.MeshStandardMaterial({ color: 0xffb12e, emissive: 0xff2d00, emissiveIntensity: 1.4, roughness: 0.25 });
     const body = addMesh(new THREE.SphereGeometry(2.6, 18, 13), scales, parent);
     body.scale.set(1.15, 1.18, 1.55);
@@ -2325,9 +2330,8 @@ import * as THREE from "./vendor/three.module.js";
     });
 
     ABANDONED_ROOMS.forEach((room) => {
-      const stairGuardian = [ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id);
-      const statueX = stairGuardian ? room.x - 2.15 : room.x;
-      state.units.push(makeUnit(2, "statue", statueX, room.z, {
+      if ([ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id)) return;
+      state.units.push(makeUnit(2, "statue", room.x, room.z, {
         id: `statue-${room.id}`,
         statue: true,
         roomId: room.id,
@@ -2374,7 +2378,7 @@ import * as THREE from "./vendor/three.module.js";
       hp: ABANDONED_DRAGON_HP,
       shield: false,
       weapon: "fire-and-claws",
-      color: 0x8f1f18,
+      color: 0x36a443,
     }));
     ABANDONED_UPPER.towerPositions.forEach((position, index) => {
       state.units.push(makeUnit(2, "archer", position.x, position.z, {
@@ -3218,6 +3222,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function abandonedStairGuardianDefeated(roomId) {
+    if ([ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(roomId)) return true;
     const guardian = state.units.find((unit) => unit.id === `statue-${roomId}`);
     return Boolean(guardian && !guardian.alive);
   }
@@ -3246,10 +3251,6 @@ import * as THREE from "./vendor/three.module.js";
     if (party === "friendly") {
       if (visit.rewardRoute === "treasury" || visit.treasureTimerStarted || visit.totalMoneyTaken > 0) {
         showToast("DU HAR VALT SKATTKAMMAREN · DRAKVÄGEN ÄR STÄNGD DET HÄR BESÖKET", 2600);
-        return false;
-      }
-      if (!abandonedStairGuardianDefeated(ABANDONED_UPPER.playerStairRoomId)) {
-        showToast("BESEGRA STATYN MED SVÄRD OCH SKÖLD I TRAPPRUMMET FÖRST", 2200);
         return false;
       }
       visit.rewardRoute = "dragon";
@@ -4109,8 +4110,6 @@ import * as THREE from "./vendor/three.module.js";
     if (visit.playerFloor === "upper" && Number.isFinite(visit.rivalUpperArrivalTimer) && !visit.rivalPartyEnteredUpper) {
       visit.rivalUpperArrivalTimer = Math.max(0, visit.rivalUpperArrivalTimer - dt);
       if (visit.rivalUpperArrivalTimer <= 1e-9) {
-        const rearStairGuardian = state.units.find((unit) => unit.id === `statue-${ABANDONED_UPPER.rivalStairRoomId}`);
-        if (rearStairGuardian?.alive) damageUnit(rearStairGuardian, rearStairGuardian.hp);
         enterAbandonedUpper("rival");
         if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
       }
@@ -4145,6 +4144,18 @@ import * as THREE from "./vendor/three.module.js";
       const candidates = abandonedUpperPartyTargets();
       candidates.sort((a, b) => Math.hypot(a.x - dragon.x, a.z - dragon.z) - Math.hypot(b.x - dragon.x, b.z - dragon.z));
       const nearest = candidates[0] || null;
+      const nearestDistance = nearest ? Math.hypot(nearest.x - dragon.x, nearest.z - dragon.z) : Infinity;
+      dragon.targetDistance = nearest ? nearestDistance : null;
+      dragon.attackMode = nearest ? nearestDistance <= ABANDONED_DRAGON_MELEE_RANGE ? "melee" : "fire" : "idle";
+      if (dragon.pendingFire && dragon.attackMode !== "fire") {
+        const warning = dragon.pendingFire.warning;
+        if (warning?.parent === effectRoot) {
+          warning.geometry.dispose?.();
+          warning.material.dispose?.();
+          effectRoot.remove(warning);
+        }
+        dragon.pendingFire = null;
+      }
       if (dragon.pendingFire) {
         dragon.pendingFire.secondsRemaining = Math.max(0, dragon.pendingFire.secondsRemaining - dt);
         if (dragon.pendingFire.secondsRemaining <= 1e-9) {
@@ -4160,24 +4171,17 @@ import * as THREE from "./vendor/three.module.js";
         }
       }
       if (nearest) {
-        const distance = Math.hypot(nearest.x - dragon.x, nearest.z - dragon.z) || 1;
         dragon.facing = Math.atan2(nearest.x - dragon.x, nearest.z - dragon.z);
-        if (distance > 5.1) {
-          const speed = 1.35;
-          moveUnit(dragon, (nearest.x - dragon.x) / distance * speed * dt, (nearest.z - dragon.z) / distance * speed * dt);
-          dragon.walk += dt * 2.8;
-        } else if (dragon.handCooldown <= 1e-9) {
+        if (dragon.attackMode === "melee" && dragon.handCooldown <= 1e-9) {
           dragon.handCooldown = ABANDONED_DRAGON_HAND_SECONDS;
           dragon.handSwipes = (dragon.handSwipes || 0) + 1;
           dragon.lastHandAt = state.time;
           damageAbandonedUpperTarget(nearest, ABANDONED_DRAGON_HAND_DAMAGE);
           if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
-        }
-        if (!dragon.pendingFire && dragon.fireCooldown <= 1e-9) {
-          const fireTarget = candidates[(dragon.fireBreaths || 0) % candidates.length] || nearest;
+        } else if (dragon.attackMode === "fire" && !dragon.pendingFire && dragon.fireCooldown <= 1e-9) {
           dragon.fireCooldown = ABANDONED_DRAGON_FIRE_SECONDS;
-          dragon.pendingFire = { x: fireTarget.x, z: fireTarget.z, secondsRemaining: ABANDONED_DRAGON_FIRE_WARNING_SECONDS };
-          addDragonFireWarning(fireTarget.x, fireTarget.z);
+          const warning = addDragonFireWarning(nearest.x, nearest.z);
+          dragon.pendingFire = { x: nearest.x, z: nearest.z, secondsRemaining: ABANDONED_DRAGON_FIRE_WARNING_SECONDS, warning };
           showToast("DRAKEN SPRUTAR ELD · FLYTTA DIG FRÅN DEN ORANGE CIRKELN!", 1700);
         }
       }
@@ -4274,10 +4278,9 @@ import * as THREE from "./vendor/three.module.js";
               goal = unit.rival ? ABANDONED_UPPER.dragon : rivalKing || ABANDONED_UPPER.dragon;
               stopDistance = unit.rival ? 5.2 : 3.2;
             } else if (visit.rivalRouteChoice === "dragon") {
-              const stairGuardian = state.units.find((entry) => entry.id === `statue-${ABANDONED_UPPER.rivalStairRoomId}`);
-              goal = stairGuardian?.alive ? stairGuardian : ABANDONED_UPPER.groundRivalStair;
-              stopDistance = stairGuardian?.alive ? 2.25 : 1.05;
-              if (unit.rival && !stairGuardian?.alive && Math.hypot(unit.x - goal.x, unit.z - goal.z) <= 3) {
+              goal = ABANDONED_UPPER.groundRivalStair;
+              stopDistance = 1.05;
+              if (unit.rival && Math.hypot(unit.x - goal.x, unit.z - goal.z) <= 3) {
                 enterAbandonedUpper("rival");
                 return true;
               }
@@ -4557,7 +4560,6 @@ import * as THREE from "./vendor/three.module.js";
           const candidate = { ...item, distance };
           if (item.kind === "abandonedStairsUp") {
             if (state.abandonedCastleVisit?.rewardRoute === "treasury") candidate.label = "DRAKVÄGEN ÄR STÄNGD";
-            else if (!abandonedStairGuardianDefeated(item.roomId)) candidate.label = "BESEGRA STATYN I TRAPPRUMMET";
           }
           state.nearest = candidate;
         }
@@ -4926,6 +4928,7 @@ import * as THREE from "./vendor/three.module.js";
           roomId: ABANDONED_UPPER.playerStairRoomId,
           ground: { ...ABANDONED_UPPER.groundPlayerStair },
           upper: { ...ABANDONED_UPPER.upperPlayerStair },
+          guardianRequired: false,
           partyMovesOnlyWithKing: true,
         },
         rival: {
@@ -4933,13 +4936,21 @@ import * as THREE from "./vendor/three.module.js";
           roomId: ABANDONED_UPPER.rivalStairRoomId,
           ground: { ...ABANDONED_UPPER.groundRivalStair },
           upper: { ...ABANDONED_UPPER.upperRivalStair },
+          guardianRequired: false,
           partyMovesOnlyWithKing: true,
         },
       },
       upperFloor: {
         width: ABANDONED_UPPER.width,
         depth: ABANDONED_UPPER.depth,
-        dragon: { ...ABANDONED_UPPER.dragon, hp: ABANDONED_DRAGON_HP, reward: ABANDONED_DRAGON_REWARD },
+        dragon: {
+          ...ABANDONED_UPPER.dragon,
+          hp: ABANDONED_DRAGON_HP,
+          reward: ABANDONED_DRAGON_REWARD,
+          appearance: "green",
+          meleeRange: ABANDONED_DRAGON_MELEE_RANGE,
+          fireRange: `>${ABANDONED_DRAGON_MELEE_RANGE}`,
+        },
         towerPositions: ABANDONED_UPPER.towerPositions.map((position) => ({ ...position })),
         towerStatues: 4,
         towerStatueWeapon: "bow",
@@ -4963,7 +4974,7 @@ import * as THREE from "./vendor/three.module.js";
           maxZ: room.z + room.depth / 2,
         },
         connectsTo: [...room.connectsTo],
-        hasStatue: true,
+        hasStatue: ![ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id),
         hasStaircase: [ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id),
         treasureCandidate: Boolean(room.treasureCandidate),
       })),
@@ -5077,6 +5088,10 @@ import * as THREE from "./vendor/three.module.js";
             hp: dragon.hp,
             maxHp: dragon.maxHp,
             alive: dragon.alive,
+            appearance: "green",
+            attackMode: dragon.attackMode || "idle",
+            targetDistance: Number.isFinite(dragon.targetDistance) ? rounded(dragon.targetDistance) : null,
+            meleeRange: ABANDONED_DRAGON_MELEE_RANGE,
             handSwipes: dragon.handSwipes || 0,
             fireBreaths: dragon.fireBreaths || 0,
             fireWarning: dragon.pendingFire ? { x: rounded(dragon.pendingFire.x), z: rounded(dragon.pendingFire.z), secondsRemaining: rounded(dragon.pendingFire.secondsRemaining) } : null,
