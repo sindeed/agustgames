@@ -6,6 +6,7 @@ const startOverlay = document.getElementById("startOverlay");
 const startButton = document.getElementById("startButton");
 const gameHud = document.getElementById("gameHud");
 const gameNav = document.getElementById("gameNav");
+const hudMissionNumber = document.getElementById("hudMissionNumber");
 const hudMission = document.getElementById("hudMission");
 const hudProgress = document.getElementById("hudProgress");
 const hudFloor = document.getElementById("hudFloor");
@@ -35,7 +36,7 @@ const SPRINT_SPEED = 8.1;
 const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
-const VERSION = "20260830-2";
+const VERSION = "20260830-3";
 
 const FLOOR_THEMES = [
   { name: "MOTTAGNING", floor: 0x6f7472, wall: 0x74726a, accent: 0xf1a13d, fog: 0xaab0a9 },
@@ -220,8 +221,7 @@ const MATERIALS = {
   safetyYellow: createMaterial(0xf5ca3f, { metalness: 0.12, roughness: 0.48 }),
   yellowGlow: createMaterial(0xffd94d, { emissive: 0xffb300, emissiveIntensity: 3.4, roughness: 0.18 }),
   yellowOff: createMaterial(0x655c3f, { roughness: 0.72 }),
-  brownMonster: createMaterial(0x5b3826, { roughness: 0.86, metalness: 0.02 }),
-  brownLight: createMaterial(0x76503a, { roughness: 0.84, metalness: 0.02 }),
+  monsterBlack: createMaterial(0x000000, { roughness: 0.9, metalness: 0 }),
   playerBlue: createMaterial(0x2e8bd2, { roughness: 0.68 }),
   playerNavy: createMaterial(0x174f79, { roughness: 0.72 }),
   playerSkin: createMaterial(0xf0bd83, { roughness: 0.9, metalness: 0 }),
@@ -289,7 +289,7 @@ function initRenderer() {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, touchDevice ? 1.25 : 1.7));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMappingExposure = 1.02;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
 }
@@ -791,25 +791,27 @@ function buildPlayerModel() {
 
 function createTallMonster() {
   const group = new THREE.Group();
-  meshBox(group, [1.55, 3.15, 0.95], [0, 4.35, 0], MATERIALS.brownMonster);
-  meshSphere(group, 0.95, [0, 6.25, 0], MATERIALS.brownLight, 18);
-  const eye = meshSphere(group, 0.31, [0, 6.37, 0.86], MATERIALS.yellowGlow, 16);
-  eye.scale.set(1.15, 0.9, 0.4);
-  group.userData.leftArm = limb(group, [0.42, 3.2, 0.42], [-1.08, 5.3, 0], MATERIALS.brownMonster, "leftArm");
-  group.userData.rightArm = limb(group, [0.42, 3.2, 0.42], [1.08, 5.3, 0], MATERIALS.brownMonster, "rightArm");
-  group.userData.leftLeg = limb(group, [0.52, 3.25, 0.56], [-0.45, 3.0, 0], MATERIALS.brownMonster, "leftLeg");
-  group.userData.rightLeg = limb(group, [0.52, 3.25, 0.56], [0.45, 3.0, 0], MATERIALS.brownMonster, "rightLeg");
-  meshBox(group, [0.78, 0.32, 1.25], [-0.45, 0.16, 0.22], MATERIALS.brownLight);
-  meshBox(group, [0.78, 0.32, 1.25], [0.45, 0.16, 0.22], MATERIALS.brownLight);
+  meshBox(group, [1.55, 3.15, 0.95], [0, 4.35, 0], MATERIALS.monsterBlack);
+  meshSphere(group, 0.95, [0, 6.25, 0], MATERIALS.monsterBlack, 18);
+  const yellowEye = meshSphere(group, 0.27, [-0.3, 6.37, 0.87], MATERIALS.yellowGlow, 16);
+  yellowEye.scale.set(1.05, 0.9, 0.38);
+  const blackEye = meshSphere(group, 0.27, [0.3, 6.37, 0.65], MATERIALS.monsterBlack, 16);
+  blackEye.scale.set(1.05, 0.9, 0.38);
+  group.userData.leftArm = limb(group, [0.42, 3.2, 0.42], [-1.08, 5.3, 0], MATERIALS.monsterBlack, "leftArm");
+  group.userData.rightArm = limb(group, [0.42, 3.2, 0.42], [1.08, 5.3, 0], MATERIALS.monsterBlack, "rightArm");
+  group.userData.leftLeg = limb(group, [0.52, 3.25, 0.56], [-0.45, 3.0, 0], MATERIALS.monsterBlack, "leftLeg");
+  group.userData.rightLeg = limb(group, [0.52, 3.25, 0.56], [0.45, 3.0, 0], MATERIALS.monsterBlack, "rightLeg");
+  meshBox(group, [0.78, 0.32, 1.25], [-0.45, 0.16, 0.22], MATERIALS.monsterBlack);
+  meshBox(group, [0.78, 0.32, 1.25], [0.45, 0.16, 0.22], MATERIALS.monsterBlack);
   group.scale.setScalar(0.78);
   return group;
 }
 
 function createSpiderMonster() {
   const group = new THREE.Group();
-  const body = meshSphere(group, 1.12, [0, 1.22, 0], MATERIALS.brownMonster, 18);
+  const body = meshSphere(group, 1.12, [0, 1.22, 0], MATERIALS.monsterBlack, 18);
   body.scale.set(1.3, 0.82, 1.15);
-  const head = meshSphere(group, 0.76, [0, 1.42, 1.06], MATERIALS.brownLight, 18);
+  const head = meshSphere(group, 0.76, [0, 1.42, 1.06], MATERIALS.monsterBlack, 18);
   head.scale.set(1.05, 0.9, 0.9);
   for (const x of [-0.28, 0.28]) {
     const eye = meshSphere(group, 0.17, [x, 1.6, 1.7], MATERIALS.yellowGlow, 12);
@@ -823,9 +825,9 @@ function createSpiderMonster() {
     pivot.position.set(side * 0.72, 1.22, -0.78 + row * 0.52);
     pivot.rotation.y = side * (0.45 + row * 0.12);
     group.add(pivot);
-    const upper = meshCylinder(pivot, 0.13, 0.16, 1.55, 9, [side * 0.68, -0.25, 0], MATERIALS.brownMonster);
+    const upper = meshCylinder(pivot, 0.13, 0.16, 1.55, 9, [side * 0.68, -0.25, 0], MATERIALS.monsterBlack);
     upper.rotation.z = side * 1.05;
-    const lower = meshCylinder(pivot, 0.11, 0.13, 1.5, 9, [side * 1.37, -0.75, 0], MATERIALS.brownLight);
+    const lower = meshCylinder(pivot, 0.11, 0.13, 1.5, 9, [side * 1.37, -0.75, 0], MATERIALS.monsterBlack);
     lower.rotation.z = side * 0.28;
     group.userData.legs.push(pivot);
   }
@@ -834,14 +836,14 @@ function createSpiderMonster() {
 
 function createFacelessMonster() {
   const group = new THREE.Group();
-  meshBox(group, [1.45, 1.75, 0.85], [0, 2.15, 0], MATERIALS.brownMonster);
-  meshSphere(group, 0.68, [0, 3.55, 0], MATERIALS.brownLight, 18);
-  group.userData.leftArm = limb(group, [0.38, 1.65, 0.38], [-0.93, 2.78, 0], MATERIALS.brownMonster, "leftArm");
-  group.userData.rightArm = limb(group, [0.38, 1.65, 0.38], [0.93, 2.78, 0], MATERIALS.brownMonster, "rightArm");
-  group.userData.leftLeg = limb(group, [0.46, 1.65, 0.5], [-0.37, 1.45, 0], MATERIALS.brownMonster, "leftLeg");
-  group.userData.rightLeg = limb(group, [0.46, 1.65, 0.5], [0.37, 1.45, 0], MATERIALS.brownMonster, "rightLeg");
-  meshBox(group, [0.65, 0.26, 1.05], [-0.37, 0.13, 0.18], MATERIALS.brownLight);
-  meshBox(group, [0.65, 0.26, 1.05], [0.37, 0.13, 0.18], MATERIALS.brownLight);
+  meshBox(group, [1.45, 1.75, 0.85], [0, 2.15, 0], MATERIALS.monsterBlack);
+  meshSphere(group, 0.68, [0, 3.55, 0], MATERIALS.monsterBlack, 18);
+  group.userData.leftArm = limb(group, [0.38, 1.65, 0.38], [-0.93, 2.78, 0], MATERIALS.monsterBlack, "leftArm");
+  group.userData.rightArm = limb(group, [0.38, 1.65, 0.38], [0.93, 2.78, 0], MATERIALS.monsterBlack, "rightArm");
+  group.userData.leftLeg = limb(group, [0.46, 1.65, 0.5], [-0.37, 1.45, 0], MATERIALS.monsterBlack, "leftLeg");
+  group.userData.rightLeg = limb(group, [0.46, 1.65, 0.5], [0.37, 1.45, 0], MATERIALS.monsterBlack, "rightLeg");
+  meshBox(group, [0.65, 0.26, 1.05], [-0.37, 0.13, 0.18], MATERIALS.monsterBlack);
+  meshBox(group, [0.65, 0.26, 1.05], [0.37, 0.13, 0.18], MATERIALS.monsterBlack);
   return group;
 }
 
@@ -997,6 +999,7 @@ function updateHud() {
   if (!hudMission) return;
   const mission = MISSION_INFO[state.activeMission - 1] || MISSION_INFO[4];
   const progress = missionProgress();
+  if (hudMissionNumber) hudMissionNumber.textContent = `UPPDRAG ${state.activeMission} AV ${MISSION_INFO.length}`;
   hudMission.textContent = mission.title;
   hudProgress.textContent = progress.text;
   hudFloor.textContent = `${state.player.floor} / ${FLOOR_COUNT}`;

@@ -7,8 +7,8 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - Startmenyn visar bara namnet `WHERE'S EXIT` och knappen `STARTA SPELET`.
 - Fabriken är mycket stor, har sju våningar, hissar, trappor, dörrar och vanlig belysning.
 - Spelet är ett lekfullt monsterspel, inte skräck. Inga jumpscares, inget blod och inga otäcka ljud.
-- Tre mörkbruna monster:
-  1. Mycket långt, ett lysande gult öga, två armar/händer, två ben/fötter, ingen mun.
+- Tre helt svarta monster:
+  1. Mycket långt, ett lysande gult öga och ett svart öga som smälter in, två armar/händer, två ben/fötter, ingen mun.
   2. Åtta ben, ett huvud, två lysande gula ögon, ingen mun; går på golv, väggar och tak.
   3. Inte långt, inga ögon eller mun, två armar/händer och två ben/fötter.
 - Monstren vandrar; de jagar när de ser spelaren. Fångad spelare skickas till startmenyn och nästa start börjar om.
@@ -18,6 +18,7 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - Uppdrag 4: våning 3 är dämpad men synlig; hitta knappen som tänder lamporna.
 - Uppdrag 5: hitta hammaren, åk till våning 6, slå sönder EXIT-plankorna med ett tryck och gå ut för att vinna.
 - Kontroller: spring, ta sak/använd och hoppa. Ta sak/använd slår sönder plankorna när hammaren finns.
+- HUD visar alltid tydligt `UPPDRAG N AV 5` och namnet på det aktuella uppdraget.
 - iPad/iPhone och dator ska fungera.
 
 ## Arbetslogg
@@ -28,6 +29,9 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - 2026-08-30: Första lokala Chromium-testet startar, går och hoppar utan konsolfel. Fabriksljuset höjdes efter visuell kontroll för att undvika skräckkänsla.
 - 2026-08-30: Full Chromium-E2E klar: 214 kontroller godkända, 0 funktionsfel, 0 konsolfel, 0 sidfel och 0 misslyckade nätverksanrop. Hela uppdragskedjan, hiss/trapp-lås, våning 3, vinst och monsterfångst verifierades.
 - 2026-08-30: iPad 1024×1366 och iPhone 393×852 verifierade utan scroll, kontrollöverlapp eller flimmer. Pekmålen är 64–145 px och våning 3 är mörk men tydligt synlig.
+- 2026-08-30: Version `20260830-2` publicerad i Agust Games. GitHub Pages-deploy lyckades och live-versionen startades, gick och hoppade utan konsolfel.
+- 2026-08-30: Användaren ändrade monsterfärgen från mörkbrun till helt svart. Det långa monstret fick ett gult och ett osynligt svart öga. Fabrikens exponering sänktes lite från 1,08 till 1,02.
+- 2026-08-30: HUD uppdaterad till `UPPDRAG N AV 5`. Version `20260830-3` klarade 214/214 regressionstester, 5/5 uppdragsrubriker och visuell iPad-kontroll av samtliga svarta monster utan konsol- eller sidfel.
 
 ## TODO
 
@@ -39,4 +43,4 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - [x] Vinst, förlust och omstart
 - [x] render_game_to_text och advanceTime
 - [x] Playwright-test på desktop, iPad och iPhone
-- [ ] Publicering och kontroll av live-version
+- [x] Publicering och kontroll av live-version
