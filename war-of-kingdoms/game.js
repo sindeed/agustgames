@@ -21,6 +21,12 @@ import * as THREE from "./vendor/three.module.js";
     clock: $("#clock-value"),
     weapon: $("#weapon-label"),
     followers: $("#followers-value"),
+    dragonBoss: $("#dragon-boss-hud"),
+    dragonBossFill: $("#dragon-boss-fill"),
+    dragonBossText: $("#dragon-boss-text"),
+    dragonBossMeter: $("#dragon-boss-meter"),
+    upperPhase: $("#upper-phase-hud"),
+    upperPhaseLabel: $("#upper-phase-label"),
     prompt: $("#interaction-prompt"),
     toast: $("#toast"),
     map: $("#world-map"),
@@ -110,6 +116,35 @@ import * as THREE from "./vendor/three.module.js";
   const ABANDONED_STATUE_ATTACK_SECONDS = 3;
   const ABANDONED_LARGE_STATUE_ATTACK_SECONDS = 2;
   const ABANDONED_HEAL_SECONDS = 3;
+  const ABANDONED_DRAGON_HP = 1500;
+  const ABANDONED_DRAGON_REWARD = 1500;
+  const ABANDONED_DRAGON_HAND_SECONDS = 2;
+  const ABANDONED_DRAGON_HAND_DAMAGE = 32;
+  const ABANDONED_DRAGON_FIRE_SECONDS = 4.5;
+  const ABANDONED_DRAGON_FIRE_WARNING_SECONDS = 0.9;
+  const ABANDONED_DRAGON_FIRE_DAMAGE = 24;
+  const ABANDONED_DRAGON_FIRE_RADIUS = 3.7;
+  const ABANDONED_UPPER_TOWER_ATTACK_SECONDS = 2.8;
+  const ABANDONED_UPPER_TOWER_DAMAGE = 5;
+  const ABANDONED_UPPER = Object.freeze({
+    width: 70,
+    depth: 184,
+    playerSpawn: Object.freeze({ x: 0, z: 77 }),
+    rivalSpawn: Object.freeze({ x: 0, z: -77 }),
+    dragon: Object.freeze({ x: 0, z: 0 }),
+    playerStairRoomId: "small-28",
+    rivalStairRoomId: "small-3",
+    groundPlayerStair: Object.freeze({ x: 16.35, z: 84.55 }),
+    groundRivalStair: Object.freeze({ x: 16.35, z: -84.55 }),
+    upperPlayerStair: Object.freeze({ x: 0, z: 84 }),
+    upperRivalStair: Object.freeze({ x: 0, z: -84 }),
+    towerPositions: Object.freeze([
+      Object.freeze({ x: -36, z: -92 }),
+      Object.freeze({ x: 36, z: -92 }),
+      Object.freeze({ x: -36, z: 92 }),
+      Object.freeze({ x: 36, z: 92 }),
+    ]),
+  });
   const ABANDONED_ARROW_TRAP_DAMAGE = "instant-death";
   const ABANDONED_FRONT_BRIDGE = Object.freeze({
     side: "front",
@@ -162,7 +197,7 @@ import * as THREE from "./vendor/three.module.js";
     roomsTotal: 35,
     explorable: true,
     maxPlayerGuards: ABANDONED_MAX_GUARDS,
-    statues: 37,
+    statues: 41,
     roomStatues: 35,
     sGuardianStatues: 2,
     statueHp: ABANDONED_STATUE_HP,
@@ -176,6 +211,11 @@ import * as THREE from "./vendor/three.module.js";
     maxMoneyPerVisit: ABANDONED_MAX_MONEY_PER_VISIT,
     guardMoneyPerSecond: ABANDONED_GUARD_MONEY_PER_SECOND,
     treasureSecondsPerVisit: ABANDONED_TREASURE_SECONDS,
+    alternativeUpperFloor: true,
+    dragonHp: ABANDONED_DRAGON_HP,
+    dragonReward: ABANDONED_DRAGON_REWARD,
+    upperTowerStatues: 4,
+    upperTowerStatuesInvulnerable: true,
     statueAttackSeconds: ABANDONED_STATUE_ATTACK_SECONDS,
     smallStatueAttackSeconds: ABANDONED_STATUE_ATTACK_SECONDS,
     largeStatueAttackSeconds: ABANDONED_LARGE_STATUE_ATTACK_SECONDS,
@@ -286,6 +326,7 @@ import * as THREE from "./vendor/three.module.js";
       attackCooldown: 0,
       swing: 0,
       moving: 0,
+      abandonedFloor: null,
       abandonedDamagedAt: null,
       abandonedHealSecondsRemaining: 0,
     },
@@ -1046,6 +1087,20 @@ import * as THREE from "./vendor/three.module.js";
     addCollider(36, bridge.facadeZ, 7, 7, -0.2, 7.5);
   }
 
+  function buildStoneStaircase(x, z, direction = 1, width = 2.55, steps = 7, parent = worldRoot) {
+    for (let index = 0; index < steps; index++) {
+      const height = 0.24 + index * 0.25;
+      const stepZ = z + direction * (index - (steps - 1) / 2) * 0.44;
+      box(x, height / 2, stepZ, width, height, 0.58, index % 2 ? materials.stone : materials.stoneDark, parent, true, true);
+    }
+    const railX = width / 2 + 0.12;
+    for (const side of [-1, 1]) {
+      box(x + side * railX, 1.04, z, 0.14, 1.85, steps * 0.48, materials.ironDark, parent);
+      cylinder(x + side * railX, 1.68, z + direction * 1.25, 0.1, 0.48, materials.gold, parent, 8);
+    }
+    addCollider(x, z, width + 0.28, steps * 0.48, -0.1, 2.25);
+  }
+
   function buildAbandonedRoom(room, abandonedStone, abandonedFloor) {
     const doors = { north: [], south: [], east: [], west: [] };
     const skippedSides = new Set();
@@ -1090,6 +1145,14 @@ import * as THREE from "./vendor/three.module.js";
       roomLight.position.set(room.x, 4.75, room.z);
       worldRoot.add(roomLight);
       cylinder(room.x, 5.28, room.z, 0.24, 0.42, materials.gold, worldRoot, 8);
+    } else if ([ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id)) {
+      const stair = room.id === ABANDONED_UPPER.playerStairRoomId ? ABANDONED_UPPER.groundPlayerStair : ABANDONED_UPPER.groundRivalStair;
+      buildStoneStaircase(stair.x, stair.z, room.id === ABANDONED_UPPER.playerStairRoomId ? 1 : -1, 2.2, 7);
+      const runeZ = stair.z + (room.id === ABANDONED_UPPER.playerStairRoomId ? 1.65 : -1.65);
+      box(stair.x, 2.85, runeZ, 1.35, 1.05, 0.12, materials.gold, worldRoot, false, true);
+      const stairLight = new THREE.PointLight(0xffca78, 3.4, 18, 1.55);
+      stairLight.position.set(room.x, 4.45, room.z);
+      worldRoot.add(stairLight);
     } else {
       const wing = ABANDONED_WINGS[room.wing - 1];
       const awayX = room.position.startsWith("outer") ? wing.side * 2.25 : 0;
@@ -1141,7 +1204,61 @@ import * as THREE from "./vendor/three.module.js";
     }
   }
 
+  function buildAbandonedUpperWorld() {
+    abandonedWallSegmentsBuilt = 0;
+    const upperFloor = new THREE.MeshStandardMaterial({ color: 0x55565b, roughness: 0.93, metalness: 0.04 });
+    const upperStone = new THREE.MeshStandardMaterial({ map: stoneTexture, color: 0x656d73, roughness: 0.96 });
+    const ember = new THREE.MeshStandardMaterial({ color: 0xb5321e, emissive: 0x5b0c05, emissiveIntensity: 0.72, roughness: 0.64 });
+
+    box(0, -0.68, 0, 92, 1.25, 208, materials.rockDark, worldRoot, false, true);
+    box(0, -0.12, 0, ABANDONED_UPPER.width, 0.38, ABANDONED_UPPER.depth, upperFloor, worldRoot, false, true);
+    box(0, 0.035, 0, 5.4, 0.07, 168, ember, worldRoot, false, true);
+
+    buildAbandonedSegmentedWall("vertical", -35, -92, 92, [], upperStone);
+    buildAbandonedSegmentedWall("vertical", 35, -92, 92, [], upperStone);
+    buildAbandonedSegmentedWall("horizontal", -92, -35, 35, [{ center: 0, width: 7 }], upperStone);
+    buildAbandonedSegmentedWall("horizontal", 92, -35, 35, [{ center: 0, width: 7 }], upperStone);
+    crenellations(-17.5, -92, 31, 1.1);
+    crenellations(17.5, -92, 31, 1.1);
+    crenellations(-17.5, 92, 31, 1.1);
+    crenellations(17.5, 92, 31, 1.1);
+
+    ABANDONED_UPPER.towerPositions.forEach((tower) => {
+      buildTower(tower.x, tower.z);
+      addCollider(tower.x, tower.z, 7, 7, -0.2, 7.6);
+      const brazier = new THREE.PointLight(0xff6838, 2.4, 28, 1.75);
+      brazier.position.set(tower.x * 0.86, 6.1, tower.z * 0.93);
+      worldRoot.add(brazier);
+      cylinder(tower.x * 0.86, 5.65, tower.z * 0.93, 0.34, 0.42, materials.ironDark, worldRoot, 8);
+    });
+
+    buildStoneStaircase(ABANDONED_UPPER.upperPlayerStair.x, ABANDONED_UPPER.upperPlayerStair.z, 1, 4.2, 9);
+    buildStoneStaircase(ABANDONED_UPPER.upperRivalStair.x, ABANDONED_UPPER.upperRivalStair.z, -1, 4.2, 9);
+    interactables.push({
+      kind: "abandonedStairsDown",
+      side: "front",
+      x: ABANDONED_UPPER.upperPlayerStair.x,
+      z: ABANDONED_UPPER.upperPlayerStair.z,
+      radius: 3.15,
+      label: "GÅ NER TILL LABYRINTEN",
+    });
+
+    for (const x of [-24, -12, 12, 24]) for (const z of [-62, -30, 30, 62]) {
+      const pillarHeight = 2.2 + ((Math.abs(x + z) / 6) % 3);
+      cylinder(x, pillarHeight / 2, z, 0.55, pillarHeight, upperStone, worldRoot, 10);
+      cylinder(x, 0.1, z, 1.05, 0.2, materials.stoneDark, worldRoot, 12);
+      addCollider(x, z, 1.15, 1.15, -0.2, pillarHeight + 0.1);
+    }
+    const dragonDais = cylinder(0, 0.11, 0, 7.8, 0.22, materials.stoneDark, worldRoot, 16);
+    dragonDais.receiveShadow = true;
+    buildSkyDecor();
+  }
+
   function buildAbandonedCastleWorld() {
+    if (state.abandonedCastleVisit?.playerFloor === "upper") {
+      buildAbandonedUpperWorld();
+      return;
+    }
     abandonedWallSegmentsBuilt = 0;
     const abandonedStone = new THREE.MeshStandardMaterial({ map: stoneTexture, color: 0x72787a, roughness: 0.98 });
     const abandonedFloor = new THREE.MeshStandardMaterial({ color: 0x4c4a46, roughness: 0.97 });
@@ -1228,6 +1345,16 @@ import * as THREE from "./vendor/three.module.js";
     forestTrees.forEach(([x, z, scale]) => buildTree(x, z, scale));
     buildSkyDecor();
 
+    interactables.push({
+      kind: "abandonedStairsUp",
+      side: "front",
+      roomId: ABANDONED_UPPER.playerStairRoomId,
+      x: ABANDONED_UPPER.groundPlayerStair.x,
+      z: ABANDONED_UPPER.groundPlayerStair.z,
+      radius: 3.2,
+      label: "GÅ UPP TILL DRAKEN",
+    });
+
     const moneyRoom = ABANDONED_ROOMS.find((room) => room.id === activeAbandonedTreasureRoomId());
     if (moneyRoom && state.abandonedCastleVisit?.treasureAvailable !== false) {
       const moneyX = moneyRoom.x + moneyRoom.side * 4;
@@ -1264,11 +1391,12 @@ import * as THREE from "./vendor/three.module.js";
     if (state.scene === "battle") buildArena();
     else if (state.scene === "abandonedCastle") buildAbandonedCastleWorld();
     else buildHomeWorld(state.scene === "stealth" || state.scene === "mineRaid");
-    state.units.forEach((unit) => {
+    const visibleAbandonedFloor = state.abandonedCastleVisit?.playerFloor || "ground";
+    state.units.filter((unit) => state.scene !== "abandonedCastle" || (unit.abandonedFloor || "ground") === visibleAbandonedFloor).forEach((unit) => {
       const model = makeActor(unit);
       actorModels.set(unit.id, model);
     });
-    state.loot.forEach((loot) => buildLoot(loot));
+    if (state.scene !== "abandonedCastle" || visibleAbandonedFloor === "ground") state.loot.forEach((loot) => buildLoot(loot));
     updateLighting(true);
   }
 
@@ -1298,6 +1426,57 @@ import * as THREE from "./vendor/three.module.js";
     return group;
   }
 
+  function buildDragonModel(parent) {
+    const scales = new THREE.MeshStandardMaterial({ color: 0x8f1f18, roughness: 0.6, metalness: 0.08 });
+    const darkScales = new THREE.MeshStandardMaterial({ color: 0x351419, roughness: 0.76 });
+    const belly = new THREE.MeshStandardMaterial({ color: 0xd1843e, emissive: 0x2f0b03, emissiveIntensity: 0.45, roughness: 0.72 });
+    const fire = new THREE.MeshStandardMaterial({ color: 0xffb12e, emissive: 0xff2d00, emissiveIntensity: 1.4, roughness: 0.25 });
+    const body = addMesh(new THREE.SphereGeometry(2.6, 18, 13), scales, parent);
+    body.scale.set(1.15, 1.18, 1.55);
+    body.position.y = 3.25;
+    const chest = addMesh(new THREE.SphereGeometry(1.72, 16, 11), belly, parent);
+    chest.scale.set(0.82, 1.1, 0.62);
+    chest.position.set(0, 3.15, -1.35);
+    const neck = addMesh(new THREE.CylinderGeometry(1.12, 1.5, 3.4, 10), scales, parent);
+    neck.rotation.x = -0.72;
+    neck.position.set(0, 5.15, -2.1);
+    const head = addMesh(new THREE.SphereGeometry(1.6, 16, 11), scales, parent);
+    head.scale.set(1.1, 0.78, 1.35);
+    head.position.set(0, 6.3, -3.9);
+    const muzzle = addMesh(new THREE.BoxGeometry(1.9, 0.8, 1.85), darkScales, parent);
+    muzzle.position.set(0, 5.95, -5.05);
+    for (const x of [-0.72, 0.72]) {
+      const horn = addMesh(new THREE.ConeGeometry(0.25, 1.4, 7), materials.ironDark, parent);
+      horn.position.set(x, 7.55, -3.25);
+      horn.rotation.x = -0.35;
+      const eye = addMesh(new THREE.SphereGeometry(0.15, 8, 6), fire, parent, false, false);
+      eye.position.set(x * 0.72, 6.55, -5.15);
+    }
+    for (const side of [-1, 1]) {
+      const wing = addMesh(new THREE.ConeGeometry(4.2, 7.8, 3), darkScales, parent);
+      wing.position.set(side * 3.65, 5.2, 1.1);
+      wing.rotation.z = side * 1.2;
+      wing.rotation.x = -0.18;
+      const arm = addMesh(new THREE.CylinderGeometry(0.42, 0.62, 3.5, 8), scales, parent);
+      arm.position.set(side * 2.9, 2.8, -1.5);
+      arm.rotation.z = side * 0.9;
+      const hand = addMesh(new THREE.SphereGeometry(0.72, 10, 7), darkScales, parent);
+      hand.position.set(side * 4.1, 1.8, -2.35);
+      for (let clawIndex = -1; clawIndex <= 1; clawIndex++) {
+        const claw = addMesh(new THREE.ConeGeometry(0.12, 0.62, 6), materials.iron, parent);
+        claw.position.set(side * (4.35 + clawIndex * 0.12), 1.52, -2.78 - Math.abs(clawIndex) * 0.18);
+        claw.rotation.x = Math.PI / 2;
+      }
+    }
+    for (let segment = 0; segment < 6; segment++) {
+      const tail = addMesh(new THREE.ConeGeometry(Math.max(0.25, 1.25 - segment * 0.17), 2.65, 9), scales, parent);
+      tail.rotation.x = Math.PI / 2;
+      tail.position.set(Math.sin(segment * 0.55) * 0.8, 2.4 - segment * 0.14, 3.4 + segment * 1.65);
+    }
+    parent.userData.dragonBody = body;
+    parent.userData.dragonHead = head;
+  }
+
   function makeActor(data) {
     const root = new THREE.Group();
     root.position.set(data.x, data.y || 0, data.z);
@@ -1308,7 +1487,9 @@ import * as THREE from "./vendor/three.module.js";
     const body = new THREE.Group();
     root.add(body);
 
-    if (data.statue) {
+    if (data.dragon) {
+      buildDragonModel(body);
+    } else if (data.statue) {
       buildGuardianStatue(body, data);
     } else if (data.type === "cavalry") {
       const horse = new THREE.Group();
@@ -1528,7 +1709,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function resetPlayerForHome() {
-    Object.assign(state.player, { x: 0, y: 0, z: 9, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
+    Object.assign(state.player, { x: 0, y: 0, z: 9, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedFloor: null, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
   }
 
   function startGame() {
@@ -1973,6 +2154,10 @@ import * as THREE from "./vendor/three.module.js";
       searchTargetRoomId: null,
       roomId: extra.roomId || null,
       sGuardian: Boolean(extra.sGuardian),
+      abandonedFloor: extra.abandonedFloor || (state.scene === "abandonedCastle" ? "ground" : null),
+      dragon: Boolean(extra.dragon),
+      upperTowerStatue: Boolean(extra.upperTowerStatue),
+      invulnerable: Boolean(extra.invulnerable),
       lockedTargetId: extra.lockedTargetId || null,
       infiniteArrows: Boolean(extra.infiniteArrows),
       awake: Boolean(extra.awake),
@@ -2054,6 +2239,7 @@ import * as THREE from "./vendor/three.module.js";
     const rivalCandidates = state.kingdoms.slice(1).filter((kingdom) => !kingdomAtEnemyWar(kingdom.index));
     const rivalKingdom = (rivalCandidates[Math.floor(seeded() * Math.max(1, rivalCandidates.length))] || state.kingdoms[1]).index;
     const treasureRoomId = chooseAbandonedTreasureRoomId();
+    const rivalRouteChoice = seeded() < 0.58 ? "dragon" : "treasury";
     state.scene = "abandonedCastle";
     state.units = [];
     state.loot = [];
@@ -2064,6 +2250,22 @@ import * as THREE from "./vendor/three.module.js";
     state.lastAbandonedCastleOutcome = null;
     state.abandonedCastleVisit = {
       counts: { ...safeCounts },
+      playerFloor: "ground",
+      rivalFloor: "ground",
+      rewardRoute: null,
+      rivalRouteChoice,
+      playerPartyEnteredUpper: false,
+      rivalPartyEnteredUpper: false,
+      rivalUpperArrivalTimer: null,
+      upperPhase: "dragon",
+      upperWarActive: false,
+      upperWarResult: null,
+      dragonId: "abandoned-upper-dragon",
+      dragonDefeated: false,
+      dragonDefeatedAt: null,
+      dragonRewardClaimed: false,
+      dragonRewardPaid: 0,
+      upperTowerIds: ABANDONED_UPPER.towerPositions.map((_, index) => `abandoned-upper-tower-${index + 1}`),
       currentRoomId: null,
       visitedRoomIds: [],
       statuesDefeated: 0,
@@ -2110,7 +2312,7 @@ import * as THREE from "./vendor/three.module.js";
         lastCrossingSide: null,
       }])),
     };
-    Object.assign(state.player, { x: -6, y: 0, z: ABANDONED_FRONT_BRIDGE.spawnZ, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
+    Object.assign(state.player, { x: -6, y: 0, z: ABANDONED_FRONT_BRIDGE.spawnZ, yaw: 0, pitch: 0, hp: 100, alive: true, attackCooldown: 0, swing: 0, abandonedFloor: "ground", abandonedDamagedAt: null, abandonedHealSecondsRemaining: 0 });
 
     let followerIndex = 0;
     UNIT_TYPES.forEach((type) => {
@@ -2123,7 +2325,9 @@ import * as THREE from "./vendor/three.module.js";
     });
 
     ABANDONED_ROOMS.forEach((room) => {
-      state.units.push(makeUnit(2, "statue", room.x, room.z, {
+      const stairGuardian = [ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id);
+      const statueX = stairGuardian ? room.x - 2.15 : room.x;
+      state.units.push(makeUnit(2, "statue", statueX, room.z, {
         id: `statue-${room.id}`,
         statue: true,
         roomId: room.id,
@@ -2163,6 +2367,34 @@ import * as THREE from "./vendor/three.module.js";
       state.units.push(guard);
       state.abandonedCastleVisit.rivalGuardIds.push(guard.id);
     });
+    state.units.push(makeUnit(2, "dragon", ABANDONED_UPPER.dragon.x, ABANDONED_UPPER.dragon.z, {
+      id: state.abandonedCastleVisit.dragonId,
+      dragon: true,
+      abandonedFloor: "upper",
+      hp: ABANDONED_DRAGON_HP,
+      shield: false,
+      weapon: "fire-and-claws",
+      color: 0x8f1f18,
+    }));
+    ABANDONED_UPPER.towerPositions.forEach((position, index) => {
+      state.units.push(makeUnit(2, "archer", position.x, position.z, {
+        id: state.abandonedCastleVisit.upperTowerIds[index],
+        statue: true,
+        upperTowerStatue: true,
+        invulnerable: true,
+        abandonedFloor: "upper",
+        hp: ABANDONED_STATUE_HP,
+        weapon: "bow",
+        shield: false,
+        infiniteArrows: true,
+        fixed: true,
+        awake: true,
+        y: 7.15,
+        attackEverySeconds: ABANDONED_UPPER_TOWER_ATTACK_SECONDS,
+        respawnAfterSeconds: 0,
+        color: 0x4f4447,
+      }));
+    });
     rebuildWorld();
     showToast("PILFÄLLOR ÄR DÖDLIGA · BESEGRA STATYN MED SVÄRD OCH SKÖLD I STORA RUMMET BREDVID", 4200);
     updateHud();
@@ -2179,7 +2411,7 @@ import * as THREE from "./vendor/three.module.js";
     UNIT_TYPES.forEach((type) => { state.guards[type] = Math.max(0, state.guards[type] - dead[type]); });
     normalizeTowerSlots();
     const visited = visit.visitedRoomIds.length;
-    const moneyTaken = visit.totalMoneyTaken;
+    const moneyTaken = visit.totalMoneyTaken + (visit.dragonRewardPaid || 0);
     state.lastAbandonedCastleOutcome = {
       playerDied,
       deathCause: playerDied ? visit.playerDeathCause || "combat" : null,
@@ -2187,6 +2419,11 @@ import * as THREE from "./vendor/three.module.js";
       requiredGuardianRoomId: visit.playerDeathGuardianRoomId || null,
       visitedRoomCount: visited,
       moneyTaken,
+      rewardRoute: visit.rewardRoute,
+      treasuryMoneyTaken: visit.totalMoneyTaken,
+      dragonRewardPaid: visit.dragonRewardPaid || 0,
+      dragonDefeated: Boolean(visit.dragonDefeated),
+      upperWarResult: visit.upperWarResult || null,
       finishedAt: state.time,
     };
     state.abandonedCastleVisit = null;
@@ -2683,7 +2920,7 @@ import * as THREE from "./vendor/three.module.js";
       const leftByFrontBridge = Math.abs(state.player.x) < 3.2 && state.player.z > 25.2;
       const leftByRearBridge = Math.abs(state.player.x) < 3.2 && state.player.z < -27.2;
       if (state.enteredEnemyCastle && (leftByFrontBridge || leftByRearBridge)) finishStealth(false);
-    } else if (state.scene === "abandonedCastle" && state.abandonedCastleVisit) {
+    } else if (state.scene === "abandonedCastle" && state.abandonedCastleVisit?.playerFloor === "ground") {
       const visit = state.abandonedCastleVisit;
       if (abandonedNavigationZoneAt(state.player.x, state.player.z)) visit.enteredCastle = true;
       const crossedFrontGate = Math.abs(state.player.x) < 4.2 && state.player.z > 91;
@@ -2729,12 +2966,21 @@ import * as THREE from "./vendor/three.module.js";
   function nearestEnemyTo(x, z, team, maxRange = Infinity, excludeWorkers = false) {
     let best = null;
     let bestDistance = maxRange;
+    const visit = state.scene === "abandonedCastle" ? state.abandonedCastleVisit : null;
+    const activeFloor = visit?.playerFloor || "ground";
     state.units.forEach((unit) => {
-      if (!unit.alive || unit.team === team || isTowerArcher(unit) || (unit.statue && !unit.awake) || (unit.rivalParty && state.scene === "abandonedCastle" && Math.abs(unit.z) > 90) || (excludeWorkers && unit.worker)) return;
+      if (!unit.alive || unit.team === team || unit.invulnerable || isTowerArcher(unit) || (unit.statue && !unit.awake) || (unit.rivalParty && state.scene === "abandonedCastle" && activeFloor === "ground" && Math.abs(unit.z) > 90) || (excludeWorkers && unit.worker)) return;
+      if (visit && abandonedActorFloor(unit) !== activeFloor) return;
+      if (visit && activeFloor === "upper") {
+        if (visit.upperPhase === "dragon" && [0, 1].includes(team) && !unit.dragon) return;
+        if (visit.upperPhase === "war" && [0, 1].includes(team) && ![0, 1].includes(unit.team)) return;
+        if (visit.upperPhase === "cleared" && [0, 1].includes(team)) return;
+      }
       const distance = Math.hypot(unit.x - x, unit.z - z);
       if (distance < bestDistance) { best = unit; bestDistance = distance; }
     });
-    if (team !== 0 && state.player.alive) {
+    const playerIsHostile = !visit || activeFloor === "ground" || team === 2 || visit.upperPhase === "war";
+    if (team !== 0 && state.player.alive && playerIsHostile) {
       const playerDistance = Math.hypot(state.player.x - x, state.player.z - z);
       if (playerDistance < bestDistance) return { player: true, x: state.player.x, z: state.player.z, hp: state.player.hp, alive: true, distance: playerDistance };
     }
@@ -2961,6 +3207,111 @@ import * as THREE from "./vendor/three.module.js";
     });
   }
 
+  function abandonedActorFloor(actor) {
+    if (actor?.player) return state.abandonedCastleVisit?.playerFloor || "ground";
+    return actor?.abandonedFloor || "ground";
+  }
+
+  function abandonedUnitOnVisibleFloor(unit) {
+    return state.scene !== "abandonedCastle"
+      || abandonedActorFloor(unit) === (state.abandonedCastleVisit?.playerFloor || "ground");
+  }
+
+  function abandonedStairGuardianDefeated(roomId) {
+    const guardian = state.units.find((unit) => unit.id === `statue-${roomId}`);
+    return Boolean(guardian && !guardian.alive);
+  }
+
+  function placeAbandonedPartyOnFloor(party, floor) {
+    const members = abandonedPartyMembers(party);
+    const spawn = party === "friendly" ? ABANDONED_UPPER.playerSpawn : ABANDONED_UPPER.rivalSpawn;
+    const direction = party === "friendly" ? 1 : -1;
+    members.forEach((unit, index) => {
+      unit.abandonedFloor = floor;
+      unit.searchTargetRoomId = null;
+      unit.requiredGuardianRoomId = null;
+      unit.requiredArrowTrapId = null;
+      if (floor === "upper") {
+        unit.x = -5.4 + (index % 5) * 2.7;
+        unit.z = spawn.z + direction * (3.2 + Math.floor(index / 5) * 2.3);
+        unit.y = 0;
+        unit.facing = party === "friendly" ? 0 : Math.PI;
+      }
+    });
+  }
+
+  function enterAbandonedUpper(party = "friendly") {
+    const visit = state.abandonedCastleVisit;
+    if (state.scene !== "abandonedCastle" || !visit) return false;
+    if (party === "friendly") {
+      if (visit.rewardRoute === "treasury" || visit.treasureTimerStarted || visit.totalMoneyTaken > 0) {
+        showToast("DU HAR VALT SKATTKAMMAREN · DRAKVÄGEN ÄR STÄNGD DET HÄR BESÖKET", 2600);
+        return false;
+      }
+      if (!abandonedStairGuardianDefeated(ABANDONED_UPPER.playerStairRoomId)) {
+        showToast("BESEGRA STATYN MED SVÄRD OCH SKÖLD I TRAPPRUMMET FÖRST", 2200);
+        return false;
+      }
+      visit.rewardRoute = "dragon";
+      visit.treasureAvailable = false;
+      visit.playerFloor = "upper";
+      visit.playerPartyEnteredUpper = true;
+      visit.playerEnteredUpperAt = state.time;
+      Object.assign(state.player, {
+        x: ABANDONED_UPPER.playerSpawn.x,
+        y: 0,
+        z: ABANDONED_UPPER.playerSpawn.z,
+        yaw: 0,
+        pitch: 0,
+        abandonedFloor: "upper",
+      });
+      placeAbandonedPartyOnFloor("friendly", "upper");
+      delete visit.arrowTrapActorPositions["player-king"];
+      abandonedPartyMembers("friendly").forEach((unit) => { delete visit.arrowTrapActorPositions[unit.id]; });
+      if (visit.rivalRouteChoice === "dragon" && !visit.rivalPartyEnteredUpper) visit.rivalUpperArrivalTimer = 4.5;
+      rebuildWorld();
+      showToast("DRAKEN HAR 1 500 LIV · DIN GRUPP FÖLJER KUNGEN", 3000);
+      return true;
+    }
+
+    const rivalKing = state.units.find((unit) => unit.id === visit.rivalKingId && unit.alive);
+    if (!rivalKing || visit.rivalPartyEnteredUpper) return false;
+    visit.rivalFloor = "upper";
+    visit.rivalPartyEnteredUpper = true;
+    visit.rivalEnteredUpperAt = state.time;
+    visit.rivalUpperArrivalTimer = null;
+    placeAbandonedPartyOnFloor("rival", "upper");
+    rebuildWorld();
+    if (visit.playerFloor === "upper") showToast(`FIENDEKUNG ${visit.rivalKingdom} OCH TIO VAKTER KOMMER UPP · NI HJÄLPS ÅT MOT DRAKEN!`, 3000);
+    return true;
+  }
+
+  function leaveAbandonedUpper() {
+    const visit = state.abandonedCastleVisit;
+    if (state.scene !== "abandonedCastle" || !visit || visit.playerFloor !== "upper") return false;
+    visit.playerFloor = "ground";
+    Object.assign(state.player, {
+      x: 15,
+      y: 0,
+      z: 81.15,
+      yaw: Math.PI,
+      pitch: 0,
+      abandonedFloor: "ground",
+    });
+    abandonedPartyMembers("friendly").forEach((unit, index) => {
+      unit.abandonedFloor = "ground";
+      unit.x = 12.2 + (index % 4) * 1.75;
+      unit.z = 78.4 - Math.floor(index / 4) * 1.5;
+      unit.y = 0;
+      unit.facing = Math.PI;
+      delete visit.arrowTrapActorPositions[unit.id];
+    });
+    delete visit.arrowTrapActorPositions["player-king"];
+    rebuildWorld();
+    showToast("HELA DIN ÖVERLEVANDE GRUPP FÖLJDE MED NER", 2200);
+    return true;
+  }
+
   function abandonedSearchState(party) {
     const visit = state.abandonedCastleVisit;
     return party === "friendly" ? visit?.friendlySearch : visit?.rivalSearch;
@@ -3035,12 +3386,14 @@ import * as THREE from "./vendor/three.module.js";
   function updateAbandonedSearchDiscoveries() {
     if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
     ["friendly", "rival"].forEach((party) => {
+      if (party === "friendly" && (state.abandonedCastleVisit.playerFloor !== "ground" || state.abandonedCastleVisit.rewardRoute === "dragon")) return;
+      if (party === "rival" && (state.abandonedCastleVisit.rivalFloor !== "ground" || state.abandonedCastleVisit.rivalRouteChoice === "dragon")) return;
       if (party === "friendly" && state.abandonedCastleVisit.playerEscaping) return;
       if (party === "rival" && state.abandonedCastleVisit.rivalEscaping) return;
       const search = abandonedSearchState(party);
       if (!search) return;
       releaseAbandonedSearchClaims(party);
-      abandonedPartyMembers(party).forEach((unit) => {
+      abandonedPartyMembers(party).filter((unit) => abandonedActorFloor(unit) === "ground").forEach((unit) => {
         const room = abandonedRoomAt(unit.x, unit.z);
         if (!room) return;
         if (!search.searchedRoomIds.includes(room.id)) search.searchedRoomIds.push(room.id);
@@ -3071,7 +3424,7 @@ import * as THREE from "./vendor/three.module.js";
     let x = 0;
     let z = 0;
     state.units.forEach((other) => {
-      if (other === unit || !other.alive || other.team !== unit.team) return;
+      if (other === unit || !other.alive || other.team !== unit.team || (state.scene === "abandonedCastle" && abandonedActorFloor(other) !== abandonedActorFloor(unit))) return;
       const dx = unit.x - other.x;
       const dz = unit.z - other.z;
       const distance = Math.hypot(dx, dz);
@@ -3117,11 +3470,41 @@ import * as THREE from "./vendor/three.module.js";
     return Boolean(unit?.fixed && unit.type === "archer");
   }
 
+  function onAbandonedDragonDefeated(dragon) {
+    const visit = state.abandonedCastleVisit;
+    if (state.scene !== "abandonedCastle" || !visit || visit.dragonDefeated) return false;
+    visit.dragonDefeated = true;
+    visit.dragonDefeatedAt = state.time;
+    visit.lastDragonHp = dragon.hp;
+    const playerWasInFight = visit.playerFloor === "upper" && state.player.alive;
+    if (playerWasInFight && !visit.dragonRewardClaimed) {
+      visit.rewardRoute = "dragon";
+      visit.dragonRewardClaimed = true;
+      visit.dragonRewardPaid = ABANDONED_DRAGON_REWARD;
+      state.money += ABANDONED_DRAGON_REWARD;
+      saveProgress();
+      sfx("coin");
+    }
+    const rivalsAliveUpstairs = abandonedPartyMembers("rival").some((unit) => unit.abandonedFloor === "upper");
+    const friendlySideAlive = state.player.alive || abandonedPartyMembers("friendly").some((unit) => unit.abandonedFloor === "upper");
+    if (rivalsAliveUpstairs && friendlySideAlive) {
+      visit.upperPhase = "war";
+      visit.upperWarActive = true;
+      showToast(`DRAKEN ÄR BESEGRAD · ${playerWasInFight ? "+1 500 PENGAR · " : ""}NU BÖRJAR KRIGET MOT FIENDEKUNGEN!`, 3600);
+    } else {
+      visit.upperPhase = "cleared";
+      visit.upperWarActive = false;
+      showToast(playerWasInFight ? "DRAKEN ÄR BESEGRAD · DU FÅR 1 500 PENGAR!" : "DRAKEN ÄR BESEGRAD", 3200);
+    }
+    updateHud();
+    return true;
+  }
+
   function damageUnit(unit, amount) {
     if (!unit?.alive) return;
     // Tornskyttar stannar i tornen hela striden. De kan skjuta, men kan inte
     // skadas och räknas därför inte heller som markstridande i resultatet.
-    if (isTowerArcher(unit)) return;
+    if (unit.invulnerable || isTowerArcher(unit)) return;
     if (unit.worker && state.mineRaid && !state.mineRaid.incoming) {
       const kingdom = state.kingdoms[state.mineRaid.target];
       if (unit.hp - amount <= 0 && kingdom.miners <= 1) {
@@ -3144,6 +3527,7 @@ import * as THREE from "./vendor/three.module.js";
     if (unit.hp <= 0) {
       unit.alive = false;
       unit.cooldown = 999;
+      if (unit.dragon) onAbandonedDragonDefeated(unit);
       if (unit.statue) {
         unit.awake = false;
         unit.lockedTargetId = null;
@@ -3252,7 +3636,17 @@ import * as THREE from "./vendor/three.module.js";
   function playerAttack() {
     enableSound();
     if (state.screen !== "playing" || state.modal || state.paused || !state.player.alive || state.player.attackCooldown > 0) return;
-    if (!state.units.some((unit) => unit.alive && unit.team !== 0 && (!unit.statue || unit.awake))) {
+    const visit = state.scene === "abandonedCastle" ? state.abandonedCastleVisit : null;
+    const attackableForPlayer = (unit) => {
+      if (!unit.alive || unit.team === 0 || unit.invulnerable || isTowerArcher(unit) || (unit.statue && !unit.awake)) return false;
+      if (!visit) return true;
+      if (abandonedActorFloor(unit) !== visit.playerFloor) return false;
+      if (visit.playerFloor !== "upper") return true;
+      if (visit.upperPhase === "dragon") return unit.dragon;
+      if (visit.upperPhase === "war") return unit.team === 1;
+      return false;
+    };
+    if (!state.units.some(attackableForPlayer)) {
       state.player.swing = 0.001;
       state.player.attackCooldown = state.weapon === "sword" ? 0.48 : 0.72;
       sfx(state.weapon);
@@ -3263,7 +3657,7 @@ import * as THREE from "./vendor/three.module.js";
     let target = null;
     let best = range;
     state.units.forEach((unit) => {
-      if (!unit.alive || unit.team === 0 || (unit.statue && !unit.awake)) return;
+      if (!attackableForPlayer(unit)) return;
       const dx = unit.x - state.player.x;
       const dz = unit.z - state.player.z;
       const distance = Math.hypot(dx, dz);
@@ -3288,6 +3682,11 @@ import * as THREE from "./vendor/three.module.js";
   function updateAbandonedCastleVisit() {
     if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
     const visit = state.abandonedCastleVisit;
+    if (visit.playerFloor !== "ground" || visit.rewardRoute === "dragon") {
+      visit.currentRoomId = null;
+      visit.allFriendlyInsideTreasure = false;
+      return;
+    }
     const room = abandonedRoomAt(state.player.x, state.player.z);
     visit.currentRoomId = room?.id || null;
     if (room && !visit.visitedRoomIds.includes(room.id)) {
@@ -3308,6 +3707,7 @@ import * as THREE from "./vendor/three.module.js";
     const moneyInteraction = interactables.find((item) => item.kind === "infiniteMoney");
 
     if (!visit.treasureTimerStarted && visit.treasureAvailable && visit.friendlySearch.treasureFound && visit.allFriendlyInsideTreasure) {
+      visit.rewardRoute = "treasury";
       visit.treasureUnlocked = true;
       visit.treasureTimerStarted = true;
       visit.treasureStartedAt = state.time;
@@ -3343,7 +3743,7 @@ import * as THREE from "./vendor/three.module.js";
 
   function updateAbandonedTreasure(dt) {
     const visit = state.abandonedCastleVisit;
-    if (state.scene !== "abandonedCastle" || !visit?.treasureTimerStarted || !visit.treasureAvailable) return;
+    if (state.scene !== "abandonedCastle" || visit?.playerFloor !== "ground" || !visit?.treasureTimerStarted || !visit.treasureAvailable) return;
     if (visit.treasureStartedAt === state.time) return;
     const activeDt = Math.min(dt, visit.treasureSecondsRemaining);
     visit.guardPayoutAccumulator += activeDt;
@@ -3386,11 +3786,13 @@ import * as THREE from "./vendor/three.module.js";
       candidate.alive
       && !candidate.statue
       && [0, 1].includes(candidate.team)
+      && abandonedActorFloor(candidate) === "ground"
       && Math.abs(candidate.z - unit.originZ) <= 8
       && Math.hypot(candidate.x - unit.x, candidate.z - unit.z) <= ABANDONED_S_GUARDIAN_RANGE
     ));
     if (
       state.player.alive
+      && state.abandonedCastleVisit?.playerFloor === "ground"
       && Math.abs(state.player.z - unit.originZ) <= 8
       && Math.hypot(state.player.x - unit.x, state.player.z - unit.z) <= ABANDONED_S_GUARDIAN_RANGE
     ) candidates.push({ id: "player-king", player: true, x: state.player.x, y: state.player.y, z: state.player.z, alive: true });
@@ -3456,7 +3858,7 @@ import * as THREE from "./vendor/three.module.js";
 
   function updateStatues(dt) {
     if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
-    state.units.filter((unit) => unit.statue).forEach((unit) => {
+    state.units.filter((unit) => unit.statue && !unit.upperTowerStatue && abandonedActorFloor(unit) === "ground" && state.abandonedCastleVisit?.playerFloor === "ground").forEach((unit) => {
       if (state.scene !== "abandonedCastle" || !state.abandonedCastleVisit) return;
       const attackEverySeconds = unit.attackEverySeconds || ABANDONED_STATUE_ATTACK_SECONDS;
       const model = actorModels.get(unit.id);
@@ -3502,10 +3904,11 @@ import * as THREE from "./vendor/three.module.js";
         other !== unit
         && !other.statue
         && other.alive
+        && abandonedActorFloor(other) === "ground"
         && [0, 1].includes(other.team)
         && abandonedRoomAt(other.x, other.z)?.id === room.id
       ));
-      if (state.player.alive && abandonedRoomAt(state.player.x, state.player.z)?.id === room.id) {
+      if (state.player.alive && state.abandonedCastleVisit?.playerFloor === "ground" && abandonedRoomAt(state.player.x, state.player.z)?.id === room.id) {
         candidates.push({ player: true, x: state.player.x, z: state.player.z, alive: true });
       }
       let target = null;
@@ -3602,9 +4005,9 @@ import * as THREE from "./vendor/three.module.js";
     const visit = state.abandonedCastleVisit;
     if (state.scene !== "abandonedCastle" || !visit) return;
     const actors = state.units
-      .filter((unit) => unit.alive && !unit.statue && [0, 1].includes(unit.team))
+      .filter((unit) => unit.alive && !unit.statue && abandonedActorFloor(unit) === "ground" && [0, 1].includes(unit.team))
       .map((unit) => ({ ...unit, actor: unit }));
-    if (state.player.alive) actors.push({ id: "player-king", player: true, x: state.player.x, y: state.player.y, z: state.player.z });
+    if (state.player.alive && visit.playerFloor === "ground") actors.push({ id: "player-king", player: true, x: state.player.x, y: state.player.y, z: state.player.z });
 
     actors.forEach((entry) => {
       if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
@@ -3661,6 +4064,148 @@ import * as THREE from "./vendor/three.module.js";
     }
   }
 
+  function abandonedUpperPartyTargets() {
+    const targets = state.units.filter((unit) => (
+      unit.alive
+      && !unit.statue
+      && !unit.dragon
+      && abandonedActorFloor(unit) === "upper"
+      && [0, 1].includes(unit.team)
+    ));
+    if (state.player.alive && state.abandonedCastleVisit?.playerFloor === "upper") {
+      targets.push({ id: "player-king", player: true, team: 0, x: state.player.x, y: state.player.y, z: state.player.z, hp: state.player.hp, alive: true });
+    }
+    return targets;
+  }
+
+  function damageAbandonedUpperTarget(target, amount) {
+    if (!target?.alive) return;
+    if (target.player) damagePlayer(amount);
+    else damageUnit(target, amount);
+  }
+
+  function addDragonFireWarning(x, z) {
+    const material = new THREE.MeshBasicMaterial({ color: 0xff6a1c, transparent: true, opacity: 0.62, depthWrite: false });
+    const warning = addMesh(new THREE.CylinderGeometry(ABANDONED_DRAGON_FIRE_RADIUS, ABANDONED_DRAGON_FIRE_RADIUS, 0.08, 28), material, effectRoot, false, false);
+    warning.position.set(x, 0.08, z);
+    warning.userData.life = ABANDONED_DRAGON_FIRE_WARNING_SECONDS;
+    return warning;
+  }
+
+  function burstDragonFire(x, z) {
+    const flameMaterial = new THREE.MeshBasicMaterial({ color: 0xff8a24, transparent: true, opacity: 0.92, depthWrite: false });
+    for (let index = 0; index < 11; index++) {
+      const flame = addMesh(new THREE.IcosahedronGeometry(0.45 + (index % 3) * 0.28, 1), flameMaterial.clone(), effectRoot, false, false);
+      const angle = index / 11 * TAU;
+      const radius = (index % 4) * 0.72;
+      flame.position.set(x + Math.cos(angle) * radius, 0.6 + (index % 5) * 0.52, z + Math.sin(angle) * radius);
+      flame.userData.life = 0.48 + (index % 3) * 0.08;
+    }
+  }
+
+  function updateAbandonedUpperCombat(dt) {
+    const visit = state.abandonedCastleVisit;
+    if (state.scene !== "abandonedCastle" || !visit) return;
+    if (visit.playerFloor === "upper" && Number.isFinite(visit.rivalUpperArrivalTimer) && !visit.rivalPartyEnteredUpper) {
+      visit.rivalUpperArrivalTimer = Math.max(0, visit.rivalUpperArrivalTimer - dt);
+      if (visit.rivalUpperArrivalTimer <= 1e-9) {
+        const rearStairGuardian = state.units.find((unit) => unit.id === `statue-${ABANDONED_UPPER.rivalStairRoomId}`);
+        if (rearStairGuardian?.alive) damageUnit(rearStairGuardian, rearStairGuardian.hp);
+        enterAbandonedUpper("rival");
+        if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+      }
+    }
+    if (visit.playerFloor !== "upper") return;
+
+    const towerTargets = abandonedUpperPartyTargets();
+    state.units.filter((unit) => unit.upperTowerStatue && unit.alive && abandonedActorFloor(unit) === "upper").forEach((tower, towerIndex) => {
+      if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+      tower.cooldown = Math.max(-0.01, tower.cooldown - dt);
+      tower.awake = true;
+      if (!towerTargets.length || tower.cooldown > 1e-9) return;
+      tower.cooldown = tower.attackEverySeconds || ABANDONED_UPPER_TOWER_ATTACK_SECONDS;
+      const target = towerTargets[(tower.shotCursor || towerIndex) % towerTargets.length];
+      tower.shotCursor = (tower.shotCursor || towerIndex) + 1;
+      tower.facing = Math.atan2(target.x - tower.x, target.z - tower.z);
+      tower.shotsFired = (tower.shotsFired || 0) + 1;
+      tower.lastShotAt = state.time;
+      damageAbandonedUpperTarget(target, ABANDONED_UPPER_TOWER_DAMAGE);
+      if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+      fireTracer(tower, target, 0xff5f48);
+      const model = actorModels.get(tower.id);
+      if (model) animateActor(model, tower, dt);
+    });
+    if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+
+    const dragon = state.units.find((unit) => unit.dragon);
+    const model = dragon ? actorModels.get(dragon.id) : null;
+    if (dragon?.alive && visit.upperPhase === "dragon") {
+      dragon.handCooldown = Number.isFinite(dragon.handCooldown) ? dragon.handCooldown - dt : 1.1;
+      dragon.fireCooldown = Number.isFinite(dragon.fireCooldown) ? dragon.fireCooldown - dt : 2.2;
+      const candidates = abandonedUpperPartyTargets();
+      candidates.sort((a, b) => Math.hypot(a.x - dragon.x, a.z - dragon.z) - Math.hypot(b.x - dragon.x, b.z - dragon.z));
+      const nearest = candidates[0] || null;
+      if (dragon.pendingFire) {
+        dragon.pendingFire.secondsRemaining = Math.max(0, dragon.pendingFire.secondsRemaining - dt);
+        if (dragon.pendingFire.secondsRemaining <= 1e-9) {
+          const impact = { ...dragon.pendingFire };
+          dragon.pendingFire = null;
+          dragon.fireBreaths = (dragon.fireBreaths || 0) + 1;
+          dragon.lastFireAt = state.time;
+          burstDragonFire(impact.x, impact.z);
+          abandonedUpperPartyTargets().forEach((target) => {
+            if (Math.hypot(target.x - impact.x, target.z - impact.z) <= ABANDONED_DRAGON_FIRE_RADIUS) damageAbandonedUpperTarget(target, ABANDONED_DRAGON_FIRE_DAMAGE);
+          });
+          if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+        }
+      }
+      if (nearest) {
+        const distance = Math.hypot(nearest.x - dragon.x, nearest.z - dragon.z) || 1;
+        dragon.facing = Math.atan2(nearest.x - dragon.x, nearest.z - dragon.z);
+        if (distance > 5.1) {
+          const speed = 1.35;
+          moveUnit(dragon, (nearest.x - dragon.x) / distance * speed * dt, (nearest.z - dragon.z) / distance * speed * dt);
+          dragon.walk += dt * 2.8;
+        } else if (dragon.handCooldown <= 1e-9) {
+          dragon.handCooldown = ABANDONED_DRAGON_HAND_SECONDS;
+          dragon.handSwipes = (dragon.handSwipes || 0) + 1;
+          dragon.lastHandAt = state.time;
+          damageAbandonedUpperTarget(nearest, ABANDONED_DRAGON_HAND_DAMAGE);
+          if (state.scene !== "abandonedCastle" || state.abandonedCastleVisit !== visit) return;
+        }
+        if (!dragon.pendingFire && dragon.fireCooldown <= 1e-9) {
+          const fireTarget = candidates[(dragon.fireBreaths || 0) % candidates.length] || nearest;
+          dragon.fireCooldown = ABANDONED_DRAGON_FIRE_SECONDS;
+          dragon.pendingFire = { x: fireTarget.x, z: fireTarget.z, secondsRemaining: ABANDONED_DRAGON_FIRE_WARNING_SECONDS };
+          addDragonFireWarning(fireTarget.x, fireTarget.z);
+          showToast("DRAKEN SPRUTAR ELD · FLYTTA DIG FRÅN DEN ORANGE CIRKELN!", 1700);
+        }
+      }
+      if (model) {
+        model.position.x = lerp(model.position.x, dragon.x, clamp(dt * 7, 0, 1));
+        model.position.z = lerp(model.position.z, dragon.z, clamp(dt * 7, 0, 1));
+        model.position.y = Math.sin(state.time * 2.2) * 0.12;
+        model.rotation.y = dragon.facing + Math.PI;
+        const body = model.userData.body;
+        if (body?.userData.dragonBody) body.userData.dragonBody.rotation.z = Math.sin(state.time * 1.8) * 0.035;
+      }
+    } else if (dragon && model && !dragon.alive) {
+      model.userData.fall = Math.min(1, (model.userData.fall || 0) + dt * 0.65);
+      model.rotation.z = -model.userData.fall * Math.PI / 2;
+      model.position.y = model.userData.fall * 0.35;
+    }
+
+    if (visit.upperPhase === "war") {
+      const rivalsAlive = abandonedPartyMembers("rival").some((unit) => unit.abandonedFloor === "upper");
+      if (!rivalsAlive && !visit.upperWarResult) {
+        visit.upperWarResult = "player-win";
+        visit.upperWarActive = false;
+        visit.upperPhase = "cleared";
+        showToast("DU VANN KRIGET PÅ ÖVERVÅNINGEN · TORNSTATYERNA SKJUTER FORTFARANDE!", 3300);
+      }
+    }
+  }
+
   function updateUnits(dt) {
     const unitsAtFrameStart = state.units;
     const sceneAtFrameStart = state.scene;
@@ -3669,7 +4214,8 @@ import * as THREE from "./vendor/three.module.js";
       // the king at home. Stop this old frame immediately so stale enemies
       // cannot keep attacking the newly respawned player.
       if (state.units !== unitsAtFrameStart || state.scene !== sceneAtFrameStart) return true;
-      if (unit.statue) return;
+      if (unit.statue || unit.dragon) return;
+      if (state.scene === "abandonedCastle" && !abandonedUnitOnVisibleFloor(unit)) return;
       const model = actorModels.get(unit.id);
       if (!unit.alive) {
         if (model) {
@@ -3694,7 +4240,7 @@ import * as THREE from "./vendor/three.module.js";
       const range = unitAttackRange(unit);
       const stealthAwareness = unit.team === 0 ? 12 : 15;
       const detectionRange = state.scene === "abandonedCastle"
-        ? unit.rivalParty && Math.abs(unit.z) > 90 ? 0 : 16
+        ? state.abandonedCastleVisit?.playerFloor === "upper" ? Infinity : unit.rivalParty && Math.abs(unit.z) > 90 ? 0 : 16
         : state.scene === "stealth"
           ? Math.max(stealthAwareness, range)
           : Infinity;
@@ -3705,7 +4251,13 @@ import * as THREE from "./vendor/three.module.js";
           let goal = null;
           let stopDistance = 0.42;
           if (unit.broughtGuard) {
-            if (visit.playerEscaping) {
+            if (visit.playerFloor === "upper") {
+              goal = state.player;
+              stopDistance = 3.4;
+            } else if (visit.rewardRoute === "dragon") {
+              goal = state.player;
+              stopDistance = 2.8;
+            } else if (visit.playerEscaping) {
               if (visit.playerEscapeSide === "rear") {
                 goal = unit.z > -87 ? { x: 0, z: -88 } : { x: 0, z: ABANDONED_REAR_BRIDGE.exitZ };
               } else {
@@ -3717,6 +4269,19 @@ import * as THREE from "./vendor/three.module.js";
               stopDistance = visit.enteredCastle ? 0.4 : 2.6;
             }
           } else if (unit.rivalParty) {
+            if (visit.rivalFloor === "upper") {
+              const rivalKing = state.units.find((entry) => entry.id === visit.rivalKingId && entry.alive);
+              goal = unit.rival ? ABANDONED_UPPER.dragon : rivalKing || ABANDONED_UPPER.dragon;
+              stopDistance = unit.rival ? 5.2 : 3.2;
+            } else if (visit.rivalRouteChoice === "dragon") {
+              const stairGuardian = state.units.find((entry) => entry.id === `statue-${ABANDONED_UPPER.rivalStairRoomId}`);
+              goal = stairGuardian?.alive ? stairGuardian : ABANDONED_UPPER.groundRivalStair;
+              stopDistance = stairGuardian?.alive ? 2.25 : 1.05;
+              if (unit.rival && !stairGuardian?.alive && Math.hypot(unit.x - goal.x, unit.z - goal.z) <= 3) {
+                enterAbandonedUpper("rival");
+                return true;
+              }
+            } else {
             const rivalRoom = abandonedRoomAt(unit.x, unit.z);
             if (unit.rival && !visit.rivalEscaping && visit.rivalSearch.treasureFound && visit.treasureAvailable && rivalRoom?.id === activeAbandonedTreasureRoomId()) {
               visit.rivalReachedMoney = true;
@@ -3728,15 +4293,16 @@ import * as THREE from "./vendor/three.module.js";
             else if (unit.z < -118) goal = { x: 0, z: ABANDONED_REAR_BRIDGE.bridgeWaypointZ };
             else if (unit.z < -87) goal = { x: 0, z: ABANDONED_REAR_BRIDGE.insideWaypointZ };
             else goal = abandonedSearchGoal(unit, "rival");
+            }
           }
           if (goal) {
             const goalDistance = Math.hypot(goal.x - unit.x, goal.z - unit.z);
             if (goalDistance > stopDistance) {
-              const moveTarget = abandonedGuardianAwareNavigationTarget(unit, goal);
+              const moveTarget = visit.playerFloor === "upper" ? goal : abandonedGuardianAwareNavigationTarget(unit, goal);
               const waypointDistance = Math.hypot(moveTarget.x - unit.x, moveTarget.z - unit.z) || 1;
               let moveX = (moveTarget.x - unit.x) / waypointDistance;
               let moveZ = (moveTarget.z - unit.z) / waypointDistance;
-              const inNarrowLabyrinthPassage = Math.abs(unit.x) < 5.25 && Math.abs(unit.z) < 120;
+              const inNarrowLabyrinthPassage = visit.playerFloor === "ground" && Math.abs(unit.x) < 5.25 && Math.abs(unit.z) < 120;
               const avoidance = inNarrowLabyrinthPassage ? { x: 0, z: 0 } : unitAvoidance(unit);
               moveX += avoidance.x * 0.72;
               moveZ += avoidance.z * 0.72;
@@ -3787,7 +4353,7 @@ import * as THREE from "./vendor/three.module.js";
       if (distance > range || !lineOfSight) {
         if (speed > 0) {
           const waypoint = state.scene === "abandonedCastle"
-            ? abandonedGuardianAwareNavigationTarget(unit, target)
+            ? state.abandonedCastleVisit?.playerFloor === "upper" ? target : abandonedGuardianAwareNavigationTarget(unit, target)
             : rearBridgeWaypoint(unit, target);
           const moveTarget = waypoint || target;
           const moveDistance = Math.hypot(moveTarget.x - unit.x, moveTarget.z - unit.z) || 1;
@@ -3987,7 +4553,14 @@ import * as THREE from "./vendor/three.module.js";
     } else if (state.scene === "abandonedCastle") {
       interactables.forEach((item) => {
         const distance = Math.hypot(item.x - state.player.x, item.z - state.player.z);
-        if (distance <= item.radius && (!state.nearest || distance < state.nearest.distance)) state.nearest = { ...item, distance };
+        if (distance <= item.radius && (!state.nearest || distance < state.nearest.distance)) {
+          const candidate = { ...item, distance };
+          if (item.kind === "abandonedStairsUp") {
+            if (state.abandonedCastleVisit?.rewardRoute === "treasury") candidate.label = "DRAKVÄGEN ÄR STÄNGD";
+            else if (!abandonedStairGuardianDefeated(item.roomId)) candidate.label = "BESEGRA STATYN I TRAPPRUMMET";
+          }
+          state.nearest = candidate;
+        }
       });
     }
     if (ui.prompt) {
@@ -4012,8 +4585,14 @@ import * as THREE from "./vendor/three.module.js";
       else showToast(`${state.miners} MINERS JOBBAR · ${mineIncomeFor()} PENGAR VAR 30:E SEKUND`);
     }
     else if (item.kind === "tower") placeTowerArcher(item.slot);
+    else if (item.kind === "abandonedStairsUp") enterAbandonedUpper("friendly");
+    else if (item.kind === "abandonedStairsDown") leaveAbandonedUpper();
     else if (item.kind === "infiniteMoney") {
       const visit = state.abandonedCastleVisit;
+      if (visit?.rewardRoute === "dragon") {
+        showToast("DU HAR VALT DRAKEN · SKATTKAMMAREN ÄR STÄNGD DET HÄR BESÖKET", 2400);
+        return;
+      }
       if (!visit?.treasureTimerStarted || !visit.treasureAvailable) {
         if (visit?.treasureMaxReached) {
           showToast("MAX 500 PENGAR ÄR REDAN TAGNA DET HÄR BESÖKET");
@@ -4157,6 +4736,7 @@ import * as THREE from "./vendor/three.module.js";
       movePlayer(dt);
       updateAbandonedSearchDiscoveries();
       updateStatues(dt);
+      updateAbandonedUpperCombat(dt);
       updateUnits(dt);
       updateAbandonedArrowTraps();
       updateAbandonedCombatantHealing();
@@ -4190,6 +4770,28 @@ import * as THREE from "./vendor/three.module.js";
         : Object.values(state.quickStealth).reduce((sum, value) => sum + value, 0);
       ui.followers.textContent = String(followers);
     }
+    const visit = state.scene === "abandonedCastle" ? state.abandonedCastleVisit : null;
+    const upstairs = Boolean(visit && visit.playerFloor === "upper");
+    const dragon = visit ? state.units.find((unit) => unit.id === visit.dragonId) : null;
+    const showBoss = upstairs && Boolean(dragon?.alive);
+    if (ui.dragonBoss) setVisible(ui.dragonBoss, showBoss);
+    if (ui.dragonBossText && dragon) ui.dragonBossText.textContent = `DRAKEN · ${Math.ceil(dragon.hp).toLocaleString("sv-SE")} / ${ABANDONED_DRAGON_HP.toLocaleString("sv-SE")} LIV`;
+    if (ui.dragonBossFill && dragon) ui.dragonBossFill.style.width = `${clamp(dragon.hp / ABANDONED_DRAGON_HP * 100, 0, 100)}%`;
+    if (ui.dragonBossMeter && dragon) {
+      ui.dragonBossMeter.setAttribute("aria-valuenow", String(Math.ceil(dragon.hp)));
+      ui.dragonBossMeter.setAttribute("aria-valuemax", String(ABANDONED_DRAGON_HP));
+    }
+    if (ui.upperPhase) {
+      setVisible(ui.upperPhase, upstairs);
+      const phase = visit?.upperPhase === "war" ? "war" : visit?.upperPhase === "cleared" ? "victory" : "truce";
+      ui.upperPhase.dataset.phase = phase;
+      if (ui.upperPhaseLabel) ui.upperPhaseLabel.textContent = phase === "war"
+        ? "KRIG · BESEGRA FIENDEKUNGENS GRUPP"
+        : phase === "victory"
+          ? "DRAKEN ÄR BESEGRAD · TORNSTATYERNA SKJUTER ÄN"
+          : "VAPENVILA · BESEGRA DRAKEN TILLSAMMANS";
+    }
+    shell.classList.toggle("upper-combat-active", upstairs);
   }
 
   function render() {
@@ -4318,6 +4920,32 @@ import * as THREE from "./vendor/three.module.js";
       drawbridge: { ...drawbridges[0] },
       drawbridges,
       moat: { surroundsCastle: true, bridgesAreOnlySafeCrossings: true, bridgeIsOnlySafeFrontCrossing: false },
+      staircases: {
+        player: {
+          side: "front",
+          roomId: ABANDONED_UPPER.playerStairRoomId,
+          ground: { ...ABANDONED_UPPER.groundPlayerStair },
+          upper: { ...ABANDONED_UPPER.upperPlayerStair },
+          partyMovesOnlyWithKing: true,
+        },
+        rival: {
+          side: "rear",
+          roomId: ABANDONED_UPPER.rivalStairRoomId,
+          ground: { ...ABANDONED_UPPER.groundRivalStair },
+          upper: { ...ABANDONED_UPPER.upperRivalStair },
+          partyMovesOnlyWithKing: true,
+        },
+      },
+      upperFloor: {
+        width: ABANDONED_UPPER.width,
+        depth: ABANDONED_UPPER.depth,
+        dragon: { ...ABANDONED_UPPER.dragon, hp: ABANDONED_DRAGON_HP, reward: ABANDONED_DRAGON_REWARD },
+        towerPositions: ABANDONED_UPPER.towerPositions.map((position) => ({ ...position })),
+        towerStatues: 4,
+        towerStatueWeapon: "bow",
+        towerStatuesInvulnerable: true,
+        towerRange: "entire-upper-floor",
+      },
       rooms: ABANDONED_ROOMS.map((room) => ({
         id: room.id,
         name: room.name,
@@ -4336,6 +4964,7 @@ import * as THREE from "./vendor/three.module.js";
         },
         connectsTo: [...room.connectsTo],
         hasStatue: true,
+        hasStaircase: [ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id),
         treasureCandidate: Boolean(room.treasureCandidate),
       })),
       doors: ABANDONED_DOORS.map((door) => ({ ...door, connects: [...door.connects] })),
@@ -4363,15 +4992,16 @@ import * as THREE from "./vendor/three.module.js";
 
   function renderGameToText() {
     const nearbyUnits = state.units
-      .filter((unit) => unit.alive && dist(unit, state.player) < 18)
+      .filter((unit) => unit.alive && abandonedUnitOnVisibleFloor(unit) && dist(unit, state.player) < 18)
       .slice(0, 16)
       .map((unit) => ({
         id: unit.id, team: unit.team, type: unit.type, king: unit.king, worker: unit.worker,
-        statue: unit.statue, sGuardian: unit.sGuardian, shield: unit.shield, weapon: unit.weapon, rivalParty: unit.rivalParty,
+        statue: unit.statue, sGuardian: unit.sGuardian, dragon: unit.dragon, upperTowerStatue: unit.upperTowerStatue,
+        invulnerable: unit.invulnerable, abandonedFloor: abandonedActorFloor(unit), shield: unit.shield, weapon: unit.weapon, rivalParty: unit.rivalParty,
         broughtGuard: unit.broughtGuard, searchParty: unit.searchParty, searchTargetRoomId: unit.searchTargetRoomId,
         requiredGuardianRoomId: unit.requiredGuardianRoomId || null, requiredArrowTrapId: unit.requiredArrowTrapId || null,
         abandonedHealSecondsRemaining: rounded(unit.abandonedHealSecondsRemaining || 0),
-        roomId: abandonedRoomAt(unit.x, unit.z)?.id || null,
+        roomId: abandonedActorFloor(unit) === "ground" ? abandonedRoomAt(unit.x, unit.z)?.id || null : null,
         x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, maxHp: unit.maxHp,
         distance: rounded(dist(unit, state.player)),
       }));
@@ -4379,10 +5009,14 @@ import * as THREE from "./vendor/three.module.js";
     const abandonedVisitState = state.abandonedCastleVisit;
     const friendlyBrought = abandonedVisitState ? abandonedPartyMembers("friendly", false) : [];
     const friendlyAlive = friendlyBrought.filter((unit) => unit.alive);
-    const friendlyInsideTreasure = friendlyAlive.filter((unit) => abandonedRoomAt(unit.x, unit.z)?.id === activeAbandonedTreasureRoomId());
-    const playerInsideTreasure = abandonedRoomAt(state.player.x, state.player.z)?.id === activeAbandonedTreasureRoomId();
+    const friendlyInsideTreasure = friendlyAlive.filter((unit) => abandonedActorFloor(unit) === "ground" && abandonedRoomAt(unit.x, unit.z)?.id === activeAbandonedTreasureRoomId());
+    const playerInsideTreasure = abandonedVisitState?.playerFloor === "ground" && abandonedRoomAt(state.player.x, state.player.z)?.id === activeAbandonedTreasureRoomId();
     const abandonedCastleState = abandonedVisitState ? {
       phase: abandonedVisitState.treasureMaxReached ? "maxed" : !abandonedVisitState.treasureAvailable ? "expired" : abandonedVisitState.treasureTimerStarted ? "earning" : abandonedVisitState.friendlySearch.treasureFound ? "gathering" : "searching",
+      playerFloor: abandonedVisitState.playerFloor,
+      rivalFloor: abandonedVisitState.rivalFloor,
+      rewardRoute: abandonedVisitState.rewardRoute,
+      rivalRouteChoice: abandonedVisitState.rivalRouteChoice,
       enteredCastle: abandonedVisitState.enteredCastle,
       playerFoundTreasure: abandonedVisitState.playerFoundTreasure,
       playerEscaping: abandonedVisitState.playerEscaping,
@@ -4427,6 +5061,46 @@ import * as THREE from "./vendor/three.module.js";
         allSurvivorsInsideTreasure: abandonedVisitState.allFriendlyInsideTreasure,
       },
       playerInsideTreasure,
+      upperFloor: {
+        playerPartyEntered: abandonedVisitState.playerPartyEnteredUpper,
+        rivalPartyEntered: abandonedVisitState.rivalPartyEnteredUpper,
+        rivalArrivalSecondsRemaining: Number.isFinite(abandonedVisitState.rivalUpperArrivalTimer) ? rounded(abandonedVisitState.rivalUpperArrivalTimer) : null,
+        phase: abandonedVisitState.upperPhase,
+        truceActive: abandonedVisitState.upperPhase === "dragon",
+        warActive: abandonedVisitState.upperWarActive,
+        warResult: abandonedVisitState.upperWarResult,
+        dragon: (() => {
+          const dragon = state.units.find((unit) => unit.id === abandonedVisitState.dragonId);
+          return dragon ? {
+            id: dragon.id,
+            floor: abandonedActorFloor(dragon),
+            hp: dragon.hp,
+            maxHp: dragon.maxHp,
+            alive: dragon.alive,
+            handSwipes: dragon.handSwipes || 0,
+            fireBreaths: dragon.fireBreaths || 0,
+            fireWarning: dragon.pendingFire ? { x: rounded(dragon.pendingFire.x), z: rounded(dragon.pendingFire.z), secondsRemaining: rounded(dragon.pendingFire.secondsRemaining) } : null,
+          } : null;
+        })(),
+        dragonDefeated: abandonedVisitState.dragonDefeated,
+        dragonDefeatedAt: abandonedVisitState.dragonDefeatedAt,
+        rewardCap: ABANDONED_DRAGON_REWARD,
+        rewardClaimed: abandonedVisitState.dragonRewardClaimed,
+        rewardPaid: abandonedVisitState.dragonRewardPaid,
+        towerStatues: state.units.filter((unit) => unit.upperTowerStatue).map((unit) => ({
+          id: unit.id,
+          x: unit.x,
+          y: unit.y,
+          z: unit.z,
+          alive: unit.alive,
+          life: "infinite",
+          invulnerable: unit.invulnerable,
+          infiniteArrows: unit.infiniteArrows,
+          coversEntireUpperFloor: true,
+          shotsFired: unit.shotsFired || 0,
+          lastShotAt: unit.lastShotAt ?? null,
+        })),
+      },
       treasure: {
         roomId: activeAbandonedTreasureRoomId(),
         candidateRoomIds: [...ABANDONED_TREASURE_ROOM_IDS],
@@ -4464,7 +5138,8 @@ import * as THREE from "./vendor/three.module.js";
         }] : []),
       },
       statues: state.units.filter((unit) => unit.statue).map((unit) => ({
-        id: unit.id, roomId: unit.roomId, sGuardian: unit.sGuardian, hp: unit.hp, maxHp: unit.maxHp, alive: unit.alive,
+        id: unit.id, roomId: unit.roomId, floor: abandonedActorFloor(unit), sGuardian: unit.sGuardian, upperTowerStatue: unit.upperTowerStatue,
+        invulnerable: unit.invulnerable, life: unit.invulnerable ? "infinite" : unit.hp, hp: unit.hp, maxHp: unit.maxHp, alive: unit.alive,
         awake: unit.awake, respawnSecondsRemaining: rounded(unit.respawnTimer), weapon: unit.weapon,
         shield: unit.shield, attackEverySeconds: unit.attackEverySeconds || ABANDONED_STATUE_ATTACK_SECONDS,
         respawnAfterSeconds: unit.respawnAfterSeconds,
@@ -4497,8 +5172,9 @@ import * as THREE from "./vendor/three.module.js";
       arrowTrapSafeCrossings: abandonedVisitState.arrowTrapSafeCrossings || 0,
       statueCounts: {
         total: state.units.filter((unit) => unit.statue).length,
-        ordinaryRoomGuardians: state.units.filter((unit) => unit.statue && !unit.sGuardian).length,
+        ordinaryRoomGuardians: state.units.filter((unit) => unit.statue && !unit.sGuardian && !unit.upperTowerStatue).length,
         sGuardians: state.units.filter((unit) => unit.statue && unit.sGuardian).length,
+        upperTowerStatues: state.units.filter((unit) => unit.upperTowerStatue).length,
       },
       statuesDefeated: abandonedVisitState.statuesDefeated,
       statueRespawns: abandonedVisitState.statueRespawns,
@@ -4516,9 +5192,10 @@ import * as THREE from "./vendor/three.module.js";
           type: unit.type,
           x: rounded(unit.x),
           z: rounded(unit.z),
+          floor: abandonedActorFloor(unit),
           alive: unit.alive,
           escaped: Boolean(unit.escaped),
-          roomId: abandonedRoomAt(unit.x, unit.z)?.id || null,
+          roomId: abandonedActorFloor(unit) === "ground" ? abandonedRoomAt(unit.x, unit.z)?.id || null : null,
         })),
         reachedMoney: abandonedVisitState.rivalReachedMoney,
         escaping: abandonedVisitState.rivalEscaping,
@@ -4552,7 +5229,7 @@ import * as THREE from "./vendor/three.module.js";
         } : null,
       } : null,
       dayNight: { phase: state.phase, day: state.day, elapsedSeconds: rounded(state.phaseElapsed), remainingSeconds: rounded(duration - state.phaseElapsed), durationSeconds: duration, sleepingSeconds: rounded(state.sleeping), mineRaidTriggered: state.nightMineRaidTriggered, mineRaidAtSeconds: rounded(state.nightMineRaidAt), enemyWarTriggered: state.enemyWarTriggered, enemyWarAtSeconds: rounded(state.enemyWarAt) },
-      player: { x: rounded(state.player.x), y: rounded(state.player.y), z: rounded(state.player.z), yaw: rounded(state.player.yaw), pitch: rounded(state.player.pitch), hp: state.player.hp, alive: state.player.alive, weapon: state.weapon, abandonedHealSecondsRemaining: rounded(state.player.abandonedHealSecondsRemaining || 0) },
+      player: { x: rounded(state.player.x), y: rounded(state.player.y), z: rounded(state.player.z), yaw: rounded(state.player.yaw), pitch: rounded(state.player.pitch), hp: state.player.hp, alive: state.player.alive, weapon: state.weapon, abandonedFloor: state.abandonedCastleVisit?.playerFloor || null, abandonedHealSecondsRemaining: rounded(state.player.abandonedHealSecondsRemaining || 0) },
       resources: { money: state.money, diamonds: state.diamonds, diamondSellValue: 10 },
       mine: {
         behindPlayerCastle: true,
@@ -4822,6 +5499,9 @@ import * as THREE from "./vendor/three.module.js";
     startMineDefense: (attacker = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startMineDefense(attacker, counts),
     startAbandonedCastle: (counts = { sword: 0, archer: 0, cavalry: 0 }) => startAbandonedCastle(counts),
     finishAbandonedCastle,
+    enterAbandonedUpper,
+    leaveAbandonedUpper,
+    abandonedStairGuardianDefeated,
     startEnemyWar,
     finishEnemyWar,
     getAbandonedCastleLayout,

@@ -14,7 +14,7 @@
     <link rel="icon" href="../favicon.ico">
     <link rel="apple-touch-icon" href="../apple-touch-icon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="stylesheet" href="style.css?v=20260829-lethal-guardian-gates">
+    <link rel="stylesheet" href="style.css?v=20260830-dragon-upper-floor">
   </head>
   <body>
     <main class="game-shell" id="game-shell">
@@ -73,6 +73,41 @@
           <span><small>FÖLJER</small><strong id="followers-value">0</strong></span>
         </div>
       </section>
+
+      <div class="upper-combat-hud" aria-label="Striden på övervåningen">
+        <section class="dragon-boss-hud" id="dragon-boss-hud" aria-label="Drakens liv" hidden>
+          <div class="dragon-boss-heading">
+            <span class="dragon-boss-mark" aria-hidden="true">♞</span>
+            <span>
+              <small>ÖVERVÅNINGENS VÄKTARE</small>
+              <strong id="dragon-boss-text">DRAKEN · 1 500 / 1 500 LIV</strong>
+            </span>
+          </div>
+          <div
+            class="dragon-boss-track"
+            id="dragon-boss-meter"
+            role="progressbar"
+            aria-label="Drakens återstående liv"
+            aria-valuemin="0"
+            aria-valuemax="1500"
+            aria-valuenow="1500"
+          >
+            <span class="dragon-boss-fill" id="dragon-boss-fill"></span>
+          </div>
+        </section>
+
+        <div
+          class="upper-phase-hud"
+          id="upper-phase-hud"
+          data-phase="truce"
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+          <span class="upper-phase-mark" aria-hidden="true">⚜</span>
+          <strong id="upper-phase-label">VAPENVILA · BESEGRA DRAKEN</strong>
+        </div>
+      </div>
 
       <div class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 
@@ -307,6 +342,6 @@
       </noscript>
     </main>
 
-    <script type="module" src="game.js?v=20260829-lethal-guardian-gates"></script>
+    <script type="module" src="game.js?v=20260830-dragon-upper-floor"></script>
   </body>
 </html>
