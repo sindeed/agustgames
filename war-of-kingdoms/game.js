@@ -214,9 +214,13 @@ import * as THREE from "./vendor/three.module.js";
     guardMoneyPerSecond: ABANDONED_GUARD_MONEY_PER_SECOND,
     treasureSecondsPerVisit: ABANDONED_TREASURE_SECONDS,
     alternativeUpperFloor: true,
+    rewardQuestionInActiveTreasureRoom: true,
+    rewardOptions: Object.freeze(["money", "dragon"]),
+    dragonRouteInitiallyLocked: true,
     dragonHp: ABANDONED_DRAGON_HP,
     dragonReward: ABANDONED_DRAGON_REWARD,
     dragonColor: "green",
+    dragonAttackableByPlayerWeapons: Object.freeze(["sword", "bow"]),
     dragonMeleeRange: ABANDONED_DRAGON_MELEE_RANGE,
     dragonFireRange: `>${ABANDONED_DRAGON_MELEE_RANGE}`,
     upperTowerStatues: 4,
@@ -1151,10 +1155,20 @@ import * as THREE from "./vendor/three.module.js";
       worldRoot.add(roomLight);
       cylinder(room.x, 5.28, room.z, 0.24, 0.42, materials.gold, worldRoot, 8);
     } else if ([ABANDONED_UPPER.playerStairRoomId, ABANDONED_UPPER.rivalStairRoomId].includes(room.id)) {
-      const stair = room.id === ABANDONED_UPPER.playerStairRoomId ? ABANDONED_UPPER.groundPlayerStair : ABANDONED_UPPER.groundRivalStair;
-      buildStoneStaircase(stair.x, stair.z, room.id === ABANDONED_UPPER.playerStairRoomId ? 1 : -1, 2.2, 7);
-      const runeZ = stair.z + (room.id === ABANDONED_UPPER.playerStairRoomId ? 1.65 : -1.65);
+      const isPlayerStair = room.id === ABANDONED_UPPER.playerStairRoomId;
+      const stair = isPlayerStair ? ABANDONED_UPPER.groundPlayerStair : ABANDONED_UPPER.groundRivalStair;
+      buildStoneStaircase(stair.x, stair.z, isPlayerStair ? 1 : -1, 2.2, 7);
+      const runeZ = stair.z + (isPlayerStair ? 1.65 : -1.65);
       box(stair.x, 2.85, runeZ, 1.35, 1.05, 0.12, materials.gold, worldRoot, false, true);
+      if (isPlayerStair && state.abandonedCastleVisit?.rewardRoute !== "dragon") {
+        const gateZ = stair.z - 1.62;
+        for (const offset of [-0.92, -0.46, 0, 0.46, 0.92]) {
+          cylinder(stair.x + offset, 1.62, gateZ, 0.075, 3.24, materials.ironDark, worldRoot, 8);
+        }
+        box(stair.x, 0.58, gateZ, 2.18, 0.14, 0.16, materials.ironDark);
+        box(stair.x, 2.56, gateZ, 2.18, 0.14, 0.16, materials.ironDark);
+        box(stair.x, 1.55, gateZ - 0.12, 0.44, 0.5, 0.24, materials.red);
+      }
       const stairLight = new THREE.PointLight(0xffca78, 3.4, 18, 1.55);
       stairLight.position.set(room.x, 4.45, room.z);
       worldRoot.add(stairLight);
@@ -1350,15 +1364,17 @@ import * as THREE from "./vendor/three.module.js";
     forestTrees.forEach(([x, z, scale]) => buildTree(x, z, scale));
     buildSkyDecor();
 
-    interactables.push({
-      kind: "abandonedStairsUp",
-      side: "front",
-      roomId: ABANDONED_UPPER.playerStairRoomId,
-      x: ABANDONED_UPPER.groundPlayerStair.x,
-      z: ABANDONED_UPPER.groundPlayerStair.z,
-      radius: 3.2,
-      label: "GÅ UPP TILL DRAKEN",
-    });
+    if (state.abandonedCastleVisit?.rewardRoute === "dragon") {
+      interactables.push({
+        kind: "abandonedStairsUp",
+        side: "front",
+        roomId: ABANDONED_UPPER.playerStairRoomId,
+        x: ABANDONED_UPPER.groundPlayerStair.x,
+        z: ABANDONED_UPPER.groundPlayerStair.z,
+        radius: 3.2,
+        label: "GÅ UPP TILL DRAKEN",
+      });
+    }
 
     const moneyRoom = ABANDONED_ROOMS.find((room) => room.id === activeAbandonedTreasureRoomId());
     if (moneyRoom && state.abandonedCastleVisit?.treasureAvailable !== false) {
@@ -1753,7 +1769,7 @@ import * as THREE from "./vendor/three.module.js";
     if (ui.questionYes) ui.questionYes.textContent = yesLabel;
     if (ui.questionNo) ui.questionNo.textContent = noLabel;
     if (ui.question) ui.question.dataset.mode = options.mode || "confirm";
-    ui.questionActions?.classList.toggle("mission-choice", options.mode === "mission");
+    ui.questionActions?.classList.toggle("mission-choice", ["mission", "reward"].includes(options.mode));
     if (ui.questionBack) {
       ui.questionBack.textContent = options.backLabel || "TILLBAKA";
       setVisible(ui.questionBack, Boolean(options.back));
@@ -2258,6 +2274,9 @@ import * as THREE from "./vendor/three.module.js";
       playerFloor: "ground",
       rivalFloor: "ground",
       rewardRoute: null,
+      rewardChoicePrompted: false,
+      rewardChoiceOpenedAt: null,
+      rewardChoiceMadeAt: null,
       rivalRouteChoice,
       playerPartyEnteredUpper: false,
       rivalPartyEnteredUpper: false,
@@ -3227,6 +3246,26 @@ import * as THREE from "./vendor/three.module.js";
     return Boolean(guardian && !guardian.alive);
   }
 
+  function chooseAbandonedReward(choice) {
+    const visit = state.abandonedCastleVisit;
+    if (state.scene !== "abandonedCastle" || !visit || !visit.rewardChoicePrompted || visit.rewardRoute || !["treasury", "dragon"].includes(choice)) return false;
+    visit.rewardRoute = choice;
+    visit.rewardChoiceMadeAt = state.time;
+    if (choice === "dragon") {
+      visit.treasureAvailable = false;
+      visit.treasureUnlocked = false;
+      visit.treasureTimerStarted = false;
+      visit.treasureStartedAt = null;
+      visit.treasureSecondsRemaining = 0;
+      rebuildWorld();
+      showToast("DU VALDE DRAKEN · DRAKVÄGEN ÄR ÖPPEN VID TRAPPAN!", 3000);
+    } else {
+      showToast("DU VALDE PENGAR · SAMLA HELA GRUPPEN I SKATTKAMMAREN!", 3000);
+    }
+    updateHud();
+    return true;
+  }
+
   function placeAbandonedPartyOnFloor(party, floor) {
     const members = abandonedPartyMembers(party);
     const spawn = party === "friendly" ? ABANDONED_UPPER.playerSpawn : ABANDONED_UPPER.rivalSpawn;
@@ -3249,11 +3288,15 @@ import * as THREE from "./vendor/three.module.js";
     const visit = state.abandonedCastleVisit;
     if (state.scene !== "abandonedCastle" || !visit) return false;
     if (party === "friendly") {
-      if (visit.rewardRoute === "treasury" || visit.treasureTimerStarted || visit.totalMoneyTaken > 0) {
-        showToast("DU HAR VALT SKATTKAMMAREN · DRAKVÄGEN ÄR STÄNGD DET HÄR BESÖKET", 2600);
+      if (visit.rewardRoute !== "dragon") {
+        showToast(
+          visit.rewardRoute === "treasury"
+            ? "DU HAR VALT PENGAR · DRAKVÄGEN ÄR STÄNGD DET HÄR BESÖKET"
+            : "DRAKVÄGEN ÄR STÄNGD · HITTA SKATTKAMMAREN OCH VÄLJ DRAKEN FÖRST",
+          2800,
+        );
         return false;
       }
-      visit.rewardRoute = "dragon";
       visit.treasureAvailable = false;
       visit.playerFloor = "upper";
       visit.playerPartyEnteredUpper = true;
@@ -3707,8 +3750,21 @@ import * as THREE from "./vendor/three.module.js";
     visit.allFriendlyInsideTreasure = playerInside && guardsInside.length === livingGuards.length;
     const moneyInteraction = interactables.find((item) => item.kind === "infiniteMoney");
 
-    if (!visit.treasureTimerStarted && visit.treasureAvailable && visit.friendlySearch.treasureFound && visit.allFriendlyInsideTreasure) {
-      visit.rewardRoute = "treasury";
+    if (playerInside && !visit.rewardChoicePrompted && !visit.rewardRoute) {
+      visit.rewardChoicePrompted = true;
+      visit.rewardChoiceOpenedAt = state.time;
+      showQuestion(
+        "VILL DU TA PENGAR ELLER GÅ UPP TILL DRAKEN?",
+        "Du kan bara välja en av vägarna under det här besöket.",
+        () => chooseAbandonedReward("treasury"),
+        () => chooseAbandonedReward("dragon"),
+        "PENGAR",
+        "DRAKEN",
+        { mode: "reward" },
+      );
+    }
+
+    if (!visit.treasureTimerStarted && visit.rewardRoute === "treasury" && visit.treasureAvailable && visit.friendlySearch.treasureFound && visit.allFriendlyInsideTreasure) {
       visit.treasureUnlocked = true;
       visit.treasureTimerStarted = true;
       visit.treasureStartedAt = state.time;
@@ -3716,7 +3772,9 @@ import * as THREE from "./vendor/three.module.js";
       if (visit.friendlySearch.foundAt !== state.time) showToast("ALLA ÄR INNE · SKATTKAMMAREN ÄR ÖPPEN I 30 SEKUNDER!", 2600);
     } else if (moneyInteraction && !visit.treasureTimerStarted) {
       const missing = Math.max(0, livingGuards.length - guardsInside.length);
-      moneyInteraction.label = visit.friendlySearch.treasureFound
+      moneyInteraction.label = !visit.rewardRoute
+        ? "VÄLJ PENGAR ELLER DRAKEN"
+        : visit.friendlySearch.treasureFound
         ? missing > 0 ? `VÄNTA PÅ ${missing} ${missing === 1 ? "VAKT" : "VAKTER"}` : "KUNGEN MÅSTE VARA I SKATTKAMMAREN"
         : visit.playerFoundTreasure ? "VÄNTA PÅ ATT EN VAKT HITTAR HIT" : "HITTA SKATTKAMMAREN I LABYRINTEN";
     }
@@ -4559,7 +4617,10 @@ import * as THREE from "./vendor/three.module.js";
         if (distance <= item.radius && (!state.nearest || distance < state.nearest.distance)) {
           const candidate = { ...item, distance };
           if (item.kind === "abandonedStairsUp") {
-            if (state.abandonedCastleVisit?.rewardRoute === "treasury") candidate.label = "DRAKVÄGEN ÄR STÄNGD";
+            const route = state.abandonedCastleVisit?.rewardRoute;
+            if (route !== "dragon") candidate.label = route === "treasury"
+              ? "DRAKVÄGEN ÄR STÄNGD · DU VALDE PENGAR"
+              : "DRAKVÄGEN ÄR STÄNGD · HITTA SKATTKAMMAREN";
           }
           state.nearest = candidate;
         }
@@ -4930,6 +4991,8 @@ import * as THREE from "./vendor/three.module.js";
           upper: { ...ABANDONED_UPPER.upperPlayerStair },
           guardianRequired: false,
           partyMovesOnlyWithKing: true,
+          open: state.abandonedCastleVisit?.rewardRoute === "dragon",
+          lockedUntilTreasureRoomChoice: true,
         },
         rival: {
           side: "rear",
@@ -5023,10 +5086,14 @@ import * as THREE from "./vendor/three.module.js";
     const friendlyInsideTreasure = friendlyAlive.filter((unit) => abandonedActorFloor(unit) === "ground" && abandonedRoomAt(unit.x, unit.z)?.id === activeAbandonedTreasureRoomId());
     const playerInsideTreasure = abandonedVisitState?.playerFloor === "ground" && abandonedRoomAt(state.player.x, state.player.z)?.id === activeAbandonedTreasureRoomId();
     const abandonedCastleState = abandonedVisitState ? {
-      phase: abandonedVisitState.treasureMaxReached ? "maxed" : !abandonedVisitState.treasureAvailable ? "expired" : abandonedVisitState.treasureTimerStarted ? "earning" : abandonedVisitState.friendlySearch.treasureFound ? "gathering" : "searching",
+      phase: abandonedVisitState.rewardRoute === "dragon" ? "dragon-route" : abandonedVisitState.treasureMaxReached ? "maxed" : !abandonedVisitState.treasureAvailable ? "expired" : abandonedVisitState.treasureTimerStarted ? "earning" : abandonedVisitState.friendlySearch.treasureFound ? "gathering" : "searching",
       playerFloor: abandonedVisitState.playerFloor,
       rivalFloor: abandonedVisitState.rivalFloor,
       rewardRoute: abandonedVisitState.rewardRoute,
+      rewardChoicePrompted: abandonedVisitState.rewardChoicePrompted,
+      rewardChoiceOpenedAt: abandonedVisitState.rewardChoiceOpenedAt,
+      rewardChoiceMadeAt: abandonedVisitState.rewardChoiceMadeAt,
+      stairsOpen: abandonedVisitState.rewardRoute === "dragon",
       rivalRouteChoice: abandonedVisitState.rivalRouteChoice,
       enteredCastle: abandonedVisitState.enteredCastle,
       playerFoundTreasure: abandonedVisitState.playerFoundTreasure,
@@ -5089,6 +5156,7 @@ import * as THREE from "./vendor/three.module.js";
             maxHp: dragon.maxHp,
             alive: dragon.alive,
             appearance: "green",
+            attackableByPlayerWeapons: ["sword", "bow"],
             attackMode: dragon.attackMode || "idle",
             targetDistance: Number.isFinite(dragon.targetDistance) ? rounded(dragon.targetDistance) : null,
             meleeRange: ABANDONED_DRAGON_MELEE_RANGE,
@@ -5240,7 +5308,9 @@ import * as THREE from "./vendor/three.module.js";
           yes: ui.questionYes?.textContent,
           no: ui.questionNo?.textContent,
           back: ui.questionBack && !ui.questionBack.hidden ? ui.questionBack.textContent : null,
-          actionIds: ui.question?.dataset.mode === "mission" ? ["castleStealth", "mineRaid"] : null,
+          actionIds: ui.question?.dataset.mode === "mission"
+            ? ["castleStealth", "mineRaid"]
+            : ui.question?.dataset.mode === "reward" ? ["money", "dragon"] : null,
         } : null,
       } : null,
       dayNight: { phase: state.phase, day: state.day, elapsedSeconds: rounded(state.phaseElapsed), remainingSeconds: rounded(duration - state.phaseElapsed), durationSeconds: duration, sleepingSeconds: rounded(state.sleeping), mineRaidTriggered: state.nightMineRaidTriggered, mineRaidAtSeconds: rounded(state.nightMineRaidAt), enemyWarTriggered: state.enemyWarTriggered, enemyWarAtSeconds: rounded(state.enemyWarAt) },
@@ -5517,6 +5587,7 @@ import * as THREE from "./vendor/three.module.js";
     enterAbandonedUpper,
     leaveAbandonedUpper,
     abandonedStairGuardianDefeated,
+    chooseAbandonedReward,
     startEnemyWar,
     finishEnemyWar,
     getAbandonedCastleLayout,

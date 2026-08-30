@@ -1318,8 +1318,18 @@ button:disabled {
   margin: 12px auto 0;
 }
 
-#question-dialog[data-mode="mission"] .compact-dialog {
+#question-dialog[data-mode="mission"] .compact-dialog,
+#question-dialog[data-mode="reward"] .compact-dialog {
   width: min(82%, 650px);
+}
+
+#question-dialog[data-mode="reward"] #question-actions.mission-choice #question-yes {
+  color: #191207;
+  background: linear-gradient(145deg, #ffe68a, #d99f28 70%);
+}
+
+#question-dialog[data-mode="reward"] #question-actions.mission-choice #question-no {
+  background: linear-gradient(145deg, #4c9b4f, #1f6334);
 }
 
 #question-actions.mission-choice {
