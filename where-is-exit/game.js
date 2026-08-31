@@ -36,7 +36,7 @@ const SPRINT_SPEED = 8.1;
 const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
-const VERSION = "20260831-4";
+const VERSION = "20260831-5";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -44,6 +44,10 @@ const STAIR_TOP_Z = 46.6;
 const STAIR_HEIGHT = 3.06;
 const STAIR_STEP_COUNT = 9;
 const STAIR_STEP_RISE = 0.34;
+const SPIDER_JUMP_SPEED = JUMP_SPEED;
+const SPIDER_JUMP_GRAVITY = GRAVITY;
+const SPIDER_PATROL_JUMP_INTERVAL = 3.4;
+const SPIDER_CHASE_JUMP_INTERVAL = 1.45;
 
 const FLOOR_THEMES = [
   { name: "MOTTAGNING", floor: 0x6f7472, wall: 0x74726a, accent: 0xf1a13d, fog: 0xaab0a9 },
@@ -178,6 +182,11 @@ function freshState(seed = 333) {
       frozen: false,
       visionOverride: null,
       surfaceTimer: 3 + index * 2,
+      jumpY: 0,
+      jumpVelocity: 0,
+      jumping: false,
+      jumpGrounded: true,
+      jumpCooldown: monster.kind === "eight-legs" ? 1.2 : 0,
       stairRoute: null,
       stairY: 0,
       stairCooldown: 2 + index,
@@ -1314,7 +1323,55 @@ function chooseMonsterTarget(monster) {
 }
 
 function monsterMovementSpeed(monster) {
-  return monster.kind === "faceless" ? SPRINT_SPEED : WALK_SPEED;
+  return monster.kind === "faceless" || monster.kind === "eight-legs" ? SPRINT_SPEED : WALK_SPEED;
+}
+
+function monsterCanJump(monster) {
+  return monster.kind === "eight-legs";
+}
+
+function monsterCanUseSurface(monster, surface) {
+  return ["floor", "wall", "ceiling"].includes(surface)
+    && (surface === "floor" || monster.kind === "eight-legs");
+}
+
+function setMonsterSurfaceState(monster, surface) {
+  if (!monsterCanUseSurface(monster, surface)) return false;
+  if (surface !== "floor" && monster.jumping) return false;
+  monster.surface = surface;
+  if (surface !== "floor") landMonsterJump(monster, 0.55);
+  return true;
+}
+
+function landMonsterJump(monster, cooldown = monster.jumpCooldown) {
+  monster.jumpY = 0;
+  monster.jumpVelocity = 0;
+  monster.jumping = false;
+  monster.jumpGrounded = true;
+  monster.jumpCooldown = Math.max(0, cooldown || 0);
+}
+
+function triggerMonsterJump(monster) {
+  if (!monsterCanJump(monster) || monster.stairRoute || monster.surface !== "floor" || monster.jumping) return false;
+  monster.jumpVelocity = SPIDER_JUMP_SPEED;
+  monster.jumping = true;
+  monster.jumpGrounded = false;
+  monster.jumpCooldown = monster.ai === "chase" ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL;
+  return true;
+}
+
+function updateMonsterJump(monster, dt) {
+  if (!monsterCanJump(monster)) return;
+  if (monster.stairRoute || monster.surface !== "floor") {
+    landMonsterJump(monster, Math.max(monster.jumpCooldown, 0.55));
+    return;
+  }
+  monster.jumpCooldown = Math.max(0, monster.jumpCooldown - dt);
+  if (!monster.jumping && monster.jumpCooldown <= 0) triggerMonsterJump(monster);
+  if (!monster.jumping) return;
+  monster.jumpVelocity -= SPIDER_JUMP_GRAVITY * dt;
+  monster.jumpY += monster.jumpVelocity * dt;
+  if (monster.jumpY <= 0) landMonsterJump(monster, monster.ai === "chase" ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL);
 }
 
 function monsterCanEnterFloor(monster, targetFloor) {
@@ -1339,7 +1396,7 @@ function monsterStairSurfaceHeight(progress) {
 }
 
 function beginMonsterStairTravel(monster, targetFloor, reason = "patrol") {
-  if (monster.stairRoute || monster.stairCooldown > 0) return false;
+  if (monster.stairRoute || monster.stairCooldown > 0 || monster.jumping) return false;
   if (Math.abs(targetFloor - monster.floor) !== 1 || !monsterCanEnterFloor(monster, targetFloor)) return false;
   const direction = Math.sign(targetFloor - monster.floor);
   monster.stairRoute = {
@@ -1353,6 +1410,7 @@ function beginMonsterStairTravel(monster, targetFloor, reason = "patrol") {
     stuckTime: 0,
   };
   monster.surface = "floor";
+  landMonsterJump(monster, 0.8);
   monster.stairY = 0;
   return true;
 }
@@ -1383,6 +1441,7 @@ function finishMonsterStairTravel(monster) {
   monster.stairCooldown = 1.8;
   monster.floorRoamTimer = 11 + MONSTER_STARTS.findIndex((item) => item.id === monster.id) * 2;
   monster.surface = "floor";
+  landMonsterJump(monster, 0.8);
   if (route.reason === "patrol" || previousFloor === monster.floor) monster.ai = "patrol";
   chooseMonsterTarget(monster);
 }
@@ -1470,6 +1529,10 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt) {
 }
 
 function updateSpiderSurface(monster, dt) {
+  if (monster.jumping) {
+    monster.surface = "floor";
+    return;
+  }
   if (monster.ai === "chase") {
     monster.surface = "floor";
     monster.surfaceTimer = 4;
@@ -1484,6 +1547,34 @@ function updateSpiderSurface(monster, dt) {
     monster.targetX = side === 0 ? -50 : side === 1 ? 50 : clamp(monster.x, -46, 46);
     monster.targetZ = side === 2 ? -50 : side === 3 ? 50 : clamp(monster.z, -46, 46);
   } else chooseMonsterTarget(monster);
+}
+
+function spiderWallSide(monster) {
+  const boundary = 50;
+  const candidates = [
+    { side: "west", distance: Math.min(Math.abs(monster.x + boundary), Math.abs(monster.targetX + boundary)) },
+    { side: "east", distance: Math.min(Math.abs(monster.x - boundary), Math.abs(monster.targetX - boundary)) },
+    { side: "north", distance: Math.min(Math.abs(monster.z + boundary), Math.abs(monster.targetZ + boundary)) },
+    { side: "south", distance: Math.min(Math.abs(monster.z - boundary), Math.abs(monster.targetZ - boundary)) },
+  ];
+  return candidates.reduce((closest, candidate) => candidate.distance < closest.distance ? candidate : closest).side;
+}
+
+function monsterWorldY(monster) {
+  if (monster.stairRoute?.phase === "climb") return monster.stairY || 0;
+  if (monster.kind === "eight-legs" && monster.ai !== "chase") {
+    if (monster.surface === "ceiling") return CEILING_HEIGHT - 0.25;
+    if (monster.surface === "wall") return 3.2;
+  }
+  return monster.jumpY || 0;
+}
+
+function tryMonsterCatch(monster) {
+  if (state.mode !== "playing" || monster.floor !== state.player.floor) return false;
+  const verticalDistance = Math.abs(monsterWorldY(monster) - state.player.y);
+  if (distance2D(monster.x, monster.z, state.player.x, state.player.z) >= 1.35 || verticalDistance >= 1.05) return false;
+  caughtByMonster(monster);
+  return true;
 }
 
 function updateMonsters(dt) {
@@ -1506,21 +1597,30 @@ function updateMonsters(dt) {
         monster.stairY = 0;
       }
       monster.ai = "chase";
+      if (monster.kind === "eight-legs" && monster.surface !== "floor") {
+        monster.surface = "floor";
+        landMonsterJump(monster, 0.35);
+      }
       monster.lostTime = 0;
       monster.targetX = state.player.x;
       monster.targetZ = state.player.z;
     }
 
+    updateMonsterJump(monster, dt);
+
     if (monster.stairRoute) {
       advanceMonsterStairTravel(monster, dt);
+      tryMonsterCatch(monster);
       return;
     }
 
     if (!sameFloor && monster.ai === "chase") {
+      if (monster.jumping) return;
       if (monster.stairCooldown > 0) return;
       const direction = Math.sign(state.player.floor - monster.floor);
       if (beginMonsterStairTravel(monster, monster.floor + direction, "chase")) {
         advanceMonsterStairTravel(monster, dt);
+        tryMonsterCatch(monster);
         return;
       }
       monster.ai = "patrol";
@@ -1535,10 +1635,11 @@ function updateMonsters(dt) {
       }
     }
 
-    if (monster.ai === "patrol" && monster.stairCooldown <= 0 && monster.floorRoamTimer <= 0) {
+    if (monster.ai === "patrol" && !monster.jumping && monster.stairCooldown <= 0 && monster.floorRoamTimer <= 0) {
       chooseMonsterPatrolFloor(monster);
       if (monster.stairRoute) {
         advanceMonsterStairTravel(monster, dt);
+        tryMonsterCatch(monster);
         return;
       }
     }
@@ -1551,9 +1652,7 @@ function updateMonsters(dt) {
       moveMonsterToward(monster, monster.targetX, monster.targetZ, speed, dt);
     }
 
-    if (sameFloor && distance2D(monster.x, monster.z, state.player.x, state.player.z) < 1.35 && state.player.y < 1.6) {
-      caughtByMonster(monster);
-    }
+    tryMonsterCatch(monster);
   });
 }
 
@@ -1611,18 +1710,23 @@ function updateMonsterModels() {
     model.visible = (state.mode === "playing" || state.mode === "won") && monster.floor === state.player.floor;
     if (!model.visible) return;
     const climbingStairs = monster.stairRoute?.phase === "climb";
-    let height = monster.stairY || 0;
+    let height = monsterWorldY(monster);
     model.rotation.set(0, monster.heading, 0);
     if (monster.kind === "eight-legs") {
       if (!climbingStairs && monster.surface === "ceiling" && monster.ai !== "chase") {
-        height = CEILING_HEIGHT - 0.25;
         model.rotation.z = Math.PI;
       } else if (!climbingStairs && monster.surface === "wall" && monster.ai !== "chase") {
-        height = 3.2;
-        model.rotation.z = monster.x < 0 ? -Math.PI / 2 : Math.PI / 2;
+        const wallSide = spiderWallSide(monster);
+        if (wallSide === "west" || wallSide === "east") {
+          model.rotation.set(0, 0, wallSide === "west" ? -Math.PI / 2 : Math.PI / 2);
+        } else {
+          model.rotation.set(wallSide === "north" ? Math.PI / 2 : -Math.PI / 2, 0, 0);
+        }
       }
       (model.userData.legs || []).forEach((leg, legIndex) => {
-        leg.rotation.z = Math.sin(state.elapsedMs * 0.009 + legIndex * 0.85) * 0.25;
+        const walk = Math.sin(state.elapsedMs * 0.009 + legIndex * 0.85) * 0.25;
+        const tuck = monster.jumping ? (legIndex % 2 === 0 ? 0.22 : -0.22) : 0;
+        leg.rotation.z = walk + tuck;
       });
     } else {
       const walk = Math.sin(state.elapsedMs * 0.0075 + index);
@@ -1919,7 +2023,7 @@ function setupMissionForTest(mission) {
 function runMonsterNavigationSelfTest() {
   const originalState = state;
   const originalManualTime = manualTime;
-  const results = { speeds: {}, stairs: {}, floor3: {}, boundaries: {}, realApproach: {} };
+  const results = { speeds: {}, jump: {}, surfaces: {}, stairs: {}, floor3: {}, boundaries: {}, realApproach: {} };
 
   const prepare = (id, floor = 1) => {
     state = freshState(333);
@@ -1966,6 +2070,53 @@ function runMonsterNavigationSelfTest() {
         distance: Number(distance2D(before.x, before.z, monster.x, monster.z).toFixed(4)),
       };
     }
+
+    const tallMonster = prepare("monster-1");
+    const tallJumpStarted = triggerMonsterJump(tallMonster);
+    const facelessMonster = prepare("monster-3");
+    const facelessJumpStarted = triggerMonsterJump(facelessMonster);
+    const spider = prepare("monster-2");
+    spider.visionOverride = false;
+    const spiderJumpStarted = triggerMonsterJump(spider);
+    const repeatedJumpStarted = triggerMonsterJump(spider);
+    let maxJumpY = spider.jumpY;
+    let jumpSteps = 0;
+    while (spider.jumping && jumpSteps < 180) {
+      updateMonsters(FIXED_STEP);
+      maxJumpY = Math.max(maxJumpY, spider.jumpY);
+      jumpSteps += 1;
+    }
+    results.jump = {
+      onlyEightLegs: !tallJumpStarted && spiderJumpStarted && !facelessJumpStarted,
+      started: spiderJumpStarted,
+      repeatBlocked: !repeatedJumpStarted,
+      maxY: Number(maxJumpY.toFixed(3)),
+      landed: !spider.jumping && spider.jumpY === 0,
+      grounded: spider.jumpGrounded,
+      steps: jumpSteps,
+    };
+
+    const tallSurfaceMonster = prepare("monster-1");
+    const tallWall = setMonsterSurfaceState(tallSurfaceMonster, "wall");
+    const facelessSurfaceMonster = prepare("monster-3");
+    const facelessCeiling = setMonsterSurfaceState(facelessSurfaceMonster, "ceiling");
+    const spiderSurfaceMonster = prepare("monster-2");
+    const spiderWall = setMonsterSurfaceState(spiderSurfaceMonster, "wall");
+    const wallJumpStarted = triggerMonsterJump(spiderSurfaceMonster);
+    const spiderCeiling = setMonsterSurfaceState(spiderSurfaceMonster, "ceiling");
+    results.surfaces = {
+      onlyEightLegs: !tallWall && !facelessCeiling && spiderWall && spiderCeiling,
+      spiderSurface: spiderSurfaceMonster.surface,
+      tallSurface: tallSurfaceMonster.surface,
+      facelessSurface: facelessSurfaceMonster.surface,
+    };
+    const stairSpider = prepare("monster-2", 4);
+    state.factory.floor3Unlocked = true;
+    stairSpider.visionOverride = false;
+    const stairStarted = beginMonsterStairTravel(stairSpider, 5, "patrol");
+    const stairJumpStarted = triggerMonsterJump(stairSpider);
+    results.jump.wallBlocked = !wallJumpStarted;
+    results.jump.stairBlocked = stairStarted && !stairJumpStarted;
 
     const stairCases = [
       ["monster-1", 1, 2], ["monster-2", 4, 5], ["monster-3", 6, 7],
@@ -2097,7 +2248,17 @@ function renderGameToText() {
       seesPlayer: monster.seesPlayer,
       visible: monster.floor === state.player.floor,
       movementSpeed: monsterMovementSpeed(monster),
-      speedMatches: monster.kind === "faceless" ? "player sprint" : "player walk",
+      speedMatches: monsterMovementSpeed(monster) === SPRINT_SPEED ? "player sprint" : "player walk",
+      canJump: monsterCanJump(monster),
+      isJumping: Boolean(monster.jumping),
+      jumpY: Number((monster.jumpY || 0).toFixed(2)),
+      jumpVy: Number((monster.jumpVelocity || 0).toFixed(2)),
+      jumpGrounded: Boolean(monster.jumpGrounded),
+      jumpCooldown: Number((monster.jumpCooldown || 0).toFixed(2)),
+      canClimbWalls: monster.kind === "eight-legs",
+      canClimbCeiling: monster.kind === "eight-legs",
+      canUseWallsAndCeiling: monster.kind === "eight-legs",
+      wallSide: monster.surface === "wall" && monster.kind === "eight-legs" ? spiderWallSide(monster) : null,
       usingStairs: Boolean(monster.stairRoute),
       stairPhase: monster.stairRoute?.phase || null,
       stairTargetFloor: monster.stairRoute?.targetFloor || null,
@@ -2138,10 +2299,12 @@ window.__whereIsExitTest = {
   setEntityPose: (id, { floor, x, z, surface } = {}) => {
     const monster = state.monsters.find((item) => item.id === id);
     if (!monster) return false;
+    if (surface && !monsterCanUseSurface(monster, surface)) return false;
     if (Number.isFinite(floor)) monster.floor = clamp(Math.floor(floor), 1, FLOOR_COUNT);
     if (Number.isFinite(x)) monster.x = x;
     if (Number.isFinite(z)) monster.z = z;
-    if (surface) monster.surface = surface;
+    if (surface) setMonsterSurfaceState(monster, surface);
+    landMonsterJump(monster, monster.kind === "eight-legs" ? 0.4 : 0);
     monster.stairRoute = null;
     monster.stairY = 0;
     monster.stairCooldown = 0;
@@ -2172,12 +2335,28 @@ window.__whereIsExitTest = {
     monster.visionOverride = typeof value === "boolean" ? value : null;
     return true;
   },
+  triggerMonsterJump: (id) => {
+    const monster = state.monsters.find((item) => item.id === id);
+    if (!monster) return false;
+    const started = triggerMonsterJump(monster);
+    updateMonsterModels();
+    render();
+    return started;
+  },
+  setMonsterSurface: (id, surface = "floor") => {
+    const monster = state.monsters.find((item) => item.id === id);
+    if (!monster || !setMonsterSurfaceState(monster, surface)) return false;
+    updateMonsterModels();
+    render();
+    return true;
+  },
   setMonsterNavigation: (id, { ai, targetFloor, cooldown = 0, floorRoamTimer, startOnStairs = false } = {}) => {
     const monster = state.monsters.find((item) => item.id === id);
     if (!monster) return false;
     if (ai === "patrol" || ai === "chase") monster.ai = ai;
     monster.stairRoute = null;
     monster.stairY = 0;
+    landMonsterJump(monster, monster.kind === "eight-legs" ? 0.4 : 0);
     monster.stairCooldown = Math.max(0, Number(cooldown) || 0);
     if (Number.isFinite(floorRoamTimer)) monster.floorRoamTimer = floorRoamTimer;
     if (Number.isFinite(targetFloor)) {

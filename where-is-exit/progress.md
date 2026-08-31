@@ -9,11 +9,11 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - Spelet är ett lekfullt monsterspel, inte skräck. Inga jumpscares, inget blod och inga otäcka ljud.
 - Tre helt svarta monster:
   1. Mycket långt, ett lysande gult öga och ett svart öga som smälter in, två armar/händer, två ben/fötter, ingen mun.
-  2. Åtta ben, ett huvud, två lysande gula ögon, ingen mun; går på golv, väggar och tak.
+  2. Åtta ben, ett huvud, två lysande gula ögon, ingen mun; är det enda monstret som kan hoppa och gå på golv, väggar och tak.
   3. Inte långt, inga ögon eller mun, två armar/händer och två ben/fötter.
 - Monstren vandrar; de jagar när de ser spelaren. Fångad spelare skickas till startmenyn och nästa start börjar om.
 - Alla tre monster använder fabrikens trappor för att patrullera och jaga mellan våningar. Våning 3 är spärrad för dem tills de fem nycklarna är hittade.
-- Det korta ansiktslösa monstret rör sig exakt lika fort som spelaren springer (8,1 m/s). Det långa och det åttabenta rör sig exakt lika fort som spelaren går (5,0 m/s).
+- Det åttabenta och det korta ansiktslösa monstret rör sig exakt lika fort som spelaren springer (8,1 m/s). Det långa rör sig exakt lika fort som spelaren går (5,0 m/s).
 - Uppdrag 1: hitta tio gula lampor och sätt en i vart och ett av tio eluttag.
 - Uppdrag 2: dra i fem spakar; därefter fungerar hissen och spelaren kan välja våning.
 - Uppdrag 3: hitta fem nycklar; därefter låses våning 3 upp för hiss och trappa.
@@ -40,6 +40,10 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - 2026-08-31: Full spelregression klar efter AI-ändringen: 214/214 kontroller godkända, 0 funktionsfel, 0 konsolfel, 0 sidfel och 0 misslyckade nätverksanrop genom rörelse, samtliga fem uppdrag, hiss/trapp-lås, vinst, fångst och omstart.
 - 2026-08-31: Slutlig iPad-kontroll 1180×820 klar. Monstrets fötter följer de diskreta trappstegen exakt (1,70 m på mittsteget), HUD-överlapp är 0, touchknapparna fungerar och inga konsol- eller sidfel uppstod.
 - 2026-08-31: Version `20260831-4` publicerad i Agust Games. GitHub Pages-deploy lyckades, live-filerna matchar de testade blobbarna exakt och den publicerade versionen startade, gick och hoppade utan konsol- eller sidfel.
+- 2026-08-31: ÅTTABEN fick sprintfart 8,1 m/s och blev spelets enda hoppande monster. Hopp använder samma tydliga fysik som spelaren, pausar vägg-/takbyten i luften, samverkar inte med trapphöjd och kan inte fånga spelaren från för stor höjd.
+- 2026-08-31: ÅTTABEN-verifieringen är grön: 61/61 riktade kontroller godkända för exklusivt hopp, vägg/tak, 8,1 m/s, 1,227 m hopptopp, 0,75 s landning, trappblockering och noll webbläsarfel.
+- 2026-08-31: Hela spelets regression är fortsatt grön med 214/214 kontroller. iPad 1180×820 är visuellt granskad vid hoppets topp, på väggen och i taket utan HUD-/touchöverlappning; alla touchmål är minst 44 px.
+- 2026-08-31: Slutgranskningen rättade trappfångst och väggorientering. 17/17 höjdkänsliga trappkontroller, 61/61 ÅTTABEN-kontroller och en ny full 214/214-regression passerar; nord-, syd-, öst- och västvägg verifierades utan webbläsarfel.
 
 ## TODO
 
@@ -48,6 +52,7 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - [x] Rörelse, hopp, spring, interaktion, hiss och trappor
 - [x] Tre monster med vandring, syn, jakt och fångst
 - [x] Monstertrappor mellan våningar och exakta gång-/sprintfarter
+- [x] ÅTTABEN som exklusiv hoppare och vägg-/takklättrare
 - [x] Alla fem uppdragen i rätt ordning
 - [x] Vinst, förlust och omstart
 - [x] render_game_to_text och advanceTime
