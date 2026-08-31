@@ -39,6 +39,7 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - 2026-08-31: Automatisk nav-självtest klar: 31/31 kontroller godkända för rätt version, exakta hastigheter 5,0/5,0/8,1, upp- och nedresor för alla tre monster, våning-3-lås, våningsgränser, verklig trappinflygning och noll konsol-/sidfel.
 - 2026-08-31: Full spelregression klar efter AI-ändringen: 214/214 kontroller godkända, 0 funktionsfel, 0 konsolfel, 0 sidfel och 0 misslyckade nätverksanrop genom rörelse, samtliga fem uppdrag, hiss/trapp-lås, vinst, fångst och omstart.
 - 2026-08-31: Slutlig iPad-kontroll 1180×820 klar. Monstrets fötter följer de diskreta trappstegen exakt (1,70 m på mittsteget), HUD-överlapp är 0, touchknapparna fungerar och inga konsol- eller sidfel uppstod.
+- 2026-08-31: Version `20260831-4` publicerad i Agust Games. GitHub Pages-deploy lyckades, live-filerna matchar de testade blobbarna exakt och den publicerade versionen startade, gick och hoppade utan konsol- eller sidfel.
 
 ## TODO
 
