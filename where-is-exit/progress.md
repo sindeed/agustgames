@@ -44,6 +44,7 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - 2026-08-31: ÅTTABEN-verifieringen är grön: 61/61 riktade kontroller godkända för exklusivt hopp, vägg/tak, 8,1 m/s, 1,227 m hopptopp, 0,75 s landning, trappblockering och noll webbläsarfel.
 - 2026-08-31: Hela spelets regression är fortsatt grön med 214/214 kontroller. iPad 1180×820 är visuellt granskad vid hoppets topp, på väggen och i taket utan HUD-/touchöverlappning; alla touchmål är minst 44 px.
 - 2026-08-31: Slutgranskningen rättade trappfångst och väggorientering. 17/17 höjdkänsliga trappkontroller, 61/61 ÅTTABEN-kontroller och en ny full 214/214-regression passerar; nord-, syd-, öst- och västvägg verifierades utan webbläsarfel.
+- 2026-08-31: Version `20260831-5` publicerad i Agust Games. GitHub Pages-deploy lyckades, live-filerna matchar de testade filerna exakt och den publicerade versionen startade, gick och hoppade utan konsol- eller sidfel.
 
 ## TODO
 
