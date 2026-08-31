@@ -289,7 +289,7 @@ a:focus-visible,
 }
 
 .hud-message {
-  top: max(68px, calc(env(safe-area-inset-top) + 68px));
+  top: max(76px, calc(env(safe-area-inset-top) + 76px));
   left: 50%;
   max-width: min(72%, 620px);
   padding: 10px 16px;

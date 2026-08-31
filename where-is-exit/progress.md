@@ -12,6 +12,8 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
   2. Åtta ben, ett huvud, två lysande gula ögon, ingen mun; går på golv, väggar och tak.
   3. Inte långt, inga ögon eller mun, två armar/händer och två ben/fötter.
 - Monstren vandrar; de jagar när de ser spelaren. Fångad spelare skickas till startmenyn och nästa start börjar om.
+- Alla tre monster använder fabrikens trappor för att patrullera och jaga mellan våningar. Våning 3 är spärrad för dem tills de fem nycklarna är hittade.
+- Det korta ansiktslösa monstret rör sig exakt lika fort som spelaren springer (8,1 m/s). Det långa och det åttabenta rör sig exakt lika fort som spelaren går (5,0 m/s).
 - Uppdrag 1: hitta tio gula lampor och sätt en i vart och ett av tio eluttag.
 - Uppdrag 2: dra i fem spakar; därefter fungerar hissen och spelaren kan välja våning.
 - Uppdrag 3: hitta fem nycklar; därefter låses våning 3 upp för hiss och trappa.
@@ -32,6 +34,11 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - 2026-08-30: Version `20260830-2` publicerad i Agust Games. GitHub Pages-deploy lyckades och live-versionen startades, gick och hoppade utan konsolfel.
 - 2026-08-30: Användaren ändrade monsterfärgen från mörkbrun till helt svart. Det långa monstret fick ett gult och ett osynligt svart öga. Fabrikens exponering sänktes lite från 1,08 till 1,02.
 - 2026-08-30: HUD uppdaterad till `UPPDRAG N AV 5`. Version `20260830-3` klarade 214/214 regressionstester, 5/5 uppdragsrubriker och visuell iPad-kontroll av samtliga svarta monster utan konsol- eller sidfel.
+- 2026-08-30: Version `20260830-3` publicerad. GitHub Pages-deploy lyckades och live-versionen verifierades med start, gång och hopp utan konsolfel.
+- 2026-08-31: Monster-AI uppdaterad för trappor, patrull och jakt mellan våningar. Trapphöjden matchar modellen, nedåtresor hoppar inte i bild, åttabensmonstret startar utanför väggen och fastnade rutter har en säker återhämtning.
+- 2026-08-31: Automatisk nav-självtest klar: 31/31 kontroller godkända för rätt version, exakta hastigheter 5,0/5,0/8,1, upp- och nedresor för alla tre monster, våning-3-lås, våningsgränser, verklig trappinflygning och noll konsol-/sidfel.
+- 2026-08-31: Full spelregression klar efter AI-ändringen: 214/214 kontroller godkända, 0 funktionsfel, 0 konsolfel, 0 sidfel och 0 misslyckade nätverksanrop genom rörelse, samtliga fem uppdrag, hiss/trapp-lås, vinst, fångst och omstart.
+- 2026-08-31: Slutlig iPad-kontroll 1180×820 klar. Monstrets fötter följer de diskreta trappstegen exakt (1,70 m på mittsteget), HUD-överlapp är 0, touchknapparna fungerar och inga konsol- eller sidfel uppstod.
 
 ## TODO
 
@@ -39,6 +46,7 @@ Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monst
 - [x] 3D-fabrik med sju våningar
 - [x] Rörelse, hopp, spring, interaktion, hiss och trappor
 - [x] Tre monster med vandring, syn, jakt och fångst
+- [x] Monstertrappor mellan våningar och exakta gång-/sprintfarter
 - [x] Alla fem uppdragen i rätt ordning
 - [x] Vinst, förlust och omstart
 - [x] render_game_to_text och advanceTime

@@ -36,7 +36,14 @@ const SPRINT_SPEED = 8.1;
 const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
-const VERSION = "20260830-3";
+const VERSION = "20260831-4";
+const STAIR_UP_X = -43;
+const STAIR_DOWN_X = -32;
+const STAIR_ENTRY_Z = 39.4;
+const STAIR_TOP_Z = 46.6;
+const STAIR_HEIGHT = 3.06;
+const STAIR_STEP_COUNT = 9;
+const STAIR_STEP_RISE = 0.34;
 
 const FLOOR_THEMES = [
   { name: "MOTTAGNING", floor: 0x6f7472, wall: 0x74726a, accent: 0xf1a13d, fog: 0xaab0a9 },
@@ -82,7 +89,7 @@ const ENTITY_DEFS = {
 
 const MONSTER_STARTS = [
   { id: "monster-1", kind: "tall-one-eye", name: "ENÖGAT", floor: 1, x: 30, z: 24, heading: Math.PI, surface: "floor" },
-  { id: "monster-2", kind: "eight-legs", name: "ÅTTABEN", floor: 3, x: -25, z: -20, heading: 0.4, surface: "ceiling" },
+  { id: "monster-2", kind: "eight-legs", name: "ÅTTABEN", floor: 3, x: -25, z: -17, heading: 0.4, surface: "ceiling" },
   { id: "monster-3", kind: "faceless", name: "BRUNIS", floor: 6, x: -32, z: 23, heading: -0.7, surface: "floor" },
 ];
 
@@ -171,6 +178,10 @@ function freshState(seed = 333) {
       frozen: false,
       visionOverride: null,
       surfaceTimer: 3 + index * 2,
+      stairRoute: null,
+      stairY: 0,
+      stairCooldown: 2 + index,
+      floorRoamTimer: 8 + index * 4,
     })),
     nearby: null,
     elevatorOpen: false,
@@ -1302,9 +1313,129 @@ function chooseMonsterTarget(monster) {
   monster.targetZ = point[1];
 }
 
+function monsterMovementSpeed(monster) {
+  return monster.kind === "faceless" ? SPRINT_SPEED : WALK_SPEED;
+}
+
+function monsterCanEnterFloor(monster, targetFloor) {
+  return targetFloor >= 1
+    && targetFloor <= FLOOR_COUNT
+    && (state.factory.floor3Unlocked || (monster.floor !== 3 && targetFloor !== 3));
+}
+
+function monsterStairWaypoints(direction) {
+  const stairX = direction > 0 ? STAIR_UP_X : STAIR_DOWN_X;
+  return [
+    { x: 0, z: 16 },
+    { x: 0, z: 24 },
+    { x: 0, z: STAIR_ENTRY_Z },
+    { x: stairX, z: STAIR_ENTRY_Z },
+  ];
+}
+
+function monsterStairSurfaceHeight(progress) {
+  const stepIndex = clamp(Math.round(clamp(progress, 0, 1) * (STAIR_STEP_COUNT - 1)), 0, STAIR_STEP_COUNT - 1);
+  return Math.min(STAIR_HEIGHT, STAIR_STEP_RISE * (stepIndex + 1));
+}
+
+function beginMonsterStairTravel(monster, targetFloor, reason = "patrol") {
+  if (monster.stairRoute || monster.stairCooldown > 0) return false;
+  if (Math.abs(targetFloor - monster.floor) !== 1 || !monsterCanEnterFloor(monster, targetFloor)) return false;
+  const direction = Math.sign(targetFloor - monster.floor);
+  monster.stairRoute = {
+    direction,
+    targetFloor,
+    reason,
+    phase: "approach",
+    waypointIndex: 0,
+    waypoints: monsterStairWaypoints(direction),
+    progress: 0,
+    stuckTime: 0,
+  };
+  monster.surface = "floor";
+  monster.stairY = 0;
+  return true;
+}
+
+function chooseMonsterPatrolFloor(monster) {
+  const index = MONSTER_STARTS.findIndex((item) => item.id === monster.id);
+  const preferredDirection = monster.floor === 1
+    ? 1
+    : monster.floor === FLOOR_COUNT
+      ? -1
+      : (monster.waypoint + index) % 2 === 0 ? 1 : -1;
+  for (const direction of [preferredDirection, -preferredDirection]) {
+    if (beginMonsterStairTravel(monster, monster.floor + direction, "patrol")) return true;
+  }
+  monster.floorRoamTimer = 5;
+  return false;
+}
+
+function finishMonsterStairTravel(monster) {
+  const route = monster.stairRoute;
+  if (!route) return;
+  const previousFloor = monster.floor;
+  monster.floor = route.targetFloor;
+  monster.x = route.direction > 0 ? STAIR_DOWN_X : STAIR_UP_X;
+  monster.z = 35;
+  monster.stairY = 0;
+  monster.stairRoute = null;
+  monster.stairCooldown = 1.8;
+  monster.floorRoamTimer = 11 + MONSTER_STARTS.findIndex((item) => item.id === monster.id) * 2;
+  monster.surface = "floor";
+  if (route.reason === "patrol" || previousFloor === monster.floor) monster.ai = "patrol";
+  chooseMonsterTarget(monster);
+}
+
+function advanceMonsterStairTravel(monster, dt) {
+  const route = monster.stairRoute;
+  if (!route) return false;
+  const speed = monsterMovementSpeed(monster);
+  if (route.phase === "approach") {
+    const target = route.waypoints[route.waypointIndex];
+    const beforeX = monster.x;
+    const beforeZ = monster.z;
+    moveMonsterToward(monster, target.x, target.z, speed, dt);
+    const moved = distance2D(beforeX, beforeZ, monster.x, monster.z);
+    if (moved < Math.min(0.02, speed * dt * 0.1) && distance2D(monster.x, monster.z, target.x, target.z) >= 0.72) {
+      route.stuckTime += dt;
+      if (route.stuckTime >= 1) {
+        monster.x = target.x;
+        monster.z = target.z;
+        route.stuckTime = 0;
+      }
+    } else {
+      route.stuckTime = 0;
+    }
+    if (distance2D(monster.x, monster.z, target.x, target.z) < 0.72) {
+      route.waypointIndex += 1;
+      if (route.waypointIndex >= route.waypoints.length) {
+        if (route.direction < 0) {
+          finishMonsterStairTravel(monster);
+          return true;
+        }
+        route.phase = "climb";
+        route.progress = 0;
+        monster.x = STAIR_UP_X;
+        monster.z = STAIR_ENTRY_Z;
+        monster.stairY = monsterStairSurfaceHeight(0);
+        monster.heading = 0;
+      }
+    }
+    return true;
+  }
+
+  const stairDistance = STAIR_TOP_Z - STAIR_ENTRY_Z;
+  route.progress = clamp(route.progress + dt * speed / stairDistance, 0, 1);
+  monster.z = STAIR_ENTRY_Z + stairDistance * route.progress;
+  monster.stairY = monsterStairSurfaceHeight(route.progress);
+  if (route.progress >= 1) finishMonsterStairTravel(monster);
+  return true;
+}
+
 function monsterCanSeePlayer(monster) {
-  if (typeof monster.visionOverride === "boolean") return monster.visionOverride;
   if (monster.floor !== state.player.floor) return false;
+  if (typeof monster.visionOverride === "boolean") return monster.visionOverride;
   const dx = state.player.x - monster.x;
   const dz = state.player.z - monster.z;
   const distance = Math.hypot(dx, dz);
@@ -1326,8 +1457,15 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt) {
   const step = Math.min(distance, speed * dt);
   const beforeX = monster.x;
   const beforeZ = monster.z;
-  moveWithCollisions(monster, dx / distance * step, dz / distance * step, monster.kind === "eight-legs" ? 0.95 : 0.72);
-  if (Math.hypot(monster.x - beforeX, monster.z - beforeZ) < step * 0.18) chooseMonsterTarget(monster);
+  const stepX = dx / distance * step;
+  const stepZ = dz / distance * step;
+  if (monster.floor === state.player.floor) {
+    moveWithCollisions(monster, stepX, stepZ, monster.kind === "eight-legs" ? 0.95 : 0.72);
+  } else {
+    monster.x += stepX;
+    monster.z += stepZ;
+  }
+  if (!monster.stairRoute && Math.hypot(monster.x - beforeX, monster.z - beforeZ) < step * 0.18) chooseMonsterTarget(monster);
   return distance;
 }
 
@@ -1349,20 +1487,46 @@ function updateSpiderSurface(monster, dt) {
 }
 
 function updateMonsters(dt) {
-  state.monsters.forEach((monster, index) => {
-    if (monster.frozen || monster.floor !== state.player.floor) {
+  state.monsters.forEach((monster) => {
+    if (monster.frozen) {
       monster.seesPlayer = false;
       return;
     }
-    if (monster.kind === "eight-legs") updateSpiderSurface(monster, dt);
-    const sees = monsterCanSeePlayer(monster);
+
+    monster.stairCooldown = Math.max(0, monster.stairCooldown - dt);
+    monster.floorRoamTimer -= dt;
+    const sameFloor = monster.floor === state.player.floor;
+    if (monster.kind === "eight-legs" && !monster.stairRoute) updateSpiderSurface(monster, dt);
+
+    const sees = sameFloor && monsterCanSeePlayer(monster);
     monster.seesPlayer = sees;
     if (sees) {
+      if (monster.stairRoute?.phase === "approach") {
+        monster.stairRoute = null;
+        monster.stairY = 0;
+      }
       monster.ai = "chase";
       monster.lostTime = 0;
       monster.targetX = state.player.x;
       monster.targetZ = state.player.z;
-    } else if (monster.ai === "chase") {
+    }
+
+    if (monster.stairRoute) {
+      advanceMonsterStairTravel(monster, dt);
+      return;
+    }
+
+    if (!sameFloor && monster.ai === "chase") {
+      if (monster.stairCooldown > 0) return;
+      const direction = Math.sign(state.player.floor - monster.floor);
+      if (beginMonsterStairTravel(monster, monster.floor + direction, "chase")) {
+        advanceMonsterStairTravel(monster, dt);
+        return;
+      }
+      monster.ai = "patrol";
+      monster.lostTime = 0;
+      chooseMonsterTarget(monster);
+    } else if (!sees && monster.ai === "chase") {
       monster.lostTime += dt;
       if (monster.lostTime > 4.5) {
         monster.ai = "patrol";
@@ -1371,16 +1535,23 @@ function updateMonsters(dt) {
       }
     }
 
-    if (monster.ai === "chase") {
-      const chaseSpeed = monster.kind === "eight-legs" ? 5.35 : index === 0 ? 5.05 : 4.9;
-      moveMonsterToward(monster, state.player.x, state.player.z, chaseSpeed, dt);
-    } else {
-      if (distance2D(monster.x, monster.z, monster.targetX, monster.targetZ) < 1.4) chooseMonsterTarget(monster);
-      const patrolSpeed = monster.kind === "eight-legs" ? 3.45 : 2.75 + index * 0.18;
-      moveMonsterToward(monster, monster.targetX, monster.targetZ, patrolSpeed, dt);
+    if (monster.ai === "patrol" && monster.stairCooldown <= 0 && monster.floorRoamTimer <= 0) {
+      chooseMonsterPatrolFloor(monster);
+      if (monster.stairRoute) {
+        advanceMonsterStairTravel(monster, dt);
+        return;
+      }
     }
 
-    if (distance2D(monster.x, monster.z, state.player.x, state.player.z) < 1.35 && state.player.y < 1.6) {
+    const speed = monsterMovementSpeed(monster);
+    if (monster.ai === "chase" && sameFloor) {
+      moveMonsterToward(monster, state.player.x, state.player.z, speed, dt);
+    } else {
+      if (distance2D(monster.x, monster.z, monster.targetX, monster.targetZ) < 1.4) chooseMonsterTarget(monster);
+      moveMonsterToward(monster, monster.targetX, monster.targetZ, speed, dt);
+    }
+
+    if (sameFloor && distance2D(monster.x, monster.z, state.player.x, state.player.z) < 1.35 && state.player.y < 1.6) {
       caughtByMonster(monster);
     }
   });
@@ -1439,13 +1610,14 @@ function updateMonsterModels() {
     if (!model) return;
     model.visible = (state.mode === "playing" || state.mode === "won") && monster.floor === state.player.floor;
     if (!model.visible) return;
-    let height = 0;
+    const climbingStairs = monster.stairRoute?.phase === "climb";
+    let height = monster.stairY || 0;
     model.rotation.set(0, monster.heading, 0);
     if (monster.kind === "eight-legs") {
-      if (monster.surface === "ceiling" && monster.ai !== "chase") {
+      if (!climbingStairs && monster.surface === "ceiling" && monster.ai !== "chase") {
         height = CEILING_HEIGHT - 0.25;
         model.rotation.z = Math.PI;
-      } else if (monster.surface === "wall" && monster.ai !== "chase") {
+      } else if (!climbingStairs && monster.surface === "wall" && monster.ai !== "chase") {
         height = 3.2;
         model.rotation.z = monster.x < 0 ? -Math.PI / 2 : Math.PI / 2;
       }
@@ -1458,7 +1630,7 @@ function updateMonsterModels() {
       if (model.userData.rightArm) model.userData.rightArm.rotation.x = -walk * 0.36;
       if (model.userData.leftLeg) model.userData.leftLeg.rotation.x = -walk * 0.32;
       if (model.userData.rightLeg) model.userData.rightLeg.rotation.x = walk * 0.32;
-      height = Math.abs(Math.sin(state.elapsedMs * 0.006 + index)) * 0.05;
+      height += Math.abs(Math.sin(state.elapsedMs * 0.006 + index)) * 0.05;
     }
     model.position.set(monster.x, height, monster.z);
   });
@@ -1744,6 +1916,122 @@ function setupMissionForTest(mission) {
   render();
 }
 
+function runMonsterNavigationSelfTest() {
+  const originalState = state;
+  const originalManualTime = manualTime;
+  const results = { speeds: {}, stairs: {}, floor3: {}, boundaries: {}, realApproach: {} };
+
+  const prepare = (id, floor = 1) => {
+    state = freshState(333);
+    state.mode = "playing";
+    state.player.floor = floor;
+    state.player.x = 0;
+    state.player.z = 10;
+    state.monsters.forEach((item) => { item.frozen = item.id !== id; });
+    const monster = state.monsters.find((item) => item.id === id);
+    monster.floor = floor;
+    monster.x = 0;
+    monster.z = -10;
+    monster.surface = "floor";
+    monster.stairCooldown = 0;
+    monster.visionOverride = true;
+    return monster;
+  };
+
+  const putOnStairs = (monster, targetFloor) => {
+    const started = beginMonsterStairTravel(monster, targetFloor, "patrol");
+    if (!started) return false;
+    const route = monster.stairRoute;
+    if (route.direction < 0) {
+      finishMonsterStairTravel(monster);
+      return true;
+    }
+    route.phase = "climb";
+    route.progress = 0;
+    monster.x = route.direction > 0 ? STAIR_UP_X : STAIR_DOWN_X;
+    monster.z = route.direction > 0 ? STAIR_ENTRY_Z : STAIR_TOP_Z;
+    monster.stairY = route.direction > 0 ? monsterStairSurfaceHeight(0) : STAIR_HEIGHT;
+    monster.heading = route.direction > 0 ? 0 : Math.PI;
+    return true;
+  };
+
+  try {
+    manualTime = true;
+    for (const id of ["monster-1", "monster-2", "monster-3"]) {
+      const monster = prepare(id);
+      const before = { x: monster.x, z: monster.z };
+      updateMonsters(1);
+      results.speeds[id] = {
+        expected: monsterMovementSpeed(monster),
+        distance: Number(distance2D(before.x, before.z, monster.x, monster.z).toFixed(4)),
+      };
+    }
+
+    const stairCases = [
+      ["monster-1", 1, 2], ["monster-2", 4, 5], ["monster-3", 6, 7],
+      ["monster-1", 2, 1], ["monster-2", 5, 4], ["monster-3", 7, 6],
+    ];
+    stairCases.forEach(([id, from, to]) => {
+      const monster = prepare(id, from);
+      state.factory.floor3Unlocked = true;
+      monster.visionOverride = false;
+      const started = putOnStairs(monster, to);
+      if (monster.stairRoute) updateMonsters(2);
+      results.stairs[`${id}:${from}-${to}`] = {
+        started,
+        floor: monster.floor,
+        x: Number(monster.x.toFixed(2)),
+        z: Number(monster.z.toFixed(2)),
+        surface: monster.surface,
+        routeComplete: monster.stairRoute === null,
+      };
+    });
+
+    const lockedMonster = prepare("monster-1", 2);
+    lockedMonster.visionOverride = false;
+    results.floor3.locked = beginMonsterStairTravel(lockedMonster, 3, "patrol");
+    state.factory.floor3Unlocked = true;
+    results.floor3.unlocked = putOnStairs(lockedMonster, 3);
+    updateMonsters(2);
+    results.floor3.arrivedFloor = lockedMonster.floor;
+
+    const lowerMonster = prepare("monster-1", 1);
+    results.boundaries.belowOne = beginMonsterStairTravel(lowerMonster, 0, "patrol");
+    const upperMonster = prepare("monster-1", 7);
+    results.boundaries.aboveSeven = beginMonsterStairTravel(upperMonster, 8, "patrol");
+
+    const realMonster = prepare("monster-1", 1);
+    realMonster.x = 0;
+    realMonster.z = 16;
+    realMonster.visionOverride = false;
+    state.player.x = 48;
+    state.player.z = -44;
+    const started = beginMonsterStairTravel(realMonster, 2, "patrol");
+    let sawApproach = false;
+    let sawClimb = false;
+    let steps = 0;
+    while (realMonster.floor === 1 && steps < 400) {
+      updateMonsters(0.1);
+      sawApproach ||= realMonster.stairRoute?.phase === "approach";
+      sawClimb ||= realMonster.stairRoute?.phase === "climb";
+      steps += 1;
+    }
+    results.realApproach = {
+      started,
+      sawApproach,
+      sawClimb,
+      arrivedFloor: realMonster.floor,
+      x: Number(realMonster.x.toFixed(2)),
+      z: Number(realMonster.z.toFixed(2)),
+      steps,
+    };
+  } finally {
+    state = originalState;
+    manualTime = originalManualTime;
+  }
+  return results;
+}
+
 function renderGameToText() {
   const progress = missionProgress();
   const visibleInteractables = interactables
@@ -1808,6 +2096,12 @@ function renderGameToText() {
       ai: monster.ai,
       seesPlayer: monster.seesPlayer,
       visible: monster.floor === state.player.floor,
+      movementSpeed: monsterMovementSpeed(monster),
+      speedMatches: monster.kind === "faceless" ? "player sprint" : "player walk",
+      usingStairs: Boolean(monster.stairRoute),
+      stairPhase: monster.stairRoute?.phase || null,
+      stairTargetFloor: monster.stairRoute?.targetFloor || null,
+      stairY: Number((monster.stairY || 0).toFixed(2)),
     })),
     overlays: { elevator: state.elevatorOpen, win: state.mode === "won", menu: state.mode === "menu" },
     controls: {
@@ -1848,6 +2142,9 @@ window.__whereIsExitTest = {
     if (Number.isFinite(x)) monster.x = x;
     if (Number.isFinite(z)) monster.z = z;
     if (surface) monster.surface = surface;
+    monster.stairRoute = null;
+    monster.stairY = 0;
+    monster.stairCooldown = 0;
     updateMonsterModels();
     render();
     return true;
@@ -1859,10 +2156,47 @@ window.__whereIsExitTest = {
     return true;
   },
   setAllMonstersFrozen: (frozen = true) => state.monsters.forEach((monster) => { monster.frozen = Boolean(frozen); }),
+  pauseSimulation: () => { manualTime = true; },
+  runMonsterNavigationSelfTest,
+  stepMonsters: (seconds = FIXED_STEP) => {
+    manualTime = true;
+    updateMonsters(Math.max(0, Number(seconds) || 0));
+    updateMonsterModels();
+    updateCamera(true);
+    render();
+    return JSON.parse(renderGameToText());
+  },
   setVisionOverride: (id, value = null) => {
     const monster = state.monsters.find((item) => item.id === id);
     if (!monster) return false;
     monster.visionOverride = typeof value === "boolean" ? value : null;
+    return true;
+  },
+  setMonsterNavigation: (id, { ai, targetFloor, cooldown = 0, floorRoamTimer, startOnStairs = false } = {}) => {
+    const monster = state.monsters.find((item) => item.id === id);
+    if (!monster) return false;
+    if (ai === "patrol" || ai === "chase") monster.ai = ai;
+    monster.stairRoute = null;
+    monster.stairY = 0;
+    monster.stairCooldown = Math.max(0, Number(cooldown) || 0);
+    if (Number.isFinite(floorRoamTimer)) monster.floorRoamTimer = floorRoamTimer;
+    if (Number.isFinite(targetFloor)) {
+      const started = beginMonsterStairTravel(monster, Math.floor(targetFloor), monster.ai);
+      if (started && startOnStairs) {
+        const route = monster.stairRoute;
+        if (route.direction < 0) {
+          finishMonsterStairTravel(monster);
+          return true;
+        }
+        route.phase = "climb";
+        route.progress = 0;
+        monster.x = route.direction > 0 ? STAIR_UP_X : STAIR_DOWN_X;
+        monster.z = route.direction > 0 ? STAIR_ENTRY_Z : STAIR_TOP_Z;
+        monster.stairY = route.direction > 0 ? monsterStairSurfaceHeight(0) : STAIR_HEIGHT;
+        monster.heading = route.direction > 0 ? 0 : Math.PI;
+      }
+      return started;
+    }
     return true;
   },
   placePlayerNear: testPlacePlayerNear,
