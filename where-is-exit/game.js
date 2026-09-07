@@ -2,7 +2,7 @@ import * as THREE from "./vendor/three.module.js";
 import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, isBlankVoid } from "./floor-plans.js?v=20260907-holes-1";
 import { findRoute, rectangleConnection, findSurfaceRoute } from "./navigation.js?v=20260907-holes-1";
 import { createFactoryIntro, INTRO_TIMES } from "./intro.js?v=20260907-ending-1";
-import { createFactoryEnding } from "./ending.js?v=20260907-ending-1";
+import { createFactoryEnding } from "./ending.js?v=20260907-ending-2";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -47,7 +47,7 @@ const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260907-ending-1";
+const VERSION = "20260907-ending-2";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;

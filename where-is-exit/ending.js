@@ -35,6 +35,9 @@ export function createFactoryEnding({ world, lights, fog, frames, buildPlayer, b
   lights.forEach(light => interior.add(light.clone()));
   const camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 280);
   const player = buildPlayer(interior), monster = buildMonster(); interior.add(monster);
+  // Match the playable first-person eye height (1.62 m), not the old unused
+  // third-person rig's four-metre height. This keeps heads out of S plates.
+  player.scale.setScalar(1.62 / 3.38);
   const mat = color => { const material = new THREE.MeshStandardMaterial({color,roughness:0.85,flatShading:true});ownedMaterials.add(material);return material; };
   const wood = mat(0x795434), metal = mat(0xaebbbd), dark = mat(0x0b1419), green = mat(0x4ba477);
   const box = (parent,w,h,d,x,y,z,material) => {const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);mesh.position.set(x,y,z);parent.add(mesh);return mesh;};
@@ -47,7 +50,7 @@ export function createFactoryEnding({ world, lights, fog, frames, buildPlayer, b
   for(let i=-2;i<=2;i++){const b=box(boards,7.2,0.6,0.4,0,2.5+i*0.6,0,wood);b.rotation.z=i*0.08;b.userData.startY=b.position.y;}
   const replayFrames = frames.map(frame => ({...frame}));
   const first = replayFrames[0];
-  const strikeIndex = replayFrames.findIndex(frame => frame.boardsBroken);
+  const strikeIndex = replayFrames.findIndex((frame,index) => index > 0 && frame.boardsBroken && !replayFrames[index-1].boardsBroken);
   const last = replayFrames[Math.max(0, strikeIndex < 0 ? replayFrames.length-1 : strikeIndex-1)];
   const sourceDuration = Math.max(0.05,last.t-first.t);
   const replayDuration = clamp(sourceDuration / 2.5, 8, 26);
