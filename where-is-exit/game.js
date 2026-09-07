@@ -1,11 +1,15 @@
 import * as THREE from "./vendor/three.module.js";
 import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, isBlankVoid } from "./floor-plans.js?v=20260907-holes-1";
 import { findRoute, rectangleConnection, findSurfaceRoute } from "./navigation.js?v=20260907-holes-1";
+import { createFactoryIntro, INTRO_TIMES } from "./intro.js?v=20260907-intro-1";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
 const startOverlay = document.getElementById("startOverlay");
 const startButton = document.getElementById("startButton");
+const introButton = document.getElementById("introButton");
+const introOverlay = document.getElementById("introOverlay");
+const introCaption = document.getElementById("introCaption");
 const gameHud = document.getElementById("gameHud");
 const gameNav = document.getElementById("gameNav");
 const hudMissionNumber = document.getElementById("hudMissionNumber");
@@ -42,7 +46,7 @@ const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260907-elevators-1";
+const VERSION = "20260907-intro-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -147,6 +151,8 @@ let accumulator = 0;
 let lastFrame = performance.now();
 let messageTimer = 0;
 let resizeObserver;
+let introFilm;
+let introElapsed = 0;
 
 function freshState(seed = 333) {
   return {
@@ -166,6 +172,8 @@ function freshState(seed = 333) {
       pitch: 0,
       grounded: true,
       supportId: null,
+      autoJump: null,
+      autoJumpCount: 0,
       sprinting: false,
       moving: false,
     },
@@ -184,6 +192,7 @@ function freshState(seed = 333) {
       floor3LightsOn: false,
       exitBoards: "intact",
       floor6Visited: false,
+      entranceLocked: true,
     },
     monsters: MONSTER_STARTS.map((monster, index) => ({
       ...monster,
@@ -1099,6 +1108,7 @@ function buildFloor(floor = state.player.floor) {
 
   addFloorFixtures(worldRoot, floor, factoryLightsOn);
   addFloorLayout(worldRoot, floor, theme, wallMaterial);
+  if (floor === 1) addLockedEntrance(worldRoot);
 
   addLabel(worldRoot, `VÅNING ${floor} · ${theme.name}`, [0, 6.7, -51.8], `#${theme.accent.toString(16).padStart(6, "0")}`, 4.1);
   const elevators = FLOOR_PLANS[floor]?.elevators || [{ x: 0, z: 47 }];
@@ -1127,7 +1137,20 @@ function limb(parent, size, position, material, name) {
   return pivot;
 }
 
-function buildPlayerModel() {
+function addLockedEntrance(parent) {
+  const door = meshBox(parent, [5.4, 6.6, 0.45], [0, 3.3, -53.8], MATERIALS.mediumMetal,
+    { collider: true, colliderId: 'locked-factory-entrance' });
+  for (const x of [-2.85, 2.85]) meshBox(parent, [0.3, 7, 0.6], [x, 3.5, -53.6], MATERIALS.darkMetal);
+  meshBox(parent, [5.9, 0.3, 0.6], [0, 6.9, -53.6], MATERIALS.darkMetal);
+  meshBox(parent, [0.07, 6.4, 0.1], [0, 3.2, -53.5], MATERIALS.darkMetal);
+  meshBox(parent, [1.2, 0.16, 0.15], [0, 2.8, -53.4], MATERIALS.lightMetal);
+  meshBox(parent, [0.6, 0.75, 0.28], [0, 2.4, -53.2], MATERIALS.safetyYellow);
+  addLabel(parent, 'INGÅNG · LÅST', [0, 5.25, -53.35], '#ffd34f', 1.65);
+  registerInteractable({ id: 'factory-entrance', type: 'locked-entrance', name: 'INGÅNG · LÅST', floor: 1,
+    x: 0, z: -53.2, radius: 3.4 }, door);
+}
+
+function buildPlayerModel(parent = actorRoot) {
   const group = new THREE.Group();
   group.name = "player";
   meshBox(group, [1.15, 1.55, 0.68], [0, 2.15, 0], MATERIALS.playerBlue);
@@ -1141,13 +1164,14 @@ function buildPlayerModel() {
   meshBox(group, [0.58, 0.25, 0.95], [-0.34, 0.12, 0.16], MATERIALS.black);
   meshBox(group, [0.58, 0.25, 0.95], [0.34, 0.12, 0.16], MATERIALS.black);
 
-  carriedLampModel = new THREE.Group();
-  carriedLampModel.position.set(0.92, 2.35, 0.35);
-  meshCylinder(carriedLampModel, 0.16, 0.2, 0.28, 10, [0, 0, 0], MATERIALS.darkMetal);
-  meshSphere(carriedLampModel, 0.26, [0, 0.35, 0], MATERIALS.yellowGlow, 12);
-  carriedLampModel.visible = false;
-  group.add(carriedLampModel);
-  actorRoot.add(group);
+  const lampModel = new THREE.Group();
+  lampModel.position.set(0.92, 2.35, 0.35);
+  meshCylinder(lampModel, 0.16, 0.2, 0.28, 10, [0, 0, 0], MATERIALS.darkMetal);
+  meshSphere(lampModel, 0.26, [0, 0.35, 0], MATERIALS.yellowGlow, 12);
+  lampModel.visible = false;
+  group.add(lampModel);
+  if (parent === actorRoot) carriedLampModel = lampModel;
+  parent.add(group);
   return group;
 }
 
@@ -1475,6 +1499,7 @@ function updatePrompt(dt) {
 
 function setModeUi() {
   const playing = state.mode === "playing";
+  introOverlay.hidden = state.mode !== 'intro';
   startOverlay.hidden = state.mode !== "menu";
   gameHud.hidden = !playing;
   if (crosshair) crosshair.hidden = !playing;
@@ -1517,6 +1542,18 @@ function startGame() {
   showMessage("UPPDRAG 1 · HITTA DE GULA LAMPORNA", 3.2);
   canvas.focus({ preventScroll: true });
   updateCamera(true);
+  render();
+}
+
+function startIntro() {
+  resetGame(state.seed || 333);
+  introFilm ||= createFactoryIntro(buildPlayerModel);
+  introElapsed = 0;
+  state.mode = 'intro';
+  introFilm.update(0);
+  introCaption.textContent = 'MITT I NATTEN';
+  setModeUi();
+  canvas.focus({ preventScroll: true });
   render();
 }
 
@@ -1585,6 +1622,7 @@ function changeFloor(targetFloor, method = "elevator") {
   state.player.vy = 0;
   state.player.grounded = true;
   state.player.supportId = null;
+  state.player.autoJump = null;
   if (method === "elevator") {
     state.player.x = 0;
     state.player.z = 38.5;
@@ -1662,6 +1700,10 @@ function interact() {
     return false;
   }
 
+  if (item.type === 'locked-entrance') {
+    showMessage('INGÅNGEN ÄR LÅST · DU MÅSTE HITTA EXIT', 3);
+    return false;
+  }
   if (item.type === "door") {
     const door = doorways.find((entry) => entry.id === item.id);
     if (!door) return false;
@@ -2334,6 +2376,54 @@ function updateMonsters(dt) {
   });
 }
 
+function autoJumpSurfaces(seconds) {
+  const plan = FLOOR_PLANS[state.player.floor];
+  if (!plan) return [];
+  return [...plan.ground, ...(plan.upper || []), ...plan.platforms.map(definition => ({
+    ...definition, ...platformPose(definition, seconds),
+  }))];
+}
+
+function startPlayerAutoJump(velocityX, velocityZ, speed) {
+  const player = state.player, length = Math.hypot(velocityX, velocityZ);
+  if (!player.grounded || player.autoJump || actions.jumpQueued || length < 0.4) return false;
+  const standing = supportAt(player.x, player.z, player.y + 0.08);
+  if (!standing || Math.abs(standing.y - player.y) > 0.2) return false;
+  const dx = velocityX / length, dz = velocityZ / length;
+  const ahead = supportAt(player.x + dx * 0.28, player.z + dz * 0.28, player.y + 0.1);
+  // A low S plate can overlap the edge (floor 6). Its side would otherwise
+  // stop walking before the player can reach the edge that triggers the jump.
+  const lowPlateAhead = platforms.some(p => p.y > player.y + 0.2
+    && p.y < player.y + JUMP_SPEED ** 2 / (2 * GRAVITY)
+    && insideRect(player.x + dx * 0.28, player.z + dz * 0.28, p, -PLAYER_RADIUS * 0.5));
+  if (ahead && Math.abs(ahead.y - player.y) < 0.2 && !lowPlateAhead) return false;
+
+  // Predict a real landing using the ordinary jump height and walk/run speed.
+  // Moving S platforms are evaluated where they will be at landing time.
+  const plan = FLOOR_PLANS[player.floor];
+  if (!plan) return false;
+  const forbidden = [...plan.holes, ...(plan.monsterOnly || [])];
+  const arcY = t => player.y + JUMP_SPEED * t - GRAVITY * t * (t + FIXED_STEP) / 2;
+  for (let t = Math.ceil(JUMP_SPEED / GRAVITY / FIXED_STEP) * FIXED_STEP; t <= 1.3; t += FIXED_STEP) {
+    const x = player.x + dx * speed * t, z = player.z + dz * speed * t;
+    const surfaces = autoJumpSurfaces(state.elapsedMs / 1000 + t);
+    for (const surface of surfaces) {
+      if (!insideRect(x, z, surface, 0.4) || arcY(t) > surface.y || arcY(t - FIXED_STEP) < surface.y - 0.02) continue;
+      if (surface.y < player.y - 3.3) continue;
+      const blocked = forbidden.some(box => segmentHitsBox(player.x, player.z, x, z, {
+        minX: box.x - box.w / 2, maxX: box.x + box.w / 2,
+        minZ: box.z - box.d / 2, maxZ: box.z + box.d / 2,
+      })) || colliders.some(box => segmentHitsBox(player.x, player.z, x, z, box));
+      if (blocked) continue;
+      player.autoJump = { targetId: surface.id, offsetX: x - surface.x, offsetZ: z - surface.z, remaining: t, speed };
+      player.autoJumpCount += 1;
+      player.vy = JUMP_SPEED; player.grounded = false; player.supportId = null;
+      return true;
+    }
+  }
+  return false;
+}
+
 function updatePlayer(dt) {
   if (state.mode !== "playing" || state.elevatorOpen) return;
   let forward = 0;
@@ -2353,12 +2443,24 @@ function updatePlayer(dt) {
   const speed = sprint ? SPRINT_SPEED : WALK_SPEED;
   const sin = Math.sin(state.player.yaw);
   const cos = Math.cos(state.player.yaw);
-  const velocityX = (-sin * forward + cos * side) * speed;
-  const velocityZ = (-cos * forward - sin * side) * speed;
+  let velocityX = (-sin * forward + cos * side) * speed;
+  let velocityZ = (-cos * forward - sin * side) * speed;
+  startPlayerAutoJump(velocityX, velocityZ, speed);
+  const autoJump = state.player.autoJump;
+  if (autoJump) {
+    const target = autoJumpSurfaces(state.elapsedMs / 1000 + autoJump.remaining).find(surface => surface.id === autoJump.targetId);
+    if (target) {
+      velocityX = (target.x + autoJump.offsetX - state.player.x) / Math.max(dt, autoJump.remaining);
+      velocityZ = (target.z + autoJump.offsetZ - state.player.z) / Math.max(dt, autoJump.remaining);
+      const scale = Math.min(1, autoJump.speed / Math.max(0.001, Math.hypot(velocityX, velocityZ)));
+      velocityX *= scale; velocityZ *= scale;
+    }
+    autoJump.remaining = Math.max(0, autoJump.remaining - dt);
+  }
   moveWithCollisions(state.player, velocityX * dt, velocityZ * dt);
 
-  state.player.moving = magnitude > 0.08;
-  state.player.sprinting = Boolean(sprint && state.player.moving);
+  state.player.moving = Boolean(autoJump || magnitude > 0.08);
+  state.player.sprinting = Boolean((autoJump ? autoJump.speed === SPRINT_SPEED : sprint) && state.player.moving);
   const standing = supportAt(state.player.x, state.player.z, state.player.y + 0.08);
   if (state.player.grounded && (!standing || Math.abs(standing.y - state.player.y) > 0.2)) {
     state.player.grounded = false;
@@ -2379,6 +2481,7 @@ function updatePlayer(dt) {
     state.player.vy = 0;
     state.player.grounded = true;
     state.player.supportId = landing.id;
+    state.player.autoJump = null;
   }
   if (state.player.y < -3.5) { returnToMenu(); return; }
 
@@ -2441,6 +2544,7 @@ function updateFirstPersonRig() {
 }
 
 function updateCamera(force = false) {
+  if (state.mode === 'intro') return;
   camera.up.set(0, 1, 0);
   if (state.mode === "menu") {
     camera.position.set(0, 4.8, -48.5);
@@ -2462,6 +2566,13 @@ function updateCamera(force = false) {
 }
 
 function update(dt) {
+  if (state.mode === 'intro') {
+    introElapsed += dt;
+    introFilm.update(introElapsed);
+    introCaption.textContent = introElapsed < 3.6 ? 'MITT I NATTEN' : introElapsed >= INTRO_TIMES.locked ? 'DÖRREN ÄR LÅST' : '';
+    if (introElapsed >= INTRO_TIMES.end) startGame();
+    return;
+  }
   if (state.mode !== "playing") {
     updateCamera();
     return;
@@ -2481,6 +2592,26 @@ function update(dt) {
 }
 
 function render() {
+  if (state.mode === 'intro' && introFilm) {
+    // Preserve the complete film shot on portrait phones, rather than cropping
+    // away the car or shadow. Gameplay still uses the full device viewport.
+    const size = renderer.getSize(new THREE.Vector2());
+    const height = Math.min(size.y, size.x * 9 / 16), width = height * 16 / 9;
+    const left = (size.x - width) / 2, bottom = (size.y - height) / 2;
+    introFilm.camera.aspect = 16 / 9;
+    introFilm.camera.updateProjectionMatrix();
+    introCaption.style.top = `${bottom + 14}px`;
+    renderer.setScissorTest(false);
+    renderer.setClearColor(0x071122);
+    renderer.clear();
+    renderer.setViewport(left, bottom, width, height);
+    renderer.setScissor(left, bottom, width, height);
+    renderer.setScissorTest(true);
+    renderer.render(introFilm.scene, introFilm.camera);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, size.x, size.y);
+    return;
+  }
   renderer.render(scene, camera);
 }
 
@@ -2559,12 +2690,20 @@ function toggleFullscreen() {
 
 function bindInputs() {
   startButton.addEventListener("click", startGame);
+  introButton.addEventListener('click', startIntro);
   winMenuButton?.addEventListener("click", returnToMenu);
   elevatorCloseButton?.addEventListener("click", closeElevator);
   fullscreenButton?.addEventListener("click", toggleFullscreen);
 
   window.addEventListener("keydown", (event) => {
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+    if (state.mode === 'intro') {
+      if (event.code === 'Escape') returnToMenu();
+      return;
+    }
+    if (state.mode === 'menu' && event.target === introButton && (event.code === 'Enter' || event.code === 'Space')) {
+      event.preventDefault(); startIntro(); return;
+    }
     if (state.mode === "menu" && (event.code === "Enter" || event.code === "Space")) {
       startGame();
       return;
@@ -2644,7 +2783,7 @@ function bindInputs() {
 }
 
 function allEntityDefinitions() {
-  const definitions = [];
+  const definitions = [{ id: 'factory-entrance', type: 'locked-entrance', floor: 1, x: 0, z: -53.2 }];
   for (const [id, floor, x, z] of ENTITY_DEFS.lamps) definitions.push({ id, type: "lamp", floor, x, z });
   for (const [id, floor, x, z] of ENTITY_DEFS.levers) definitions.push({ id, type: "lever", floor, x, z });
   for (const [id, floor, x, z] of ENTITY_DEFS.keys) definitions.push({ id, type: "key", floor, x, z });
@@ -2902,6 +3041,7 @@ function renderGameToText() {
   return JSON.stringify({
     version: state.version,
     mode: state.mode,
+    intro: state.mode === 'intro' ? introFilm.snapshot() : null,
     coordinateSystem: "Each floor has local y=0. x increases east/right, z increases south; yaw 0 looks north (-z).",
     world: {
       kind: "giant six-floor factory",
@@ -2927,6 +3067,9 @@ function renderGameToText() {
       perspective: "first-person 3D",
       supportId: state.player.supportId,
       safeNearElevator: nearElevator(state.player.floor, state.player.x, state.player.z),
+      autoJumping: Boolean(state.player.autoJump),
+      autoJumpTarget: state.player.autoJump?.targetId || null,
+      autoJumpCount: state.player.autoJumpCount,
     },
     mission: {
       active: state.activeMission,
@@ -2993,7 +3136,7 @@ function renderGameToText() {
     overlays: { elevator: state.elevatorOpen, win: state.mode === "won", menu: state.mode === "menu" },
     controls: {
       keyboard: "WASD move, drag to look, Shift sprint, E take/use, Space jump, F fullscreen",
-      touch: "left joystick move, drag world to look, SPRING hold, TA SAK, HOPPA",
+      touch: "left joystick move, drag world to look, SPRING hold, TA SAK, HOPPA; automatic edge jumps to reachable platforms",
     },
   });
 }
@@ -3009,6 +3152,7 @@ window.advanceTime = (milliseconds) => {
 window.__whereIsExitTest = {
   reset: ({ seed = 333 } = {}) => resetGame(seed),
   startGame,
+  startIntro,
   snapshot: () => JSON.parse(renderGameToText()),
   setPlayerPose: ({ floor = state.player.floor, x = state.player.x, y = 0, z = state.player.z, yaw = state.player.yaw, pitch = state.player.pitch } = {}) => {
     state.player.floor = clamp(Math.floor(floor), 1, FLOOR_COUNT);
@@ -3020,6 +3164,7 @@ window.__whereIsExitTest = {
     state.player.vy = 0;
     state.player.grounded = true;
     state.player.supportId = null;
+    state.player.autoJump = null;
     buildFloor(state.player.floor);
     updateCamera(true);
     render();

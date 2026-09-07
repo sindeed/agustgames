@@ -14,8 +14,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Where's Exit – Agust Games</title>
-    <link rel="stylesheet" href="style.css?v=20260906-maps-1" />
-    <script type="module" src="game.js?v=20260907-elevators-1"></script>
+    <link rel="stylesheet" href="style.css?v=20260907-intro-1" />
+    <script type="module" src="game.js?v=20260907-intro-1"></script>
   </head>
   <body>
     <a class="skip-link" href="#startButton">Hoppa till startknappen</a>
@@ -159,6 +159,10 @@
             </div>
           </div>
 
+          <section id="introOverlay" class="intro-overlay" aria-label="Introfilm" hidden>
+            <p id="introCaption" class="intro-caption" aria-live="polite"></p>
+          </section>
+
           <section id="startOverlay" class="start-overlay" aria-labelledby="gameTitle">
             <div class="start-panel">
               <h1 id="gameTitle" class="game-title">
@@ -168,6 +172,7 @@
               <button id="startButton" class="start-button" type="button">
                 STARTA SPELET
               </button>
+              <button id="introButton" class="intro-button" type="button" aria-label="intro – titta på filmen och börja sedan spela">intro</button>
             </div>
           </section>
         </div>
