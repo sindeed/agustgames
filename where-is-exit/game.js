@@ -1,4 +1,6 @@
 import * as THREE from "./vendor/three.module.js";
+import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation } from "./floor-plans.js?v=20260906-maps-1";
+import { findRoute } from "./navigation.js?v=20260906-maps-1";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -27,7 +29,8 @@ const touchDevice = matchMedia("(pointer: coarse)").matches || navigator.maxTouc
 document.body.classList.toggle("touch-device", touchDevice);
 
 const FIXED_STEP = 1 / 60;
-const FLOOR_COUNT = 7;
+const FLOOR_COUNT = 6;
+const LAMP_TARGET_COUNT = 5;
 const MAP_HALF = 55;
 const CEILING_HEIGHT = 8.5;
 const PLAYER_RADIUS = 0.62;
@@ -36,7 +39,8 @@ const SPRINT_SPEED = 8.1;
 const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
-const VERSION = "20260831-5";
+const DOOR_OPEN_MS = 2000;
+const VERSION = "20260906-maps-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -52,15 +56,14 @@ const SPIDER_CHASE_JUMP_INTERVAL = 1.45;
 const FLOOR_THEMES = [
   { name: "MOTTAGNING", floor: 0x6f7472, wall: 0x74726a, accent: 0xf1a13d, fog: 0xaab0a9 },
   { name: "MASKINHALL", floor: 0x626d72, wall: 0x68767a, accent: 0x55bed3, fog: 0x9aaab0 },
-  { name: "RESERVKRAFT", floor: 0x555c61, wall: 0x61666b, accent: 0xf1c84c, fog: 0x606b72 },
-  { name: "LAGER", floor: 0x71685c, wall: 0x7b7062, accent: 0xed7f52, fog: 0xaaa092 },
+  { name: "HÄNGANDE PLATTOR", floor: 0x555c61, wall: 0x61666b, accent: 0xf1c84c, fog: 0x606b72 },
+  { name: "MASKINER OCH HÅL", floor: 0x71685c, wall: 0x7b7062, accent: 0xed7f52, fog: 0xaaa092 },
   { name: "VERKSTAD", floor: 0x5e6964, wall: 0x68746e, accent: 0x67d08b, fog: 0x94a59d },
-  { name: "LASTZON", floor: 0x67616e, wall: 0x706878, accent: 0xbc8df0, fog: 0x9f97aa },
-  { name: "KONTROLLPLAN", floor: 0x5d6874, wall: 0x687888, accent: 0x70baff, fog: 0x99a9b7 },
+  { name: "TVÅ HÖJDNIVÅER", floor: 0x67616e, wall: 0x706878, accent: 0xbc8df0, fog: 0x9f97aa },
 ];
 
 const MISSION_INFO = [
-  { title: "HITTA 10 GULA LAMPOR", short: "Lampor", total: 10 },
+  { title: "HITTA 5 GULA LAMPOR", short: "Lampor", total: LAMP_TARGET_COUNT },
   { title: "DRA I 5 SPAKAR", short: "Spakar", total: 5 },
   { title: "HITTA 5 NYCKLAR", short: "Nycklar", total: 5 },
   { title: "TÄND VÅNING 3", short: "Belysning", total: 1 },
@@ -71,9 +74,7 @@ const ENTITY_DEFS = {
   lamps: [
     ["lamp-1", 1, -43, -37], ["lamp-2", 1, -8, -33],
     ["lamp-3", 1, 34, -38], ["lamp-4", 1, 42, -4],
-    ["lamp-5", 1, 26, 31], ["lamp-6", 1, -18, 25],
-    ["lamp-7", 1, -44, 5], ["lamp-8", 2, -36, -30],
-    ["lamp-9", 2, 8, 24], ["lamp-10", 2, 39, 35],
+    ["lamp-5", 1, 26, 31],
   ],
   levers: [
     ["lever-1", 1, -41, -8], ["lever-2", 1, 40, 8],
@@ -82,20 +83,26 @@ const ENTITY_DEFS = {
   ],
   keys: [
     ["key-1", 1, 39, -31], ["key-2", 2, -38, 29],
-    ["key-3", 4, 35, 34], ["key-4", 5, -36, -35],
-    ["key-5", 7, 38, 4],
+    ["key-3", 4, 23, 25], ["key-4", 5, -36, -35],
+    ["key-5", 6, -31, 22],
   ],
-  lightSwitch: ["light-switch", 3, 38, -34],
+  lightSwitch: ["light-switch", 3, 35, 3],
   hammer: ["hammer", 5, 39, 35],
-  boards: ["exit-boards", 6, 51.4, 0],
-  exit: ["exit", 6, 54, 0],
+  boards: ["exit-boards", 6, 19, -50.2],
+  exit: ["exit", 6, 19, -53],
 };
 
 const MONSTER_STARTS = [
   { id: "monster-1", kind: "tall-one-eye", name: "ENÖGAT", floor: 1, x: 30, z: 24, heading: Math.PI, surface: "floor" },
   { id: "monster-2", kind: "eight-legs", name: "ÅTTABEN", floor: 3, x: -25, z: -17, heading: 0.4, surface: "ceiling" },
-  { id: "monster-3", kind: "faceless", name: "BRUNIS", floor: 6, x: -32, z: 23, heading: -0.7, surface: "floor" },
+  { id: "monster-3", kind: "faceless", name: "SNABBIS", floor: 5, x: -32, z: 23, heading: -0.7, surface: "floor" },
 ];
+
+const MONSTER_FLOOR_RANGES = {
+  "tall-one-eye": [1, 2],
+  "eight-legs": [3, 4],
+  faceless: [5, 6],
+};
 
 const keysDown = new Set();
 const touch = {
@@ -124,6 +131,8 @@ let playerModel;
 let carriedLampModel;
 let worldRevision = 0;
 let colliders = [];
+let doorways = [];
+let platforms = [];
 let interactables = [];
 let interactableModels = new Map();
 let monsterModels = new Map();
@@ -142,6 +151,7 @@ function freshState(seed = 333) {
     version: VERSION,
     mode: "menu",
     elapsedMs: 0,
+    doorOpenUntil: {},
     seed,
     activeMission: 1,
     player: {
@@ -153,6 +163,7 @@ function freshState(seed = 333) {
       yaw: Math.PI,
       pitch: 0,
       grounded: true,
+      supportId: null,
       sprinting: false,
       moving: false,
     },
@@ -170,6 +181,7 @@ function freshState(seed = 333) {
       floor3Unlocked: false,
       floor3LightsOn: false,
       exitBoards: "intact",
+      floor6Visited: false,
     },
     monsters: MONSTER_STARTS.map((monster, index) => ({
       ...monster,
@@ -183,6 +195,8 @@ function freshState(seed = 333) {
       visionOverride: null,
       surfaceTimer: 3 + index * 2,
       jumpY: 0,
+      baseY: 0,
+      supportId: null,
       jumpVelocity: 0,
       jumping: false,
       jumpGrounded: true,
@@ -191,6 +205,9 @@ function freshState(seed = 333) {
       stairY: 0,
       stairCooldown: 2 + index,
       floorRoamTimer: 8 + index * 4,
+      path: [],
+      pathTimer: 0,
+      holeCrossing: null,
     })),
     nearby: null,
     elevatorOpen: false,
@@ -405,7 +422,12 @@ function addLabel(parent, text, position, color = "#ffd85c", scale = 5.2) {
   context.lineWidth = 8;
   context.strokeRect(8, 8, 496, 112);
   context.fillStyle = color;
-  context.font = "900 54px system-ui, sans-serif";
+  let fontSize = 54;
+  context.font = `900 ${fontSize}px system-ui, sans-serif`;
+  while (context.measureText(text).width > 440 && fontSize > 28) {
+    fontSize -= 2;
+    context.font = `900 ${fontSize}px system-ui, sans-serif`;
+  }
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(text, 256, 65);
@@ -431,6 +453,8 @@ function disposeWorld() {
   });
   dynamicFloorMaterials = [];
   colliders = [];
+  doorways = [];
+  platforms = [];
   interactables = [];
   interactableModels = new Map();
 }
@@ -449,6 +473,7 @@ function registerInteractable(definition, model = null) {
 }
 
 function addDoorFrame(parent, x, z, rotationY, label = "DÖRR") {
+  const id = `door-${state.player.floor}-${x}-${z}`;
   const group = new THREE.Group();
   group.position.set(x, 0, z);
   group.rotation.y = rotationY;
@@ -456,10 +481,80 @@ function addDoorFrame(parent, x, z, rotationY, label = "DÖRR") {
   meshBox(group, [0.45, 5.6, 0.6], [-2.2, 2.8, 0], MATERIALS.darkMetal);
   meshBox(group, [0.45, 5.6, 0.6], [2.2, 2.8, 0], MATERIALS.darkMetal);
   meshBox(group, [4.85, 0.45, 0.6], [0, 5.55, 0], MATERIALS.orange);
-  const panel = meshBox(group, [2.2, 4.7, 0.22], [-2.05, 2.35, 0.42], MATERIALS.mediumMetal);
-  panel.rotation.y = -0.72;
+  const hinge = new THREE.Group();
+  hinge.position.set(-2, 0, 0);
+  group.add(hinge);
+  meshBox(hinge, [4, 5.1, 0.28], [2, 2.55, 0], MATERIALS.mediumMetal);
+  meshBox(hinge, [0.16, 0.65, 0.14], [3.65, 2.4, -0.22], MATERIALS.safetyYellow);
+  meshBox(hinge, [0.16, 0.65, 0.14], [3.65, 2.4, 0.22], MATERIALS.safetyYellow);
+  const collider = { id, minX: 0, maxX: 0, minZ: 0, maxZ: 0, vision: true };
+  const door = { id, floor: state.player.floor, name: label, x, z, rotationY, open: false, hinge, collider };
+  doorways.push(door);
+  colliders.push(collider);
+  setDoorOpen(door, (state.doorOpenUntil[id] || 0) > state.elapsedMs);
+  registerInteractable({ id, type: "door", name: label, floor: state.player.floor, x, z }, group);
   addLabel(group, label, [0, 6.3, 0], "#ffd15c", 2.0);
   return group;
+}
+
+function setDoorOpen(door, open) {
+  door.open = open;
+  door.hinge.rotation.y = open ? -Math.PI / 2 : 0;
+  const cos = Math.cos(door.rotationY);
+  const sin = Math.sin(door.rotationY);
+  const localX = open ? -2 : 0;
+  const localZ = open ? 2 : 0;
+  const centerX = door.x + cos * localX + sin * localZ;
+  const centerZ = door.z - sin * localX + cos * localZ;
+  const halfWidth = open ? 0.14 : 2;
+  const halfDepth = open ? 2 : 0.14;
+  const extentX = Math.abs(cos) * halfWidth + Math.abs(sin) * halfDepth;
+  const extentZ = Math.abs(sin) * halfWidth + Math.abs(cos) * halfDepth;
+  Object.assign(door.collider, { minX: centerX - extentX, maxX: centerX + extentX, minZ: centerZ - extentZ, maxZ: centerZ + extentZ });
+}
+
+function clearClosingDoor(door) {
+  const cos = Math.cos(door.rotationY);
+  const sin = Math.sin(door.rotationY);
+  const actors = [state.player, ...state.monsters.filter((monster) => monster.floor === door.floor && monster.surface === "floor")];
+  for (const actor of actors) {
+    const radius = actor === state.player ? PLAYER_RADIUS : actor.kind === "eight-legs" ? 0.95 : 0.72;
+    const dx = actor.x - door.x;
+    const dz = actor.z - door.z;
+    const along = cos * dx - sin * dz;
+    const across = sin * dx + cos * dz;
+    if (Math.abs(along) >= 2 + radius || Math.abs(across) >= 0.14 + radius) continue;
+    const side = across < 0 ? -1 : 1;
+    for (const direction of [side, -side]) {
+      const safeAcross = direction * (0.14 + radius + 0.08);
+      const x = door.x + cos * along + sin * safeAcross;
+      const z = door.z - sin * along + cos * safeAcross;
+      if (collidesAt(x, z, radius)) continue;
+      actor.x = x;
+      actor.z = z;
+      break;
+    }
+  }
+}
+
+function updateDoors() {
+  for (const door of doorways) {
+    if (!door.open || state.elapsedMs < (state.doorOpenUntil[door.id] || 0) - 0.000001) continue;
+    setDoorOpen(door, false);
+    delete state.doorOpenUntil[door.id];
+    clearClosingDoor(door);
+  }
+}
+
+function addFactoryDoorway(parent, x, z, rotationY, label, accentMaterial) {
+  addDoorFrame(parent, x, z, rotationY, label);
+  const rotated = Math.abs(Math.sin(rotationY)) > 0.5;
+  for (const side of [-1, 1]) {
+    const wallX = x + Math.cos(rotationY) * side * 4.4;
+    const wallZ = z - Math.sin(rotationY) * side * 4.4;
+    const size = rotated ? [0.65, 5.6, 4.4] : [4.4, 5.6, 0.65];
+    addColliderBox(parent, size, [wallX, 2.8, wallZ], accentMaterial, `door-wall-${label}-${side}`);
+  }
 }
 
 function addFactoryFixture(parent, x, z, lightsOn, pointLight = false) {
@@ -508,10 +603,10 @@ function addConveyor(parent, x, z, rotationY, index) {
 
 function addStairs(parent, floor, direction) {
   const isUp = direction === "up";
-  const x = isUp ? -43 : -32;
-  const z = 43;
+  const { x, z, rotation = 0 } = stairLocation(floor, direction);
   const group = new THREE.Group();
   group.position.set(x, 0, z);
+  group.rotation.y = rotation;
   parent.add(group);
   for (let step = 0; step < 9; step += 1) {
     meshBox(group, [4.4, 0.34 + step * 0.34, 0.92], [0, (0.34 + step * 0.34) / 2, -3.6 + step * 0.9], MATERIALS.lightMetal, { castShadow: false });
@@ -527,14 +622,16 @@ function addStairs(parent, floor, direction) {
     floor,
     targetFloor: target,
     x,
-    z: 40,
+    z: z - Math.cos(rotation) * 3,
     radius: 4.2,
   }, group);
 }
 
-function addElevator(parent, floor, theme) {
+function addElevator(parent, floor, theme, location = { x: 0, z: 47 }, index = 0) {
   const group = new THREE.Group();
-  group.position.set(0, 0, 47);
+  const rotation = location.rotation || 0;
+  group.position.set(location.x, 0, location.z);
+  group.rotation.y = rotation;
   parent.add(group);
   meshBox(group, [12, 0.25, 9], [0, 0.12, 0], MATERIALS.darkMetal, { castShadow: false });
   meshBox(group, [0.55, 6.4, 8.7], [-6, 3.2, 0], MATERIALS.mediumMetal);
@@ -545,7 +642,9 @@ function addElevator(parent, floor, theme) {
   const panelMaterial = state.factory.elevatorsPowered ? MATERIALS.green : MATERIALS.red;
   const panel = meshBox(group, [1.3, 2.1, 0.38], [5.1, 2.25, -4.6], panelMaterial);
   addLabel(group, state.factory.elevatorsPowered ? "HISS PÅ" : "HISS AV", [0, 7.0, 0], state.factory.elevatorsPowered ? "#79f2a2" : "#ff9a84", 2.45);
-  registerInteractable({ id: `elevator-${floor}`, type: "elevator", name: "HISS", floor, x: 5.1, z: 42.4, radius: 3.4 }, panel);
+  registerInteractable({ id: `elevator-${floor}${index ? `-${index + 1}` : ''}`, type: "elevator", name: "HISS", floor,
+    x: location.x + Math.cos(rotation) * 5.1 - Math.sin(rotation) * 4.6,
+    z: location.z - Math.sin(rotation) * 5.1 - Math.cos(rotation) * 4.6, radius: 3.4 }, panel);
   const floorNumber = meshBox(group, [1.5, 1.5, 0.22], [0, 3.9, -4.62], theme.accentMaterial);
   floorNumber.rotation.z = Math.PI / 4;
 }
@@ -573,8 +672,8 @@ function addSocketStation(parent) {
   parent.add(group);
   meshBox(group, [17, 5.6, 0.55], [0, 2.8, 0], MATERIALS.darkMetal);
   meshBox(group, [16.2, 4.8, 0.25], [0, 2.8, -0.34], MATERIALS.mediumMetal);
-  addLabel(group, "10 ELUTTAG", [0, 6.4, 0], "#ffd75b", 2.55);
-  for (let index = 0; index < 10; index += 1) {
+  addLabel(group, "5 ELUTTAG", [0, 6.4, 0], "#ffd75b", 2.55);
+  for (let index = 0; index < LAMP_TARGET_COUNT; index += 1) {
     const column = index % 5;
     const row = Math.floor(index / 5);
     const sx = -6.4 + column * 3.2;
@@ -662,22 +761,294 @@ function addHammer(parent) {
 function addExit(parent) {
   if (state.player.floor !== 6) return;
   const group = new THREE.Group();
-  group.position.set(52.2, 0, 0);
+  group.position.set(19, 0, -51);
   parent.add(group);
-  meshBox(group, [0.75, 6.6, 9.0], [0, 3.3, -5.25], MATERIALS.darkMetal);
-  meshBox(group, [0.75, 6.6, 9.0], [0, 3.3, 5.25], MATERIALS.darkMetal);
-  meshBox(group, [0.75, 0.65, 11], [0, 6.3, 0], MATERIALS.green);
-  addLabel(group, "EXIT", [-0.5, 7.35, 0], "#7dffa6", 3.0);
+  meshBox(group, [0.6, 5.2, 0.6], [-3.7, 2.6, 0], MATERIALS.darkMetal);
+  meshBox(group, [0.6, 5.2, 0.6], [3.7, 2.6, 0], MATERIALS.darkMetal);
+  meshBox(group, [8, 0.65, 0.65], [0, 5.2, 0], MATERIALS.green);
+  addLabel(group, "EXIT", [0, 6.3, 0], "#7dffa6", 2.6);
   if (!state.missions.exit.boardsBroken) {
     for (let index = -2; index <= 2; index += 1) {
-      const board = meshBox(group, [0.42, 0.65, 9.4], [-0.45, 2.8 + index * 0.58, 0], MATERIALS.wood, { rotationY: 0.06 * index });
-      board.rotation.x = 0.08 * index;
+      const board = meshBox(group, [7.2, 0.6, 0.4], [0, 2.5 + index * 0.6, 0], MATERIALS.wood);
+      board.rotation.z = 0.08 * index;
     }
-    colliders.push({ id: "exit-boards", minX: 50.6, maxX: 53.0, minZ: -4.7, maxZ: 4.7, vision: true });
-    if (state.activeMission === 5) registerInteractable({ id: "exit-boards", type: "boards", name: "PLANKOR VID EXIT", floor: 6, x: 50.5, z: 0, radius: 3.4 }, group);
+    colliders.push({ id: "exit-boards", minX: 15, maxX: 23, minZ: -51.5, maxZ: -50.7, vision: true });
+    if (state.activeMission === 5) registerInteractable({ id: "exit-boards", type: "boards", name: "PLANKOR VID EXIT", floor: 6, x: 19, z: -50.2, radius: 3.4 }, group);
   } else {
-    registerInteractable({ id: "exit", type: "exit", name: "GÅ UT GENOM EXIT", floor: 6, x: 53.4, z: 0, radius: 4.0 }, group);
+    // Winning requires walking through the exit, not using it from the platform.
+    registerInteractable({ id: "exit", type: "exit", name: "GÅ UT GENOM EXIT", floor: 6, x: 19, z: -53, radius: 1.4 }, group);
   }
+}
+
+function addFloorFixtures(parent, floor, lightsOn) {
+  let positions;
+  if (floor === 1) {
+    positions = [-36, -12, 12, 36].flatMap((x) => [-34, 0, 34].map((z) => [x, z]));
+  } else if (floor === 2) {
+    positions = [-42, -21, 0, 21, 42].flatMap((x) => [-28, 28].map((z) => [x, z]));
+  } else if (floor === 3) {
+    const legacy = [-42, -21, 0, 21, 42];
+    positions = legacy.flatMap((z) => legacy.map((x) => [x, z]));
+  } else if (floor === 4) {
+    positions = [-40, -20, 0, 20, 40].flatMap((x) => [-38, -12, 14, 38].map((z) => [x, z]));
+  } else if (floor === 5) {
+    positions = [[-34, -32], [0, -32], [34, -32], [-22, 0], [22, 0], [-34, 30], [0, 30], [34, 30]];
+  } else {
+    positions = [-40, -20, 0, 20, 40].flatMap((x) => [-30, 0, 30].map((z) => [x, z]));
+  }
+  positions.forEach(([x, z], index) => addFactoryFixture(parent, x, z, lightsOn, index % 4 === 0));
+}
+
+function addLegacyFactoryLayout(parent, floor, theme, wallMaterial) {
+  // Våning 3 behåller den ursprungliga layouten tills användaren ritar sin egen.
+  for (const z of [-20, 20]) {
+    addColliderBox(parent, [32, 5.8, 0.75], [-35, 2.9, z], wallMaterial, `partition-${z}-west`);
+    addColliderBox(parent, [32, 5.8, 0.75], [35, 2.9, z], wallMaterial, `partition-${z}-east`);
+    addColliderBox(parent, [14, 5.8, 0.75], [-9, 2.9, z], wallMaterial, `partition-${z}-midwest`);
+    addColliderBox(parent, [14, 5.8, 0.75], [9, 2.9, z], wallMaterial, `partition-${z}-mideast`);
+    addDoorFrame(parent, 0, z, 0, z < 0 ? "NORRA DÖRREN" : "SÖDRA DÖRREN");
+  }
+  addColliderBox(parent, [0.75, 5.8, 22], [-24, 2.9, 0], wallMaterial, "partition-west-center");
+  addColliderBox(parent, [0.75, 5.8, 22], [24, 2.9, 0], wallMaterial, "partition-east-center");
+  addDoorFrame(parent, -24, 0, Math.PI / 2, "VÄST");
+  addDoorFrame(parent, 24, 0, Math.PI / 2, "ÖST");
+
+  const machinePositions = [
+    [-39, -32], [-22, -33], [19, -34], [38, -33],
+    [-39, 31], [-18, 33], [18, 32], [39, 31],
+  ];
+  machinePositions.forEach(([x, z], index) => {
+    const jitterX = (seededUnit(floor, index, 1) - 0.5) * 2.2;
+    const jitterZ = (seededUnit(floor, index, 2) - 0.5) * 2.2;
+    addMachine(parent, x + jitterX, z + jitterZ, floor * 20 + index, theme.accentMaterial);
+  });
+  addConveyor(parent, -34, 10, 0, floor * 2);
+  addConveyor(parent, 34, -10, Math.PI / 2, floor * 2 + 1);
+  for (let index = 0; index < 12; index += 1) {
+    const side = index % 2 ? 1 : -1;
+    const x = side * (12 + (index % 4) * 8);
+    const z = -10 + Math.floor(index / 4) * 10;
+    addColliderBox(parent, [1.8, 1.8 + (index % 3) * 0.5, 1.8], [x, 0.9 + (index % 3) * 0.25, z], index % 3 ? MATERIALS.wood : theme.accentMaterial, `crate-${floor}-${index}`, false);
+  }
+}
+
+function addReceptionLayout(parent, theme) {
+  addFactoryDoorway(parent, -28, -4, 0, "SORTERING", theme.accentMaterial);
+  addFactoryDoorway(parent, 28, 18, 0, "PAKETRUM", theme.accentMaterial);
+  addLabel(parent, "MOTTAGNING · SORTERING", [0, 6.3, -18], "#ffd58a", 3.2);
+  addColliderBox(parent, [18, 1.45, 4.2], [0, 0.73, -12], MATERIALS.wood, "reception-main", false);
+  meshBox(parent, [18.6, 0.25, 4.7], [0, 1.58, -12], theme.accentMaterial);
+  for (const x of [-16, 16]) {
+    addColliderBox(parent, [7.5, 1.25, 3.4], [x, 0.63, 7], MATERIALS.mediumMetal, `sorting-desk-${x}`, false);
+    meshBox(parent, [7.9, 0.2, 3.8], [x, 1.34, 7], MATERIALS.safetyYellow);
+  }
+  addConveyor(parent, -28, -17, 0, 101);
+  addConveyor(parent, 12, 16, Math.PI / 2, 102);
+  [[-33, 14], [-20, 27], [4, 29], [31, 14]].forEach(([x, z], index) => {
+    addColliderBox(parent, [3.2, 2.1 + index % 2, 3.2], [x, 1.05 + (index % 2) * 0.5, z], index % 2 ? MATERIALS.orange : MATERIALS.wood, `arrival-package-${index}`, false);
+  });
+  meshBox(parent, [4, 0.06, 70], [0, 0.04, 4], MATERIALS.safetyYellow, { castShadow: false });
+}
+
+function addMachineHallLayout(parent, theme) {
+  addFactoryDoorway(parent, -12, -5, Math.PI / 2, "KYLRUM", theme.accentMaterial);
+  addFactoryDoorway(parent, 12, 20, 0, "SERVICE", theme.accentMaterial);
+  addLabel(parent, "MASKINHALL · KYLSYSTEM", [0, 6.3, -18], "#91efff", 3.2);
+  [[-24, -18], [0, -18], [24, -18], [-24, 8], [0, 8], [24, 8]].forEach(([x, z], index) => {
+    addMachine(parent, x, z, 200 + index, theme.accentMaterial);
+  });
+  addConveyor(parent, 0, 25, 0, 210);
+  for (const x of [-42, 42]) {
+    for (const z of [-16, 4, 24]) {
+      meshCylinder(parent, 2.5, 2.8, 5.8, 18, [x, 2.9, z], MATERIALS.glass);
+      meshCylinder(parent, 0.55, 0.65, 7.2, 14, [x, 3.6, z], theme.accentMaterial);
+    }
+  }
+  for (const z of [-38, 38]) {
+    const pipe = meshCylinder(parent, 0.5, 0.5, 72, 14, [0, 6.1, z], MATERIALS.lightMetal);
+    pipe.rotation.z = Math.PI / 2;
+  }
+}
+
+function addWarehouseRack(parent, x, z, index, accentMaterial) {
+  addColliderBox(parent, [12.5, 4.8, 2.4], [x, 2.4, z], MATERIALS.darkMetal, `warehouse-rack-${index}`);
+  for (const y of [1.1, 2.5, 3.9]) meshBox(parent, [12.8, 0.18, 2.7], [x, y, z], accentMaterial);
+  for (const offset of [-5.2, -1.8, 1.8, 5.2]) {
+    meshBox(parent, [2.6, 0.75, 1.8], [x + offset, 1.55 + (index % 2) * 1.4, z], index % 2 ? MATERIALS.wood : MATERIALS.orange);
+  }
+}
+
+function addWarehouseLayout(parent, theme) {
+  addFactoryDoorway(parent, -4, -18, 0, "LAGER A", theme.accentMaterial);
+  addFactoryDoorway(parent, 18, 7, 0, "LAGER B", theme.accentMaterial);
+  addLabel(parent, "FÄRGLAGER · GÅNGAR", [0, 6.3, 31], "#ffc08a", 3.2);
+  const rackPositions = [
+    [-34, -31], [-14, -31], [10, -31], [32, -31],
+    [-34, -6], [-14, -6], [10, -6], [32, -6],
+    [-34, 19], [-14, 19], [10, 19], [32, 19],
+  ];
+  rackPositions.forEach(([x, z], index) => addWarehouseRack(parent, x, z, index, theme.accentMaterial));
+  for (const x of [-44, -24, -4, 16, 36]) {
+    meshBox(parent, [1.2, 0.08, 80], [x, 0.05, 0], theme.accentMaterial, { castShadow: false });
+  }
+}
+
+function addWorkshopBench(parent, x, z, index, accentMaterial) {
+  addColliderBox(parent, [10.5, 1.5, 4.5], [x, 0.75, z], MATERIALS.wood, `workbench-${index}`, false);
+  meshBox(parent, [11, 0.22, 5], [x, 1.62, z], accentMaterial);
+  for (const offset of [-3.2, 0, 3.2]) {
+    const arm = meshCylinder(parent, 0.22, 0.3, 3.2, 12, [x + offset, 3.0, z], MATERIALS.lightMetal);
+    arm.rotation.z = (index % 2 ? -1 : 1) * 0.42;
+    meshSphere(parent, 0.42, [x + offset + (index % 2 ? 0.62 : -0.62), 4.42, z], MATERIALS.green, 12);
+  }
+}
+
+function addWorkshopLayout(parent, theme) {
+  addFactoryDoorway(parent, -14, -5, 0, "MONTERING", theme.accentMaterial);
+  addFactoryDoorway(parent, 14, 20, Math.PI / 2, "VERKTYG", theme.accentMaterial);
+  addLabel(parent, "ROBOTVERKSTAD · VERKTYG", [0, 6.3, -18], "#a4ffc0", 3.2);
+  [[-28, -18], [0, -18], [28, -18], [-28, 8], [0, 8], [28, 8]].forEach(([x, z], index) => {
+    addWorkshopBench(parent, x, z, index, theme.accentMaterial);
+  });
+  for (const x of [-40, -20, 20, 40]) {
+    meshCylinder(parent, 1.1, 1.1, 6.5, 18, [x, 3.25, 25], MATERIALS.mediumMetal);
+    meshSphere(parent, 1.25, [x, 6.3, 25], theme.accentMaterial, 14);
+  }
+}
+
+function addLoadingBayLayout(parent, theme) {
+  addLabel(parent, "LASTZON · PORT 6", [0, 6.3, -18], "#ddbaff", 3.2);
+  const containers = [
+    [-38, -27], [-19, -27], [9, -27], [32, -27],
+    [-38, 18], [-17, 18], [5, 18], [25, 18],
+  ];
+  containers.forEach(([x, z], index) => {
+    const material = index % 3 === 0 ? theme.accentMaterial : index % 3 === 1 ? MATERIALS.orange : MATERIALS.mediumMetal;
+    addColliderBox(parent, [14, 4.2, 5.4], [x, 2.1, z], material, `container-${index}`);
+    for (let stripe = -5; stripe <= 5; stripe += 2.5) meshBox(parent, [0.12, 4.0, 5.5], [x + stripe, 2.1, z], MATERIALS.darkMetal);
+  });
+  for (const z of [-9, 0, 9]) meshBox(parent, [88, 0.07, 0.45], [-2, 0.05, z], MATERIALS.safetyYellow, { castShadow: false });
+  addDoorFrame(parent, 39, -14, Math.PI / 2, "LASTPORT");
+  meshBox(parent, [18, 0.08, 8], [42, 0.06, 0], MATERIALS.green, { castShadow: false });
+}
+
+function floorMark(parent, text, x, y, z, color = '#ffe18b', size = 4) {
+  const surface = document.createElement('canvas');
+  surface.width = 256; surface.height = 128;
+  const ctx = surface.getContext('2d');
+  ctx.font = 'bold 68px sans-serif'; ctx.fillStyle = color;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 64);
+  const texture = new THREE.CanvasTexture(surface);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  dynamicFloorMaterials.push(material);
+  const marking = new THREE.Mesh(new THREE.PlaneGeometry(size, size / 2), material);
+  marking.rotation.x = -Math.PI / 2;
+  marking.position.set(x, y, z);
+  parent.add(marking);
+}
+
+function addDrawnGround(parent, floor, material, wallMaterial) {
+  const plan = FLOOR_PLANS[floor];
+  const boxes = [...plan.ground, ...plan.holes];
+  const xs = [...new Set(boxes.flatMap(b => [b.x - b.w / 2, b.x + b.w / 2]))].sort((a, b) => a - b);
+  const zs = [...new Set(boxes.flatMap(b => [b.z - b.d / 2, b.z + b.d / 2]))].sort((a, b) => a - b);
+  const inOutline = (x, z) => plan.ground.some(b => insideRect(x, z, b));
+  for (let xi = 0; xi < xs.length - 1; xi++) {
+    for (let zi = 0; zi < zs.length - 1; zi++) {
+      const x = (xs[xi] + xs[xi + 1]) / 2, z = (zs[zi] + zs[zi + 1]) / 2;
+      const w = xs[xi + 1] - xs[xi], d = zs[zi + 1] - zs[zi];
+      if (!floorHasGround(floor, x, z)) continue;
+      meshBox(parent, [w, 0.35, d], [x, -0.18, z], material, { castShadow: false });
+      if (floor !== 4) continue;
+      for (const [dx, dz, sw, sd] of [[-w / 2, 0, 0.4, d], [w / 2, 0, 0.4, d], [0, -d / 2, w, 0.4], [0, d / 2, w, 0.4]]) {
+        if (inOutline(x + dx * 1.001, z + dz * 1.001)) continue;
+        addColliderBox(parent, [sw, CEILING_HEIGHT, sd], [x + dx, CEILING_HEIGHT / 2, z + dz], wallMaterial, `outline-${xi}-${zi}-${dx}-${dz}`);
+      }
+    }
+  }
+  if (floor !== 3) {
+    meshBox(parent, [110, 0.3, 110], [0, -7.5, 0], MATERIALS.darkMetal, { castShadow: false });
+  }
+  for (const hole of plan.holes) {
+    for (const side of [-1, 1]) {
+      meshBox(parent, [hole.w, 0.06, 0.2], [hole.x, 0.035, hole.z + side * hole.d / 2], MATERIALS.safetyYellow);
+      meshBox(parent, [0.2, 0.06, hole.d], [hole.x + side * hole.w / 2, 0.035, hole.z], MATERIALS.safetyYellow);
+    }
+    addLabel(parent, 'M · HÅL', [hole.x, 1.2, hole.z], '#ffd35b', 2.2);
+  }
+}
+
+function addSuspendedPlatform(parent, definition, accent) {
+  const group = new THREE.Group();
+  parent.add(group);
+  meshBox(group, [definition.w, 0.32, definition.d], [0, -0.16, 0], MATERIALS.darkMetal);
+  meshBox(group, [definition.w - 0.2, 0.06, definition.d - 0.2], [0, 0, 0], accent);
+  floorMark(group, `S ${definition.arrow || ''}`, 0, 0.045, 0, '#fff6c5', definition.w - 0.6);
+  const ropes = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const rope = meshCylinder(parent, 0.055, 0.055, 1, 7, [0, 0, 0], MATERIALS.wood);
+    ropes.push({ mesh: rope, dx: sx * (definition.w / 2 - 0.22), dz: sz * (definition.d / 2 - 0.22) });
+  }
+  const pose = platformPose(definition, state.elapsedMs / 1000);
+  const platform = { ...definition, ...pose, definition, group, ropes };
+  platforms.push(platform);
+  positionPlatformModel(platform);
+  if (definition.to && definition.kind === 'shuttle') {
+    const length = Math.hypot(definition.to.x - definition.from.x, definition.to.z - definition.from.z);
+    const rail = meshBox(parent, [0.16, 0.16, length + definition.d],
+      [(definition.from.x + definition.to.x) / 2, CEILING_HEIGHT - 0.12, (definition.from.z + definition.to.z) / 2], MATERIALS.lightMetal);
+    rail.rotation.y = Math.atan2(definition.to.x - definition.from.x, definition.to.z - definition.from.z);
+  }
+}
+
+function positionPlatformModel(platform) {
+  platform.group.position.set(platform.x, platform.y, platform.z);
+  for (const { mesh, dx, dz } of platform.ropes) {
+    const length = CEILING_HEIGHT - platform.y;
+    mesh.position.set(platform.x + dx, platform.y + length / 2, platform.z + dz);
+    mesh.scale.y = length;
+  }
+}
+
+function addDrawnLayout(parent, floor, theme, wallMaterial) {
+  const plan = FLOOR_PLANS[floor];
+  for (const machine of plan.machines) {
+    addMachine(parent, machine.x - 2.4, machine.z, 401, theme.accentMaterial);
+    addMachine(parent, machine.x + 2.4, machine.z, 402, theme.accentMaterial);
+    floorMark(parent, 'A', machine.x, 0.03, machine.z + 4, '#ffc993', 3);
+  }
+  for (const wall of plan.walls || []) {
+    addColliderBox(parent, [wall.w, 7, wall.d], [wall.x, 3.5, wall.z], wallMaterial, wall.id);
+  }
+  for (const platform of plan.platforms) addSuspendedPlatform(parent, platform, theme.accentMaterial);
+  for (const destination of plan.destinations) floorMark(parent, 'U', destination.x, 0.05, destination.z, '#ffe79b', 4);
+  for (const upper of plan.upper || []) {
+    meshBox(parent, [upper.w, 0.3, upper.d], [upper.x, upper.y - 0.15, upper.z], MATERIALS.mediumMetal);
+    floorMark(parent, 'ÖVRE', upper.x, upper.y + 0.03, upper.z, '#f0dbff', 5);
+    for (const side of [-1, 1]) {
+      for (let z = upper.z - upper.d / 2; z <= upper.z + upper.d / 2; z += 4) {
+        meshCylinder(parent, 0.08, 0.08, upper.y, 8, [upper.x + side * (upper.w / 2 - 0.15), upper.y / 2, z], MATERIALS.lightMetal);
+      }
+    }
+  }
+  for (const bridge of plan.monsterOnly || []) {
+    // E is a sloped route to the upper row, usable only by monsters.
+    const ramp = meshBox(parent, [bridge.w, 0.22, Math.hypot(bridge.d, 3.2)], [bridge.x, 1.6, bridge.z], theme.accentMaterial);
+    ramp.rotation.x = Math.atan2(3.2, bridge.d);
+    addLabel(parent, 'E · BARA MONSTER', [bridge.x, 3, bridge.z + 5], '#e8c6ff', 2.5);
+  }
+  if (plan.playerSpawn) floorMark(parent, 'W · START', plan.playerSpawn.x, 0.035, plan.playerSpawn.z, '#95efcb', 8);
+  if (plan.monsterSpawn) floorMark(parent, 'V1', plan.monsterSpawn.x, 0.035, plan.monsterSpawn.z, '#ffa96a', 4);
+}
+
+function addFloorLayout(parent, floor, theme, wallMaterial) {
+  if (floor === 1) addReceptionLayout(parent, theme);
+  else if (floor === 2) addMachineHallLayout(parent, theme);
+  else if (floor === 3 || floor === 4) addDrawnLayout(parent, floor, theme, wallMaterial);
+  else if (floor === 5) addWorkshopLayout(parent, theme);
+  else addDrawnLayout(parent, floor, theme, wallMaterial);
 }
 
 function buildFloor(floor = state.player.floor) {
@@ -704,7 +1075,8 @@ function buildFloor(floor = state.player.floor) {
   fillLight.intensity = floor3Dim ? 0.42 : 0.55;
   ambientLight.intensity = floor3Dim ? 0.32 : 0.92;
 
-  meshBox(worldRoot, [MAP_HALF * 2, 0.35, MAP_HALF * 2], [0, -0.18, 0], floorMaterial, { receiveShadow: true, castShadow: false });
+  if (FLOOR_PLANS[floor]) addDrawnGround(worldRoot, floor, floorMaterial, wallMaterial);
+  else meshBox(worldRoot, [MAP_HALF * 2, 0.35, MAP_HALF * 2], [0, -0.18, 0], floorMaterial, { receiveShadow: true, castShadow: false });
   meshBox(worldRoot, [MAP_HALF * 2, 0.22, MAP_HALF * 2], [0, CEILING_HEIGHT + 0.1, 0], MATERIALS.ceiling, { castShadow: false });
 
   const wallHeight = CEILING_HEIGHT;
@@ -718,49 +1090,12 @@ function buildFloor(floor = state.player.floor) {
   addColliderBox(worldRoot, [MAP_HALF * 2, wallHeight, 1.0], [0, wallHeight / 2, -MAP_HALF], wallMaterial, "outer-north");
   addColliderBox(worldRoot, [MAP_HALF * 2, wallHeight, 1.0], [0, wallHeight / 2, MAP_HALF], wallMaterial, "outer-south");
 
-  // Två långa innerväggar med breda dörröppningar skapar stora slingor.
-  for (const z of [-20, 20]) {
-    addColliderBox(worldRoot, [32, 5.8, 0.75], [-35, 2.9, z], wallMaterial, `partition-${z}-west`);
-    addColliderBox(worldRoot, [32, 5.8, 0.75], [35, 2.9, z], wallMaterial, `partition-${z}-east`);
-    addColliderBox(worldRoot, [14, 5.8, 0.75], [-9, 2.9, z], wallMaterial, `partition-${z}-midwest`);
-    addColliderBox(worldRoot, [14, 5.8, 0.75], [9, 2.9, z], wallMaterial, `partition-${z}-mideast`);
-    addDoorFrame(worldRoot, 0, z, 0, z < 0 ? "NORRA DÖRREN" : "SÖDRA DÖRREN");
-  }
-  addColliderBox(worldRoot, [0.75, 5.8, 22], [-24, 2.9, 0], wallMaterial, "partition-west-center");
-  addColliderBox(worldRoot, [0.75, 5.8, 22], [24, 2.9, 0], wallMaterial, "partition-east-center");
-  addDoorFrame(worldRoot, -24, 0, Math.PI / 2, "VÄST");
-  addDoorFrame(worldRoot, 24, 0, Math.PI / 2, "ÖST");
-
-  const fixturePositions = [-42, -21, 0, 21, 42];
-  let fixtureIndex = 0;
-  for (const z of fixturePositions) {
-    for (const x of fixturePositions) {
-      addFactoryFixture(worldRoot, x, z, factoryLightsOn, fixtureIndex % 4 === 0);
-      fixtureIndex += 1;
-    }
-  }
-
-  const machinePositions = [
-    [-39, -32], [-22, -33], [19, -34], [38, -33],
-    [-39, 31], [-18, 33], [18, 32], [39, 31],
-  ];
-  machinePositions.forEach(([x, z], index) => {
-    const jitterX = (seededUnit(floor, index, 1) - 0.5) * 2.2;
-    const jitterZ = (seededUnit(floor, index, 2) - 0.5) * 2.2;
-    addMachine(worldRoot, x + jitterX, z + jitterZ, floor * 20 + index, theme.accentMaterial);
-  });
-  addConveyor(worldRoot, -34, 10, 0, floor * 2);
-  addConveyor(worldRoot, 34, -10, Math.PI / 2, floor * 2 + 1);
-
-  for (let index = 0; index < 12; index += 1) {
-    const side = index % 2 ? 1 : -1;
-    const x = side * (12 + (index % 4) * 8);
-    const z = -10 + Math.floor(index / 4) * 10;
-    addColliderBox(worldRoot, [1.8, 1.8 + (index % 3) * 0.5, 1.8], [x, 0.9 + (index % 3) * 0.25, z], index % 3 ? MATERIALS.wood : theme.accentMaterial, `crate-${floor}-${index}`, false);
-  }
+  addFloorFixtures(worldRoot, floor, factoryLightsOn);
+  addFloorLayout(worldRoot, floor, theme, wallMaterial);
 
   addLabel(worldRoot, `VÅNING ${floor} · ${theme.name}`, [0, 6.7, -51.8], `#${theme.accent.toString(16).padStart(6, "0")}`, 4.1);
-  addElevator(worldRoot, floor, theme);
+  const elevators = FLOOR_PLANS[floor]?.elevators || [{ x: 0, z: 47 }];
+  elevators.forEach((location, index) => addElevator(worldRoot, floor, theme, location, index));
   if (floor < FLOOR_COUNT) addStairs(worldRoot, floor, "up");
   if (floor > 1) addStairs(worldRoot, floor, "down");
 
@@ -925,7 +1260,13 @@ function updateActorVisibility() {
   });
 }
 
-function collidesAt(x, z, radius = PLAYER_RADIUS) {
+function collidesAt(x, z, radius = PLAYER_RADIUS, actor = null) {
+  if (actor === state.player && (FLOOR_PLANS[actor.floor]?.monsterOnly || []).some(box => insideRect(x, z, box, -radius))) return true;
+  if (actor && actor.surface !== 'wall' && actor.surface !== 'ceiling') {
+    const feet = actor === state.player ? actor.y : (actor.baseY || 0) + (actor.jumpY || 0);
+    const solids = [...platforms, ...(FLOOR_PLANS[actor.floor]?.upper || [])];
+    if (solids.some(box => box.y > feet + 0.3 && box.y < feet + 1.55 && insideRect(x, z, box, -radius * 0.5))) return true;
+  }
   return colliders.some((wall) => (
     x + radius > wall.minX
     && x - radius < wall.maxX
@@ -936,9 +1277,40 @@ function collidesAt(x, z, radius = PLAYER_RADIUS) {
 
 function moveWithCollisions(actor, dx, dz, radius = PLAYER_RADIUS) {
   const nextX = actor.x + dx;
-  if (!collidesAt(nextX, actor.z, radius)) actor.x = nextX;
+  if (!collidesAt(nextX, actor.z, radius, actor)) actor.x = nextX;
   const nextZ = actor.z + dz;
-  if (!collidesAt(actor.x, nextZ, radius)) actor.z = nextZ;
+  if (!collidesAt(actor.x, nextZ, radius, actor)) actor.z = nextZ;
+}
+
+function supportAt(x, z, highestY = Infinity, monster = false) {
+  let best = floorHasGround(state.player.floor, x, z) && highestY >= -0.02 ? { id: 'ground', y: 0 } : null;
+  for (const box of [...platforms, ...(FLOOR_PLANS[state.player.floor]?.upper || [])]) {
+    // Only hanging platforms need an edge inset. Fixed floor joins must meet
+    // exactly, otherwise the E ramp ends in a five-centimetre navigation gap.
+    if (box.y <= highestY + 0.02 && insideRect(x, z, box, box.kind ? 0.05 : 0) && (!best || box.y > best.y)) best = { id: box.id, y: box.y };
+  }
+  if (monster) for (const ramp of FLOOR_PLANS[state.player.floor]?.monsterOnly || []) {
+    const height = 3.2 * clamp((ramp.z + ramp.d / 2 - z) / ramp.d, 0, 1);
+    if (insideRect(x, z, ramp) && height <= highestY + 0.35 && (!best || height > best.y)) best = { id: ramp.id, y: height };
+  }
+  return best;
+}
+
+function updatePlatforms() {
+  for (const platform of platforms) {
+    const pose = platformPose(platform.definition, state.elapsedMs / 1000);
+    const dx = pose.x - platform.x, dy = pose.y - platform.y, dz = pose.z - platform.z;
+    for (const actor of [state.player, ...state.monsters]) {
+      if (actor.floor !== state.player.floor || actor.supportId !== platform.id) continue;
+      const riding = actor === state.player ? actor.grounded : !actor.jumping && actor.surface === 'floor';
+      if (!riding || !insideRect(actor.x, actor.z, platform)) { actor.supportId = null; continue; }
+      actor.x += dx; actor.z += dz;
+      if (actor === state.player) actor.y += dy;
+      else actor.baseY = (actor.baseY || 0) + dy;
+    }
+    Object.assign(platform, pose);
+    positionPlatformModel(platform);
+  }
 }
 
 function segmentHitsBox(ax, az, bx, bz, box) {
@@ -973,8 +1345,8 @@ function missionProgress() {
   if (state.activeMission === 1) {
     return {
       value: state.missions.lamps.installedSocketIds.length,
-      total: 10,
-      text: `${state.missions.lamps.installedSocketIds.length} / 10 I ELUTTAG`,
+      total: LAMP_TARGET_COUNT,
+      text: `${state.missions.lamps.installedSocketIds.length} / ${LAMP_TARGET_COUNT} I ELUTTAG`,
     };
   }
   if (state.activeMission === 2) {
@@ -1039,7 +1411,9 @@ function updatePrompt(dt) {
     if (messageTimer > 0) return;
   }
   if (state.mode === "playing" && state.nearby) {
-    hudMessage.textContent = `TA SAK · ${state.nearby.name}`;
+    hudMessage.textContent = state.nearby.type === "door"
+      ? `TA SAK · ÖPPNA ${state.nearby.name}`
+      : `TA SAK · ${state.nearby.name}`;
     hudMessage.hidden = false;
   } else {
     hudMessage.hidden = true;
@@ -1157,6 +1531,7 @@ function changeFloor(targetFloor, method = "elevator") {
   state.player.y = 0;
   state.player.vy = 0;
   state.player.grounded = true;
+  state.player.supportId = null;
   if (method === "elevator") {
     state.player.x = 0;
     state.player.z = 38.5;
@@ -1166,6 +1541,26 @@ function changeFloor(targetFloor, method = "elevator") {
   } else {
     state.player.x = -43;
     state.player.z = 35;
+  }
+  const plan = FLOOR_PLANS[targetFloor];
+  if (plan) {
+    const entrance = method === 'elevator' && plan.elevators.length ? plan.elevators[0]
+      : plan.stairs[targetFloor > previousFloor ? 'down' : 'up'] || plan.stairs.down;
+    if (entrance) {
+      state.player.x = entrance.x;
+      state.player.z = entrance.z - Math.cos(entrance.rotation || 0) * 8;
+      state.player.yaw = entrance.rotation || 0;
+    }
+  }
+  if (targetFloor === 6 && previousFloor !== 6) {
+    Object.assign(state.player, FLOOR_PLANS[6].playerSpawn);
+    state.factory.floor6Visited = true;
+    const monster = state.monsters.find(item => item.kind === 'faceless');
+    Object.assign(monster, FLOOR_PLANS[6].monsterSpawn, {
+      floor: 6, ai: 'patrol', surface: 'floor', baseY: 0, supportId: null,
+      stairRoute: null, stairY: 0, floorRoamTimer: 18, lostTime: 0,
+    });
+    chooseMonsterTarget(monster);
   }
   closeElevator();
   buildFloor(targetFloor);
@@ -1214,6 +1609,15 @@ function interact() {
     return false;
   }
 
+  if (item.type === "door") {
+    const door = doorways.find((entry) => entry.id === item.id);
+    if (!door) return false;
+    state.doorOpenUntil[door.id] = state.elapsedMs + DOOR_OPEN_MS;
+    setDoorOpen(door, true);
+    showMessage("DÖRREN ÖPPEN", 1.2);
+    return true;
+  }
+
   if (item.type === "lamp") {
     if (state.activeMission !== 1) return false;
     if (state.inventory.carryingLampId) {
@@ -1235,11 +1639,11 @@ function interact() {
     if (!state.missions.lamps.installedSocketIds.includes(item.id)) {
       state.missions.lamps.installedSocketIds.push(item.id);
       state.inventory.carryingLampId = null;
-      const complete = state.missions.lamps.installedSocketIds.length === 10;
+      const complete = state.missions.lamps.installedSocketIds.length === LAMP_TARGET_COUNT;
       if (complete) completeMission(1);
       else {
         buildFloor(state.player.floor);
-        showMessage(`${state.missions.lamps.installedSocketIds.length} AV 10 LAMPOR PÅ PLATS`, 2.2);
+        showMessage(`${state.missions.lamps.installedSocketIds.length} AV ${LAMP_TARGET_COUNT} LAMPOR PÅ PLATS`, 2.2);
       }
       return true;
     }
@@ -1316,14 +1720,16 @@ const PATROL_POINTS = [
 ];
 
 function chooseMonsterTarget(monster) {
-  monster.waypoint = (monster.waypoint + 1) % PATROL_POINTS.length;
-  const point = PATROL_POINTS[(monster.waypoint + MONSTER_STARTS.findIndex((item) => item.id === monster.id) * 3) % PATROL_POINTS.length];
+  const points = monster.floor === 4 ? [[-23,-26],[12,-36],[23,-9],[24,26],[0,37],[-22,26],[-24,0],[0,4]]
+    : monster.floor === 6 ? [[10,14],[-8,28],[-30,21],[-40,-6],[-6,37],[29,32],[29,14],[29,-16]] : PATROL_POINTS;
+  monster.waypoint = (monster.waypoint + 1) % points.length;
+  const point = points[(monster.waypoint + MONSTER_STARTS.findIndex((item) => item.id === monster.id) * 3) % points.length];
   monster.targetX = point[0];
   monster.targetZ = point[1];
 }
 
 function monsterMovementSpeed(monster) {
-  return monster.kind === "faceless" || monster.kind === "eight-legs" ? SPRINT_SPEED : WALK_SPEED;
+  return monster.kind === "faceless" ? SPRINT_SPEED : WALK_SPEED;
 }
 
 function monsterCanJump(monster) {
@@ -1356,6 +1762,7 @@ function triggerMonsterJump(monster) {
   monster.jumpVelocity = SPIDER_JUMP_SPEED;
   monster.jumping = true;
   monster.jumpGrounded = false;
+  monster.supportId = null;
   monster.jumpCooldown = monster.ai === "chase" ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL;
   return true;
 }
@@ -1367,27 +1774,45 @@ function updateMonsterJump(monster, dt) {
     return;
   }
   monster.jumpCooldown = Math.max(0, monster.jumpCooldown - dt);
+  if (monster.floor === state.player.floor && !monster.jumping) {
+    const support = supportAt(monster.x, monster.z, (monster.baseY || 0) + 0.1, true);
+    if (support && Math.abs(support.y - (monster.baseY || 0)) < 0.25) {
+      monster.baseY = support.y; monster.supportId = support.id;
+    } else if ((monster.baseY || 0) > 0) {
+      monster.jumpY = monster.baseY; monster.baseY = 0;
+      monster.jumping = true; monster.jumpVelocity = 0; monster.supportId = null;
+    }
+  }
   if (!monster.jumping && monster.jumpCooldown <= 0) triggerMonsterJump(monster);
   if (!monster.jumping) return;
+  const previousHeight = (monster.baseY || 0) + monster.jumpY;
   monster.jumpVelocity -= SPIDER_JUMP_GRAVITY * dt;
   monster.jumpY += monster.jumpVelocity * dt;
+  if (monster.floor === state.player.floor && monster.jumpVelocity <= 0) {
+    const support = supportAt(monster.x, monster.z, previousHeight + 0.08, true);
+    if (support && (monster.baseY || 0) + monster.jumpY <= support.y) {
+      monster.baseY = support.y; monster.supportId = support.id;
+      landMonsterJump(monster, monster.ai === 'chase' ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL);
+      return;
+    }
+  }
   if (monster.jumpY <= 0) landMonsterJump(monster, monster.ai === "chase" ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL);
 }
 
-function monsterCanEnterFloor(monster, targetFloor) {
-  return targetFloor >= 1
-    && targetFloor <= FLOOR_COUNT
-    && (state.factory.floor3Unlocked || (monster.floor !== 3 && targetFloor !== 3));
+function monsterAllowedFloors(monster) {
+  return MONSTER_FLOOR_RANGES[monster.kind] || [1, FLOOR_COUNT];
 }
 
-function monsterStairWaypoints(direction) {
-  const stairX = direction > 0 ? STAIR_UP_X : STAIR_DOWN_X;
-  return [
-    { x: 0, z: 16 },
-    { x: 0, z: 24 },
-    { x: 0, z: STAIR_ENTRY_Z },
-    { x: stairX, z: STAIR_ENTRY_Z },
-  ];
+function monsterCanEnterFloor(monster, targetFloor) {
+  if (monster.kind === 'faceless' && targetFloor === 6 && !state.factory.floor6Visited) return false;
+  const [minimumFloor, maximumFloor] = monsterAllowedFloors(monster);
+  return targetFloor >= minimumFloor && targetFloor <= maximumFloor;
+}
+
+function monsterStairWaypoints(direction, floor = 1) {
+  const stair = stairLocation(floor, direction > 0 ? 'up' : 'down');
+  return [{ x: stair.x, z: stair.z - Math.cos(stair.rotation || 0) * 7 },
+    { x: stair.x, z: stair.z - Math.cos(stair.rotation || 0) * 3.6 }];
 }
 
 function monsterStairSurfaceHeight(progress) {
@@ -1405,7 +1830,8 @@ function beginMonsterStairTravel(monster, targetFloor, reason = "patrol") {
     reason,
     phase: "approach",
     waypointIndex: 0,
-    waypoints: monsterStairWaypoints(direction),
+    waypoints: monsterStairWaypoints(direction, monster.floor),
+    location: stairLocation(monster.floor, direction > 0 ? 'up' : 'down'),
     progress: 0,
     stuckTime: 0,
   };
@@ -1417,9 +1843,10 @@ function beginMonsterStairTravel(monster, targetFloor, reason = "patrol") {
 
 function chooseMonsterPatrolFloor(monster) {
   const index = MONSTER_STARTS.findIndex((item) => item.id === monster.id);
-  const preferredDirection = monster.floor === 1
+  const [minimumFloor, maximumFloor] = monsterAllowedFloors(monster);
+  const preferredDirection = monster.floor <= minimumFloor
     ? 1
-    : monster.floor === FLOOR_COUNT
+    : monster.floor >= maximumFloor
       ? -1
       : (monster.waypoint + index) % 2 === 0 ? 1 : -1;
   for (const direction of [preferredDirection, -preferredDirection]) {
@@ -1436,6 +1863,11 @@ function finishMonsterStairTravel(monster) {
   monster.floor = route.targetFloor;
   monster.x = route.direction > 0 ? STAIR_DOWN_X : STAIR_UP_X;
   monster.z = 35;
+  const arrival = stairLocation(monster.floor, route.direction > 0 ? 'down' : 'up');
+  monster.x = arrival.x;
+  monster.z = arrival.z - Math.cos(arrival.rotation || 0) * 8;
+  monster.baseY = 0;
+  monster.supportId = null;
   monster.stairY = 0;
   monster.stairRoute = null;
   monster.stairCooldown = 1.8;
@@ -1459,8 +1891,8 @@ function advanceMonsterStairTravel(monster, dt) {
     if (moved < Math.min(0.02, speed * dt * 0.1) && distance2D(monster.x, monster.z, target.x, target.z) >= 0.72) {
       route.stuckTime += dt;
       if (route.stuckTime >= 1) {
-        monster.x = target.x;
-        monster.z = target.z;
+        monster.pathTimer = 0;
+        monster.path = [];
         route.stuckTime = 0;
       }
     } else {
@@ -1475,10 +1907,10 @@ function advanceMonsterStairTravel(monster, dt) {
         }
         route.phase = "climb";
         route.progress = 0;
-        monster.x = STAIR_UP_X;
-        monster.z = STAIR_ENTRY_Z;
+        monster.x = route.location.x;
+        monster.z = route.location.z - Math.cos(route.location.rotation || 0) * 3.6;
         monster.stairY = monsterStairSurfaceHeight(0);
-        monster.heading = 0;
+        monster.heading = route.location.rotation || 0;
       }
     }
     return true;
@@ -1486,7 +1918,7 @@ function advanceMonsterStairTravel(monster, dt) {
 
   const stairDistance = STAIR_TOP_Z - STAIR_ENTRY_Z;
   route.progress = clamp(route.progress + dt * speed / stairDistance, 0, 1);
-  monster.z = STAIR_ENTRY_Z + stairDistance * route.progress;
+  monster.z = route.location.z + Math.cos(route.location.rotation || 0) * (-3.6 + stairDistance * route.progress);
   monster.stairY = monsterStairSurfaceHeight(route.progress);
   if (route.progress >= 1) finishMonsterStairTravel(monster);
   return true;
@@ -1506,7 +1938,81 @@ function monsterCanSeePlayer(monster) {
   return (facingX * dx + facingZ * dz) / Math.max(0.001, distance) > 0.12;
 }
 
-function moveMonsterToward(monster, targetX, targetZ, speed, dt) {
+function monsterNavigationHeight(monster, x, z) {
+  if (collidesAt(x, z, monster.kind === 'eight-legs' ? 0.98 : 0.76)) return null;
+  const support = supportAt(x, z, Infinity, true);
+  return support ? support.y : null;
+}
+
+function monsterDirectPath(monster, x, z) {
+  const length = distance2D(monster.x, monster.z, x, z);
+  let height = monster.baseY || 0;
+  for (let distance = 0.5; distance <= length + 0.5; distance += 0.5) {
+    const t = Math.min(1, distance / Math.max(0.001, length));
+    const next = monsterNavigationHeight(monster, monster.x + (x - monster.x) * t, monster.z + (z - monster.z) * t);
+    if (next === null || next - height > (monsterCanJump(monster) ? 1.25 : 0.35)) return false;
+    height = next;
+  }
+  return true;
+}
+
+function beginHoleCrossing(monster, targetX, targetZ) {
+  if (monster.kind !== 'eight-legs' || monster.floor !== 4 || monster.surface !== 'floor' || monster.holeCrossing || monster.jumping || monster.stairRoute) return false;
+  for (const hole of FLOOR_PLANS[4].holes) {
+    const box = { minX: hole.x - hole.w / 2, maxX: hole.x + hole.w / 2, minZ: hole.z - hole.d / 2, maxZ: hole.z + hole.d / 2 };
+    if (!segmentHitsBox(monster.x, monster.z, targetX, targetZ, box) || distance2D(monster.x, monster.z, hole.x, hole.z) > 22) continue;
+    const south = targetZ > hole.z;
+    monster.holeCrossing = {
+      phase: 'approach', height: 0,
+      entry: { x: box.minX - (hole.id.includes('west') ? -1.6 : 1.6), z: south ? box.minZ - 1.7 : box.maxZ + 1.7 },
+      exit: { x: hole.x, z: south ? box.maxZ + 1.7 : box.minZ - 1.7 },
+    };
+    monster.path = []; monster.pathTimer = 0;
+    return true;
+  }
+  return false;
+}
+
+function advanceHoleCrossing(monster, dt) {
+  const route = monster.holeCrossing;
+  if (!route) return false;
+  const speed = monsterMovementSpeed(monster);
+  if (route.phase === 'approach') {
+    moveMonsterToward(monster, route.entry.x, route.entry.z, speed, dt, false);
+    if (distance2D(monster.x, monster.z, route.entry.x, route.entry.z) < 0.8) {
+      route.phase = 'rise'; monster.surface = 'wall'; landMonsterJump(monster, 1);
+      monster.baseY = 0; monster.supportId = null;
+    }
+  } else if (route.phase === 'rise') {
+    route.height = Math.min(CEILING_HEIGHT - 0.25, route.height + speed * dt);
+    if (route.height >= CEILING_HEIGHT - 0.25) { route.phase = 'cross'; monster.surface = 'ceiling'; }
+  } else if (route.phase === 'cross') {
+    const dx = route.exit.x - monster.x, dz = route.exit.z - monster.z, distance = Math.hypot(dx, dz);
+    const step = Math.min(distance, speed * dt);
+    monster.x += dx / Math.max(distance, 0.001) * step;
+    monster.z += dz / Math.max(distance, 0.001) * step;
+    monster.heading = Math.atan2(dx, dz);
+    if (distance < 0.15) { route.phase = 'lower'; monster.surface = 'wall'; }
+  } else {
+    route.height = Math.max(0, route.height - speed * dt);
+    if (route.height <= 0) { monster.holeCrossing = null; monster.surface = 'floor'; monster.baseY = 0; monster.pathTimer = 0; }
+  }
+  return true;
+}
+
+function moveMonsterToward(monster, targetX, targetZ, speed, dt, allowCrossing = true) {
+  const sameFloor = monster.floor === state.player.floor;
+  if (sameFloor && allowCrossing && beginHoleCrossing(monster, targetX, targetZ)) return 1;
+  if (sameFloor && monster.surface === 'floor' && !monsterDirectPath(monster, targetX, targetZ)) {
+    monster.pathTimer = (monster.pathTimer || 0) - dt;
+    if (!Array.isArray(monster.path) || monster.pathTimer <= 0) {
+      monster.path = findRoute(monster, { x: targetX, z: targetZ }, (x, z) => monsterNavigationHeight(monster, x, z), monsterCanJump(monster) ? 1.25 : 0.4);
+      monster.pathTimer = 1;
+    }
+    while (monster.path.length && distance2D(monster.x, monster.z, monster.path[0].x, monster.path[0].z) < 0.4) monster.path.shift();
+    if (monster.path.length) { targetX = monster.path[0].x; targetZ = monster.path[0].z; }
+    else return distance2D(monster.x, monster.z, targetX, targetZ);
+  } else monster.path = [];
   const dx = targetX - monster.x;
   const dz = targetZ - monster.z;
   const distance = Math.hypot(dx, dz);
@@ -1518,7 +2024,13 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt) {
   const beforeZ = monster.z;
   const stepX = dx / distance * step;
   const stepZ = dz / distance * step;
-  if (monster.floor === state.player.floor) {
+  if (sameFloor) {
+    if (monster.surface === 'floor') {
+      const support = supportAt(monster.x + stepX, monster.z + stepZ, monsterWorldY(monster) + 0.35, true);
+      if (!support) return distance;
+      if (monster.kind !== 'eight-legs') { monster.baseY = support.y; monster.supportId = support.id; }
+      else if (!monster.jumping && support.y - (monster.baseY || 0) > 0.3) triggerMonsterJump(monster);
+    }
     moveWithCollisions(monster, stepX, stepZ, monster.kind === "eight-legs" ? 0.95 : 0.72);
   } else {
     monster.x += stepX;
@@ -1529,6 +2041,7 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt) {
 }
 
 function updateSpiderSurface(monster, dt) {
+  if (monster.holeCrossing || monster.supportId && monster.supportId !== 'ground') return;
   if (monster.jumping) {
     monster.surface = "floor";
     return;
@@ -1561,12 +2074,13 @@ function spiderWallSide(monster) {
 }
 
 function monsterWorldY(monster) {
+  if (monster.holeCrossing?.phase !== 'approach' && monster.holeCrossing) return monster.holeCrossing.height;
   if (monster.stairRoute?.phase === "climb") return monster.stairY || 0;
   if (monster.kind === "eight-legs" && monster.ai !== "chase") {
     if (monster.surface === "ceiling") return CEILING_HEIGHT - 0.25;
     if (monster.surface === "wall") return 3.2;
   }
-  return monster.jumpY || 0;
+  return (monster.baseY || 0) + (monster.jumpY || 0);
 }
 
 function tryMonsterCatch(monster) {
@@ -1587,6 +2101,7 @@ function updateMonsters(dt) {
     monster.stairCooldown = Math.max(0, monster.stairCooldown - dt);
     monster.floorRoamTimer -= dt;
     const sameFloor = monster.floor === state.player.floor;
+    if (monster.holeCrossing) { advanceHoleCrossing(monster, dt); tryMonsterCatch(monster); return; }
     if (monster.kind === "eight-legs" && !monster.stairRoute) updateSpiderSurface(monster, dt);
 
     const sees = sameFloor && monsterCanSeePlayer(monster);
@@ -1681,24 +2196,34 @@ function updatePlayer(dt) {
 
   state.player.moving = magnitude > 0.08;
   state.player.sprinting = Boolean(sprint && state.player.moving);
+  const standing = supportAt(state.player.x, state.player.z, state.player.y + 0.08);
+  if (state.player.grounded && (!standing || Math.abs(standing.y - state.player.y) > 0.2)) {
+    state.player.grounded = false;
+    state.player.supportId = null;
+  }
   if (actions.jumpQueued && state.player.grounded) {
     state.player.vy = JUMP_SPEED;
     state.player.grounded = false;
+    state.player.supportId = null;
   }
   actions.jumpQueued = false;
+  const previousY = state.player.y;
   state.player.vy -= GRAVITY * dt;
   state.player.y += state.player.vy * dt;
-  if (state.player.y <= 0) {
-    state.player.y = 0;
+  const landing = supportAt(state.player.x, state.player.z, previousY + 0.08);
+  if (landing && state.player.vy <= 0 && state.player.y <= landing.y) {
+    state.player.y = landing.y;
     state.player.vy = 0;
     state.player.grounded = true;
+    state.player.supportId = landing.id;
   }
+  if (state.player.y < -3.5) { returnToMenu(); return; }
 
   const targetFov = state.player.sprinting ? 78 : 73;
   camera.fov += (targetFov - camera.fov) * clamp(dt * 7, 0, 1);
   camera.updateProjectionMatrix();
 
-  if (state.player.floor === 6 && state.missions.exit.boardsBroken && state.player.x > 53.4 && Math.abs(state.player.z) < 4.8) {
+  if (state.player.floor === 6 && state.missions.exit.boardsBroken && state.player.z < -52 && Math.abs(state.player.x - 19) < 3.6 && state.player.y >= -0.1) {
     winGame();
   }
 }
@@ -1713,9 +2238,9 @@ function updateMonsterModels() {
     let height = monsterWorldY(monster);
     model.rotation.set(0, monster.heading, 0);
     if (monster.kind === "eight-legs") {
-      if (!climbingStairs && monster.surface === "ceiling" && monster.ai !== "chase") {
+      if (!climbingStairs && monster.surface === "ceiling" && (monster.ai !== "chase" || monster.holeCrossing)) {
         model.rotation.z = Math.PI;
-      } else if (!climbingStairs && monster.surface === "wall" && monster.ai !== "chase") {
+      } else if (!climbingStairs && monster.surface === "wall" && (monster.ai !== "chase" || monster.holeCrossing)) {
         const wallSide = spiderWallSide(monster);
         if (wallSide === "west" || wallSide === "east") {
           model.rotation.set(0, 0, wallSide === "west" ? -Math.PI / 2 : Math.PI / 2);
@@ -1753,6 +2278,7 @@ function updateFirstPersonRig() {
 }
 
 function updateCamera(force = false) {
+  camera.up.set(0, 1, 0);
   if (state.mode === "menu") {
     camera.position.set(0, 4.8, -48.5);
     camera.rotation.set(-0.08, Math.PI, 0);
@@ -1778,6 +2304,8 @@ function update(dt) {
     return;
   }
   state.elapsedMs += dt * 1000;
+  updatePlatforms();
+  updateDoors();
   updatePlayer(dt);
   if (state.mode !== "playing") return;
   updateMonsters(dt);
@@ -1957,7 +2485,7 @@ function allEntityDefinitions() {
   for (const [id, floor, x, z] of ENTITY_DEFS.lamps) definitions.push({ id, type: "lamp", floor, x, z });
   for (const [id, floor, x, z] of ENTITY_DEFS.levers) definitions.push({ id, type: "lever", floor, x, z });
   for (const [id, floor, x, z] of ENTITY_DEFS.keys) definitions.push({ id, type: "key", floor, x, z });
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < LAMP_TARGET_COUNT; index += 1) {
     const column = index % 5;
     const row = Math.floor(index / 5);
     definitions.push({ id: `socket-${index + 1}`, type: "socket", floor: 1, x: -14.4 + column * 3.2, z: -46.8, row });
@@ -1967,9 +2495,16 @@ function allEntityDefinitions() {
     definitions.push({ id, type: key, floor, x, z });
   }
   for (let floor = 1; floor <= FLOOR_COUNT; floor += 1) {
-    definitions.push({ id: `elevator-${floor}`, type: "elevator", floor, x: 5.1, z: 42.4 });
-    if (floor < FLOOR_COUNT) definitions.push({ id: `stairs-up-${floor}`, type: "stair-up", floor, x: -43, z: 40 });
-    if (floor > 1) definitions.push({ id: `stairs-down-${floor}`, type: "stair-down", floor, x: -32, z: 40 });
+    const elevators = FLOOR_PLANS[floor]?.elevators || [{ x: 0, z: 47 }];
+    elevators.forEach((entry, index) => definitions.push({ id: `elevator-${floor}${index ? `-${index + 1}` : ''}`, type: 'elevator', floor,
+      x: entry.x + Math.cos(entry.rotation || 0) * 5.1 - Math.sin(entry.rotation || 0) * 4.6,
+      z: entry.z - Math.sin(entry.rotation || 0) * 5.1 - Math.cos(entry.rotation || 0) * 4.6 }));
+    for (const direction of ['up', 'down']) {
+      if (direction === 'up' && floor === FLOOR_COUNT || direction === 'down' && floor === 1) continue;
+      const stair = stairLocation(floor, direction);
+      definitions.push({ id: `stairs-${direction}-${floor}`, type: `stair-${direction}`, floor,
+        x: stair.x, z: stair.z - Math.cos(stair.rotation || 0) * 3 });
+    }
   }
   return definitions;
 }
@@ -1986,6 +2521,8 @@ function testPlacePlayerNear(id) {
   state.player.z = definition.z;
   state.player.y = 0;
   state.player.vy = 0;
+  state.player.grounded = true;
+  state.player.supportId = null;
   findNearbyInteractable();
   updateCamera(true);
   render();
@@ -1997,7 +2534,7 @@ function setupMissionForTest(mission) {
   state.activeMission = target;
   if (target >= 2) {
     state.missions.lamps.collectedIds = ENTITY_DEFS.lamps.map((item) => item[0]);
-    state.missions.lamps.installedSocketIds = Array.from({ length: 10 }, (_, index) => `socket-${index + 1}`);
+    state.missions.lamps.installedSocketIds = Array.from({ length: LAMP_TARGET_COUNT }, (_, index) => `socket-${index + 1}`);
     state.missions.lamps.complete = true;
   }
   if (target >= 3) {
@@ -2023,17 +2560,19 @@ function setupMissionForTest(mission) {
 function runMonsterNavigationSelfTest() {
   const originalState = state;
   const originalManualTime = manualTime;
-  const results = { speeds: {}, jump: {}, surfaces: {}, stairs: {}, floor3: {}, boundaries: {}, realApproach: {} };
+  const results = { speeds: {}, jump: {}, surfaces: {}, stairs: {}, zones: {}, boundaries: {}, realApproach: {} };
 
-  const prepare = (id, floor = 1) => {
+  const prepare = (id, floor = null) => {
     state = freshState(333);
     state.mode = "playing";
-    state.player.floor = floor;
+    const startDefinition = MONSTER_STARTS.find((item) => item.id === id);
+    const selectedFloor = Number.isFinite(floor) ? floor : startDefinition.floor;
+    state.player.floor = selectedFloor;
     state.player.x = 0;
     state.player.z = 10;
     state.monsters.forEach((item) => { item.frozen = item.id !== id; });
     const monster = state.monsters.find((item) => item.id === id);
-    monster.floor = floor;
+    monster.floor = selectedFloor;
     monster.x = 0;
     monster.z = -10;
     monster.surface = "floor";
@@ -2110,21 +2649,19 @@ function runMonsterNavigationSelfTest() {
       tallSurface: tallSurfaceMonster.surface,
       facelessSurface: facelessSurfaceMonster.surface,
     };
-    const stairSpider = prepare("monster-2", 4);
-    state.factory.floor3Unlocked = true;
+    const stairSpider = prepare("monster-2", 3);
     stairSpider.visionOverride = false;
-    const stairStarted = beginMonsterStairTravel(stairSpider, 5, "patrol");
+    const stairStarted = beginMonsterStairTravel(stairSpider, 4, "patrol");
     const stairJumpStarted = triggerMonsterJump(stairSpider);
     results.jump.wallBlocked = !wallJumpStarted;
     results.jump.stairBlocked = stairStarted && !stairJumpStarted;
 
     const stairCases = [
-      ["monster-1", 1, 2], ["monster-2", 4, 5], ["monster-3", 6, 7],
-      ["monster-1", 2, 1], ["monster-2", 5, 4], ["monster-3", 7, 6],
+      ["monster-1", 1, 2], ["monster-2", 3, 4], ["monster-3", 5, 6],
+      ["monster-1", 2, 1], ["monster-2", 4, 3], ["monster-3", 6, 5],
     ];
     stairCases.forEach(([id, from, to]) => {
       const monster = prepare(id, from);
-      state.factory.floor3Unlocked = true;
       monster.visionOverride = false;
       const started = putOnStairs(monster, to);
       if (monster.stairRoute) updateMonsters(2);
@@ -2138,18 +2675,21 @@ function runMonsterNavigationSelfTest() {
       };
     });
 
-    const lockedMonster = prepare("monster-1", 2);
-    lockedMonster.visionOverride = false;
-    results.floor3.locked = beginMonsterStairTravel(lockedMonster, 3, "patrol");
-    state.factory.floor3Unlocked = true;
-    results.floor3.unlocked = putOnStairs(lockedMonster, 3);
-    updateMonsters(2);
-    results.floor3.arrivedFloor = lockedMonster.floor;
+    const zoneEscapeCases = [
+      ["monster-1", 2, 3],
+      ["monster-2", 3, 2], ["monster-2", 4, 5],
+      ["monster-3", 5, 4],
+    ];
+    zoneEscapeCases.forEach(([id, from, to]) => {
+      const monster = prepare(id, from);
+      monster.visionOverride = false;
+      results.zones[`${id}:${from}-${to}`] = beginMonsterStairTravel(monster, to, "chase");
+    });
 
     const lowerMonster = prepare("monster-1", 1);
     results.boundaries.belowOne = beginMonsterStairTravel(lowerMonster, 0, "patrol");
-    const upperMonster = prepare("monster-1", 7);
-    results.boundaries.aboveSeven = beginMonsterStairTravel(upperMonster, 8, "patrol");
+    const upperMonster = prepare("monster-3", 6);
+    results.boundaries.aboveSix = beginMonsterStairTravel(upperMonster, 7, "patrol");
 
     const realMonster = prepare("monster-1", 1);
     realMonster.x = 0;
@@ -2201,12 +2741,13 @@ function renderGameToText() {
     mode: state.mode,
     coordinateSystem: "Each floor has local y=0. x increases east/right, z increases south; yaw 0 looks north (-z).",
     world: {
-      kind: "giant seven-floor factory",
+      kind: "giant six-floor factory",
       floors: FLOOR_COUNT,
       currentFloor: state.player.floor,
       currentFloorName: FLOOR_THEMES[state.player.floor - 1].name,
       sizePerFloorMeters: MAP_HALF * 2,
       worldRevision,
+      drawnBy: FLOOR_PLANS[state.player.floor]?.drawnBy || 'factory design',
     },
     player: {
       floor: state.player.floor,
@@ -2219,6 +2760,7 @@ function renderGameToText() {
       moving: state.player.moving,
       sprinting: state.player.sprinting,
       perspective: "first-person 3D",
+      supportId: state.player.supportId,
     },
     mission: {
       active: state.activeMission,
@@ -2235,6 +2777,14 @@ function renderGameToText() {
     },
     inventory: { ...state.inventory },
     factory: { ...state.factory },
+    platforms: platforms.map(({ id, x, y, z, w, d, kind, definition }) => ({ id, x, y, z, w, d, kind, ropes: 4, from: definition.from, to: definition.to || null })),
+    holes: FLOOR_PLANS[state.player.floor]?.holes || [],
+    upperAreas: FLOOR_PLANS[state.player.floor]?.upper || [],
+    monsterOnlyAreas: FLOOR_PLANS[state.player.floor]?.monsterOnly || [],
+    doors: doorways.map(({ id, floor, name, x, z, rotationY, open }) => ({
+      id, floor, name, x, z, rotationY, open,
+      closesInSeconds: open ? Number((Math.max(0, (state.doorOpenUntil[id] || 0) - state.elapsedMs) / 1000).toFixed(3)) : 0,
+    })),
     nearby: state.nearby,
     visibleInteractables,
     monsters: state.monsters.map((monster) => ({
@@ -2249,9 +2799,12 @@ function renderGameToText() {
       visible: monster.floor === state.player.floor,
       movementSpeed: monsterMovementSpeed(monster),
       speedMatches: monsterMovementSpeed(monster) === SPRINT_SPEED ? "player sprint" : "player walk",
+      allowedFloors: [...monsterAllowedFloors(monster)],
       canJump: monsterCanJump(monster),
       isJumping: Boolean(monster.jumping),
       jumpY: Number((monster.jumpY || 0).toFixed(2)),
+      worldY: Number(monsterWorldY(monster).toFixed(2)),
+      supportId: monster.supportId,
       jumpVy: Number((monster.jumpVelocity || 0).toFixed(2)),
       jumpGrounded: Boolean(monster.jumpGrounded),
       jumpCooldown: Number((monster.jumpCooldown || 0).toFixed(2)),
@@ -2263,6 +2816,7 @@ function renderGameToText() {
       stairPhase: monster.stairRoute?.phase || null,
       stairTargetFloor: monster.stairRoute?.targetFloor || null,
       stairY: Number((monster.stairY || 0).toFixed(2)),
+      holeCrossing: monster.holeCrossing?.phase || null,
     })),
     overlays: { elevator: state.elevatorOpen, win: state.mode === "won", menu: state.mode === "menu" },
     controls: {
@@ -2292,6 +2846,8 @@ window.__whereIsExitTest = {
     state.player.yaw = yaw;
     state.player.pitch = pitch;
     state.player.vy = 0;
+    state.player.grounded = true;
+    state.player.supportId = null;
     buildFloor(state.player.floor);
     updateCamera(true);
     render();
@@ -2308,6 +2864,10 @@ window.__whereIsExitTest = {
     monster.stairRoute = null;
     monster.stairY = 0;
     monster.stairCooldown = 0;
+    monster.baseY = 0;
+    monster.supportId = null;
+    monster.holeCrossing = null;
+    monster.path = []; monster.pathTimer = 0;
     updateMonsterModels();
     render();
     return true;
@@ -2369,8 +2929,8 @@ window.__whereIsExitTest = {
         }
         route.phase = "climb";
         route.progress = 0;
-        monster.x = route.direction > 0 ? STAIR_UP_X : STAIR_DOWN_X;
-        monster.z = route.direction > 0 ? STAIR_ENTRY_Z : STAIR_TOP_Z;
+        monster.x = route.location.x;
+        monster.z = route.location.z - Math.cos(route.location.rotation || 0) * 3.6;
         monster.stairY = route.direction > 0 ? monsterStairSurfaceHeight(0) : STAIR_HEIGHT;
         monster.heading = route.direction > 0 ? 0 : Math.PI;
       }
@@ -2383,6 +2943,22 @@ window.__whereIsExitTest = {
   selectElevatorFloor: (floor) => changeFloor(Number(floor), "elevator"),
   setMission: setupMissionForTest,
   getEntityCatalog: allEntityDefinitions,
+  getFloorPlans: () => JSON.parse(JSON.stringify(FLOOR_PLANS)),
+  getGround: (x, z, y = Infinity) => supportAt(x, z, y),
+  aim: (yaw, pitch = 0) => { state.player.yaw = yaw; state.player.pitch = pitch; },
+  setMonsterTarget: (id, x, z) => {
+    const monster = state.monsters.find(item => item.id === id);
+    Object.assign(monster, { targetX: x, targetZ: z, ai: 'patrol', floorRoamTimer: 1000, surfaceTimer: 1000, path: [], pathTimer: 0 });
+  },
+  setElapsedTime: (seconds) => { state.elapsedMs = seconds * 1000; updatePlatforms(); },
+  viewFromAbove: () => {
+    camera.position.set(0, 92, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0);
+    scene.fog.near = 500; scene.fog.far = 1000;
+    firstPersonRig.visible = false;
+    const ceiling = worldRoot.children.filter(child => child.isMesh && child.position.y > CEILING_HEIGHT);
+    ceiling.forEach(child => { child.visible = false; });
+    render();
+  },
 };
 
 function showStartupError(error) {
