@@ -1,6 +1,6 @@
 import * as THREE from "./vendor/three.module.js";
-import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation } from "./floor-plans.js?v=20260906-maps-1";
-import { findRoute } from "./navigation.js?v=20260906-maps-1";
+import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, isBlankVoid } from "./floor-plans.js?v=20260907-holes-1";
+import { findRoute, rectangleConnection, findSurfaceRoute } from "./navigation.js?v=20260907-holes-1";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -35,12 +35,13 @@ const MAP_HALF = 55;
 const CEILING_HEIGHT = 8.5;
 const PLAYER_RADIUS = 0.62;
 const WALK_SPEED = 5.0;
-const SPRINT_SPEED = 8.1;
+const SPRINT_SPEED = 8.9;
+const FACELESS_SPEED = 8.1;
 const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260906-maps-1";
+const VERSION = "20260907-holes-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -84,9 +85,9 @@ const ENTITY_DEFS = {
   keys: [
     ["key-1", 1, 39, -31], ["key-2", 2, -38, 29],
     ["key-3", 4, 23, 25], ["key-4", 5, -36, -35],
-    ["key-5", 6, -31, 22],
+    ["key-5", 2, -31, 22],
   ],
-  lightSwitch: ["light-switch", 3, 35, 3],
+  lightSwitch: ["light-switch", 3, FLOOR_PLANS[3].switch.x, FLOOR_PLANS[3].switch.z],
   hammer: ["hammer", 5, 39, 35],
   boards: ["exit-boards", 6, 19, -50.2],
   exit: ["exit", 6, 19, -53],
@@ -94,7 +95,7 @@ const ENTITY_DEFS = {
 
 const MONSTER_STARTS = [
   { id: "monster-1", kind: "tall-one-eye", name: "ENÖGAT", floor: 1, x: 30, z: 24, heading: Math.PI, surface: "floor" },
-  { id: "monster-2", kind: "eight-legs", name: "ÅTTABEN", floor: 3, x: -25, z: -17, heading: 0.4, surface: "ceiling" },
+  { id: "monster-2", kind: "eight-legs", name: "ÅTTABEN", floor: 3, x: -10, z: -32, heading: 0.4, surface: "ceiling" },
   { id: "monster-3", kind: "faceless", name: "SNABBIS", floor: 5, x: -32, z: 23, heading: -0.7, surface: "floor" },
 ];
 
@@ -961,6 +962,13 @@ function addDrawnGround(parent, floor, material, wallMaterial) {
       const w = xs[xi + 1] - xs[xi], d = zs[zi + 1] - zs[zi];
       if (!floorHasGround(floor, x, z)) continue;
       meshBox(parent, [w, 0.35, d], [x, -0.18, z], material, { castShadow: false });
+      if (plan.blankIsVoid) {
+        for (const [dx, dz, sw, sd] of [[-w / 2, 0, 0.15, d], [w / 2, 0, 0.15, d], [0, -d / 2, w, 0.15], [0, d / 2, w, 0.15]]) {
+          if (floorHasGround(floor, x + dx * 1.001, z + dz * 1.001)) continue;
+          meshBox(parent, [sw, 0.06, sd], [x + dx, 0.03, z + dz], MATERIALS.safetyYellow, { castShadow: false });
+          meshBox(parent, [sw, 4.8, sd], [x + dx, -2.6, z + dz], MATERIALS.darkMetal, { castShadow: false });
+        }
+      }
       if (floor !== 4) continue;
       for (const [dx, dz, sw, sd] of [[-w / 2, 0, 0.4, d], [w / 2, 0, 0.4, d], [0, -d / 2, w, 0.4], [0, d / 2, w, 0.4]]) {
         if (inOutline(x + dx * 1.001, z + dz * 1.001)) continue;
@@ -968,9 +976,7 @@ function addDrawnGround(parent, floor, material, wallMaterial) {
       }
     }
   }
-  if (floor !== 3) {
-    meshBox(parent, [110, 0.3, 110], [0, -7.5, 0], MATERIALS.darkMetal, { castShadow: false });
-  }
+  meshBox(parent, [110, 0.3, 110], [0, -7.5, 0], MATERIALS.darkMetal, { castShadow: false });
   for (const hole of plan.holes) {
     for (const side of [-1, 1]) {
       meshBox(parent, [hole.w, 0.06, 0.2], [hole.x, 0.035, hole.z + side * hole.d / 2], MATERIALS.safetyYellow);
@@ -1296,6 +1302,21 @@ function supportAt(x, z, highestY = Infinity, monster = false) {
   return best;
 }
 
+function floorSupportAt(floor, x, z, highestY = Infinity) {
+  if (floor === state.player.floor) return supportAt(x, z, highestY, true);
+  const plan = FLOOR_PLANS[floor];
+  let best = floorHasGround(floor, x, z) && highestY >= -0.02 ? { id: 'ground', y: 0 } : null;
+  const surfaces = [...(plan?.upper || []), ...(plan?.platforms || []).map(p => ({ ...p, ...platformPose(p, state.elapsedMs / 1000) }))];
+  for (const box of surfaces) {
+    if (box.y <= highestY + 0.02 && insideRect(x, z, box, box.kind ? 0.05 : 0) && (!best || box.y > best.y)) best = { id: box.id, y: box.y };
+  }
+  for (const ramp of plan?.monsterOnly || []) {
+    const y = 3.2 * clamp((ramp.z + ramp.d / 2 - z) / ramp.d, 0, 1);
+    if (insideRect(x, z, ramp) && y <= highestY + 0.35 && (!best || y > best.y)) best = { id: ramp.id, y };
+  }
+  return best;
+}
+
 function updatePlatforms() {
   for (const platform of platforms) {
     const pose = platformPose(platform.definition, state.elapsedMs / 1000);
@@ -1310,6 +1331,17 @@ function updatePlatforms() {
     }
     Object.assign(platform, pose);
     positionPlatformModel(platform);
+  }
+  for (const monster of state.monsters) {
+    const definition = FLOOR_PLANS[monster.floor]?.platforms.find(p => p.id === monster.supportId);
+    if (!definition || monster.jumping || monster.surface !== 'floor') { monster.lastPlatformPose = null; continue; }
+    const pose = platformPose(definition, state.elapsedMs / 1000);
+    const previous = monster.lastPlatformPose;
+    if (monster.floor !== state.player.floor && previous?.id === definition.id) {
+      monster.x += pose.x - previous.x; monster.z += pose.z - previous.z;
+      monster.baseY = (monster.baseY || 0) + pose.y - previous.y;
+    }
+    monster.lastPlatformPose = { ...pose, id: definition.id };
   }
 }
 
@@ -1720,7 +1752,8 @@ const PATROL_POINTS = [
 ];
 
 function chooseMonsterTarget(monster) {
-  const points = monster.floor === 4 ? [[-23,-26],[12,-36],[23,-9],[24,26],[0,37],[-22,26],[-24,0],[0,4]]
+  const points = monster.floor === 3 ? [[-10,-32],[8,-9],[-19,-9],[29,8],[29,26],[-1,43]]
+    : monster.floor === 4 ? [[-23,-26],[12,-36],[23,-9],[24,26],[0,37],[-22,26],[-24,0],[0,4]]
     : monster.floor === 6 ? [[10,14],[-8,28],[-30,21],[-40,-6],[-6,37],[29,32],[29,14],[29,-16]] : PATROL_POINTS;
   monster.waypoint = (monster.waypoint + 1) % points.length;
   const point = points[(monster.waypoint + MONSTER_STARTS.findIndex((item) => item.id === monster.id) * 3) % points.length];
@@ -1729,7 +1762,7 @@ function chooseMonsterTarget(monster) {
 }
 
 function monsterMovementSpeed(monster) {
-  return monster.kind === "faceless" ? SPRINT_SPEED : WALK_SPEED;
+  return monster.kind === "faceless" ? FACELESS_SPEED : WALK_SPEED;
 }
 
 function monsterCanJump(monster) {
@@ -1738,7 +1771,7 @@ function monsterCanJump(monster) {
 
 function monsterCanUseSurface(monster, surface) {
   return ["floor", "wall", "ceiling"].includes(surface)
-    && (surface === "floor" || monster.kind === "eight-legs");
+    && (surface === "floor" || monster.kind === "eight-legs" && !isBlankVoid(monster.floor, monster.x, monster.z));
 }
 
 function setMonsterSurfaceState(monster, surface) {
@@ -1758,7 +1791,8 @@ function landMonsterJump(monster, cooldown = monster.jumpCooldown) {
 }
 
 function triggerMonsterJump(monster) {
-  if (!monsterCanJump(monster) || monster.stairRoute || monster.surface !== "floor" || monster.jumping) return false;
+  const stairBlocksJump = monster.stairRoute && !(FLOOR_PLANS[monster.floor]?.blankIsVoid && monster.stairRoute.phase === 'approach');
+  if (!monsterCanJump(monster) || stairBlocksJump || monster.surface !== "floor" || monster.jumping) return false;
   monster.jumpVelocity = SPIDER_JUMP_SPEED;
   monster.jumping = true;
   monster.jumpGrounded = false;
@@ -1769,13 +1803,14 @@ function triggerMonsterJump(monster) {
 
 function updateMonsterJump(monster, dt) {
   if (!monsterCanJump(monster)) return;
-  if (monster.stairRoute || monster.surface !== "floor") {
+  const onStairSteps = monster.stairRoute && !(FLOOR_PLANS[monster.floor]?.blankIsVoid && monster.stairRoute.phase === 'approach');
+  if (onStairSteps || monster.surface !== "floor") {
     landMonsterJump(monster, Math.max(monster.jumpCooldown, 0.55));
     return;
   }
   monster.jumpCooldown = Math.max(0, monster.jumpCooldown - dt);
-  if (monster.floor === state.player.floor && !monster.jumping) {
-    const support = supportAt(monster.x, monster.z, (monster.baseY || 0) + 0.1, true);
+  if (!monster.jumping) {
+    const support = floorSupportAt(monster.floor, monster.x, monster.z, (monster.baseY || 0) + 0.1);
     if (support && Math.abs(support.y - (monster.baseY || 0)) < 0.25) {
       monster.baseY = support.y; monster.supportId = support.id;
     } else if ((monster.baseY || 0) > 0) {
@@ -1783,20 +1818,32 @@ function updateMonsterJump(monster, dt) {
       monster.jumping = true; monster.jumpVelocity = 0; monster.supportId = null;
     }
   }
-  if (!monster.jumping && monster.jumpCooldown <= 0) triggerMonsterJump(monster);
+  // On the new pit floor, jump only with a real landing target. Random hops
+  // cannot create an invisible floor above the white areas.
+  if (!monster.jumping && monster.jumpCooldown <= 0 && !FLOOR_PLANS[monster.floor]?.blankIsVoid) triggerMonsterJump(monster);
   if (!monster.jumping) return;
   const previousHeight = (monster.baseY || 0) + monster.jumpY;
   monster.jumpVelocity -= SPIDER_JUMP_GRAVITY * dt;
   monster.jumpY += monster.jumpVelocity * dt;
-  if (monster.floor === state.player.floor && monster.jumpVelocity <= 0) {
-    const support = supportAt(monster.x, monster.z, previousHeight + 0.08, true);
+  if (monster.jumpVelocity <= 0) {
+    const support = floorSupportAt(monster.floor, monster.x, monster.z, previousHeight + 0.08);
     if (support && (monster.baseY || 0) + monster.jumpY <= support.y) {
       monster.baseY = support.y; monster.supportId = support.id;
+      monster.platformJump = null;
       landMonsterJump(monster, monster.ai === 'chase' ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL);
       return;
     }
   }
-  if (monster.jumpY <= 0) landMonsterJump(monster, monster.ai === "chase" ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL);
+  if (monster.jumpY <= 0 && !FLOOR_PLANS[monster.floor]?.blankIsVoid) landMonsterJump(monster, monster.ai === "chase" ? SPIDER_CHASE_JUMP_INTERVAL : SPIDER_PATROL_JUMP_INTERVAL);
+  if (FLOOR_PLANS[monster.floor]?.blankIsVoid && monsterWorldY(monster) < -3.5) {
+    // A missed landing is not permission to walk on air. Return to the same
+    // launch surface, including its new position if it is a moving platform.
+    let safe = monster.platformJump?.launch || { x: -10, z: -32, y: 0 };
+    const launchSurface = spiderSupportSurfaces(monster).find(surface => surface.id === safe.surfaceId);
+    if (launchSurface) safe = { x: launchSurface.x + safe.offsetX, z: launchSurface.z + safe.offsetZ, y: launchSurface.y || 0 };
+    monster.x = safe.x; monster.z = safe.z; monster.baseY = safe.y;
+    monster.platformJump = null; monster.supportId = null; landMonsterJump(monster, 1);
+  }
 }
 
 function monsterAllowedFloors(monster) {
@@ -1939,8 +1986,8 @@ function monsterCanSeePlayer(monster) {
 }
 
 function monsterNavigationHeight(monster, x, z) {
-  if (collidesAt(x, z, monster.kind === 'eight-legs' ? 0.98 : 0.76)) return null;
-  const support = supportAt(x, z, Infinity, true);
+  if (monster.floor === state.player.floor && collidesAt(x, z, monster.kind === 'eight-legs' ? 0.98 : 0.76)) return null;
+  const support = floorSupportAt(monster.floor, x, z);
   return support ? support.y : null;
 }
 
@@ -2000,10 +2047,72 @@ function advanceHoleCrossing(monster, dt) {
   return true;
 }
 
+function spiderSupportSurfaces(monster) {
+  const plan = FLOOR_PLANS[monster.floor];
+  return [...plan.ground, ...plan.platforms.map(definition => ({
+    ...definition, ...platformPose(definition, state.elapsedMs / 1000),
+    docks: [definition.from, definition.to].filter(Boolean).map(pose => ({ ...definition, ...pose })),
+  }))];
+}
+
+function moveSpiderOnPitFloor(monster, targetX, targetZ, speed, dt) {
+  const surfaces = spiderSupportSurfaces(monster);
+  const move = (point, bounds = null) => {
+    const dx = point.x - monster.x, dz = point.z - monster.z, d = Math.hypot(dx, dz);
+    const step = Math.min(d, speed * dt);
+    if (d > 0.001) {
+      monster.x += dx / d * step; monster.z += dz / d * step;
+      monster.heading = Math.atan2(dx, dz);
+    }
+    if (bounds) {
+      monster.x = clamp(monster.x, bounds.x - bounds.w / 2 + 0.15, bounds.x + bounds.w / 2 - 0.15);
+      monster.z = clamp(monster.z, bounds.z - bounds.d / 2 + 0.15, bounds.z + bounds.d / 2 - 0.15);
+    }
+    return d;
+  };
+  if (monster.platformJump && monster.jumping) {
+    const target = surfaces.find(s => s.id === monster.platformJump.toId);
+    if (target) move({ x: target.x + monster.platformJump.offsetX, z: target.z + monster.platformJump.offsetZ });
+    return distance2D(monster.x, monster.z, targetX, targetZ);
+  }
+  if (monster.jumping) return distance2D(monster.x, monster.z, targetX, targetZ);
+  const current = surfaces.filter(s => insideRect(monster.x, monster.z, s) && Math.abs((s.y || 0) - (monster.baseY || 0)) < 0.3)
+    .sort((a, b) => (b.y || 0) - (a.y || 0))[0];
+  if (!current) return distance2D(monster.x, monster.z, targetX, targetZ);
+  const distanceTo = surface => Math.hypot(Math.max(0, Math.abs(targetX - surface.x) - surface.w / 2), Math.max(0, Math.abs(targetZ - surface.z) - surface.d / 2));
+  const destination = [...surfaces].sort((a, b) => distanceTo(a) - distanceTo(b) || (b.y || 0) - (a.y || 0))[0];
+  if (destination.id === current.id) return move({ x: targetX, z: targetZ }, current);
+  // Return to the floor before making an allowed platform jump. A wall or
+  // ceiling route may never bypass one of the newly added pits.
+  monster.surface = 'floor';
+  const path = findSurfaceRoute(surfaces, current.id, destination.id);
+  if (!path.length) return distance2D(monster.x, monster.z, targetX, targetZ);
+  const next = surfaces.find(s => s.id === path[0]);
+  const actual = rectangleConnection(current, next, monster);
+  const possible = [next, ...(next.docks || [])].map(pose => rectangleConnection(current, pose, monster))
+    .sort((a, b) => a.distance - b.distance)[0];
+  const ready = actual.distance <= 3.1 && (next.y || 0) - (current.y || 0) <= 0.85;
+  const connection = ready ? actual : possible;
+  move(connection.from, current);
+  if (!ready || distance2D(monster.x, monster.z, connection.from.x, connection.from.z) > 0.09 || monster.jumpCooldown > 0) return 1;
+  if (actual.distance < 0.05 && Math.abs((next.y || 0) - (current.y || 0)) < 0.2) {
+    return move({ x: next.x, z: next.z }, next);
+  }
+  const launch = { x: monster.x, z: monster.z, y: monster.baseY || 0, surfaceId: current.id,
+    offsetX: monster.x - current.x, offsetZ: monster.z - current.z };
+  if (triggerMonsterJump(monster)) monster.platformJump = {
+    toId: next.id, offsetX: actual.to.x - next.x, offsetZ: actual.to.z - next.z, launch,
+  };
+  return 1;
+}
+
 function moveMonsterToward(monster, targetX, targetZ, speed, dt, allowCrossing = true) {
+  if (monster.kind === 'eight-legs' && FLOOR_PLANS[monster.floor]?.blankIsVoid) {
+    return moveSpiderOnPitFloor(monster, targetX, targetZ, speed, dt);
+  }
   const sameFloor = monster.floor === state.player.floor;
   if (sameFloor && allowCrossing && beginHoleCrossing(monster, targetX, targetZ)) return 1;
-  if (sameFloor && monster.surface === 'floor' && !monsterDirectPath(monster, targetX, targetZ)) {
+  if ((sameFloor || FLOOR_PLANS[monster.floor]?.blankIsVoid) && monster.surface === 'floor' && !monsterDirectPath(monster, targetX, targetZ)) {
     monster.pathTimer = (monster.pathTimer || 0) - dt;
     if (!Array.isArray(monster.path) || monster.pathTimer <= 0) {
       monster.path = findRoute(monster, { x: targetX, z: targetZ }, (x, z) => monsterNavigationHeight(monster, x, z), monsterCanJump(monster) ? 1.25 : 0.4);
@@ -2024,6 +2133,12 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt, allowCrossing =
   const beforeZ = monster.z;
   const stepX = dx / distance * step;
   const stepZ = dz / distance * step;
+  if (FLOOR_PLANS[monster.floor]?.blankIsVoid) {
+    if (monster.surface !== 'floor' && isBlankVoid(monster.floor, monster.x + stepX, monster.z + stepZ)) return distance;
+    const nextSupport = floorSupportAt(monster.floor, monster.x + stepX, monster.z + stepZ, monsterWorldY(monster) + 0.35);
+    if (!nextSupport) return distance;
+    if (!sameFloor) { monster.baseY = nextSupport.y; monster.supportId = nextSupport.id; }
+  }
   if (sameFloor) {
     if (monster.surface === 'floor') {
       const support = supportAt(monster.x + stepX, monster.z + stepZ, monsterWorldY(monster) + 0.35, true);
@@ -2041,7 +2156,7 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt, allowCrossing =
 }
 
 function updateSpiderSurface(monster, dt) {
-  if (monster.holeCrossing || monster.supportId && monster.supportId !== 'ground') return;
+  if (monster.holeCrossing || monster.platformJump || monster.supportId && monster.supportId !== 'ground') return;
   if (monster.jumping) {
     monster.surface = "floor";
     return;
@@ -2053,7 +2168,9 @@ function updateSpiderSurface(monster, dt) {
   }
   monster.surfaceTimer -= dt;
   if (monster.surfaceTimer > 0) return;
-  monster.surface = monster.surface === "floor" ? "wall" : monster.surface === "wall" ? "ceiling" : "floor";
+  const nextSurface = monster.surface === "floor" ? "wall" : monster.surface === "wall" ? "ceiling" : "floor";
+  if (!monsterCanUseSurface(monster, nextSurface)) return;
+  monster.surface = nextSurface;
   monster.surfaceTimer = monster.surface === "ceiling" ? 7 : 5;
   if (monster.surface === "wall") {
     const side = monster.waypoint % 4;
@@ -2092,7 +2209,7 @@ function tryMonsterCatch(monster) {
 }
 
 function updateMonsters(dt) {
-  state.monsters.forEach((monster) => {
+    state.monsters.forEach((monster) => {
     if (monster.frozen) {
       monster.seesPlayer = false;
       return;
@@ -2759,6 +2876,8 @@ function renderGameToText() {
       grounded: state.player.grounded,
       moving: state.player.moving,
       sprinting: state.player.sprinting,
+      walkSpeed: WALK_SPEED,
+      sprintSpeed: SPRINT_SPEED,
       perspective: "first-person 3D",
       supportId: state.player.supportId,
     },
@@ -2779,6 +2898,10 @@ function renderGameToText() {
     factory: { ...state.factory },
     platforms: platforms.map(({ id, x, y, z, w, d, kind, definition }) => ({ id, x, y, z, w, d, kind, ropes: 4, from: definition.from, to: definition.to || null })),
     holes: FLOOR_PLANS[state.player.floor]?.holes || [],
+    blankAreas: FLOOR_PLANS[state.player.floor]?.blankIsVoid ? {
+      arePits: true, walkingAllowed: false, wallOrCeilingCrossingAllowed: false,
+      platformJumpsAllowed: true, fixedGround: FLOOR_PLANS[state.player.floor].ground,
+    } : null,
     upperAreas: FLOOR_PLANS[state.player.floor]?.upper || [],
     monsterOnlyAreas: FLOOR_PLANS[state.player.floor]?.monsterOnly || [],
     doors: doorways.map(({ id, floor, name, x, z, rotationY, open }) => ({
@@ -2798,7 +2921,7 @@ function renderGameToText() {
       seesPlayer: monster.seesPlayer,
       visible: monster.floor === state.player.floor,
       movementSpeed: monsterMovementSpeed(monster),
-      speedMatches: monsterMovementSpeed(monster) === SPRINT_SPEED ? "player sprint" : "player walk",
+      speedMatches: monsterMovementSpeed(monster) === WALK_SPEED ? "player walk" : null,
       allowedFloors: [...monsterAllowedFloors(monster)],
       canJump: monsterCanJump(monster),
       isJumping: Boolean(monster.jumping),
@@ -2817,6 +2940,7 @@ function renderGameToText() {
       stairTargetFloor: monster.stairRoute?.targetFloor || null,
       stairY: Number((monster.stairY || 0).toFixed(2)),
       holeCrossing: monster.holeCrossing?.phase || null,
+      platformJumpTarget: monster.platformJump?.toId || null,
     })),
     overlays: { elevator: state.elevatorOpen, win: state.mode === "won", menu: state.mode === "menu" },
     controls: {
@@ -2855,7 +2979,7 @@ window.__whereIsExitTest = {
   setEntityPose: (id, { floor, x, z, surface } = {}) => {
     const monster = state.monsters.find((item) => item.id === id);
     if (!monster) return false;
-    if (surface && !monsterCanUseSurface(monster, surface)) return false;
+    if (surface && !monsterCanUseSurface({ ...monster, floor: floor ?? monster.floor, x: x ?? monster.x, z: z ?? monster.z }, surface)) return false;
     if (Number.isFinite(floor)) monster.floor = clamp(Math.floor(floor), 1, FLOOR_COUNT);
     if (Number.isFinite(x)) monster.x = x;
     if (Number.isFinite(z)) monster.z = z;
@@ -2867,6 +2991,8 @@ window.__whereIsExitTest = {
     monster.baseY = 0;
     monster.supportId = null;
     monster.holeCrossing = null;
+    monster.platformJump = null;
+    monster.lastPlatformPose = null;
     monster.path = []; monster.pathTimer = 0;
     updateMonsterModels();
     render();
@@ -2945,6 +3071,7 @@ window.__whereIsExitTest = {
   getEntityCatalog: allEntityDefinitions,
   getFloorPlans: () => JSON.parse(JSON.stringify(FLOOR_PLANS)),
   getGround: (x, z, y = Infinity) => supportAt(x, z, y),
+  isBlankVoid: (floor, x, z) => isBlankVoid(floor, x, z),
   aim: (yaw, pitch = 0) => { state.player.yaw = yaw; state.player.pitch = pitch; },
   setMonsterTarget: (id, x, z) => {
     const monster = state.monsters.find(item => item.id === id);

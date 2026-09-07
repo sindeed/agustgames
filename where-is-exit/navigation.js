@@ -1,5 +1,44 @@
 // Small deterministic A* used only when a monster cannot walk straight ahead.
 // The caller supplies collision/height rules; this never changes monster speed.
+
+export function rectangleConnection(a, b, anchor = a, inset = 0.2) {
+  const endpoints = (ac, aw, bc, bw, at) => {
+    const loA = ac - aw / 2 + inset, hiA = ac + aw / 2 - inset;
+    const loB = bc - bw / 2 + inset, hiB = bc + bw / 2 - inset;
+    if (hiA < loB) return [hiA, loB];
+    if (hiB < loA) return [loA, hiB];
+    const p = Math.max(Math.max(loA, loB), Math.min(Math.min(hiA, hiB), at));
+    return [p, p];
+  };
+  const [ax, bx] = endpoints(a.x, a.w, b.x, b.w, anchor.x);
+  const [az, bz] = endpoints(a.z, a.d, b.z, b.d, anchor.z);
+  return { from: { x: ax, z: az }, to: { x: bx, z: bz }, distance: Math.hypot(bx - ax, bz - az) };
+}
+
+// Plan through real support surfaces, not through the empty space between
+// them. A moving platform is one node with two docking positions, so an
+// actor can board, wait while riding, and jump off at its destination.
+export function findSurfaceRoute(surfaces, fromId, toId, maxGap = 3.1) {
+  if (fromId === toId) return [];
+  const poses = surface => [surface, ...(surface.docks || [])];
+  const reachable = (a, b) => poses(a).some(ap => poses(b).some(bp =>
+    rectangleConnection(ap, bp).distance <= maxGap && Math.abs((ap.y || 0) - (bp.y || 0)) <= 0.85));
+  const queue = [fromId], seen = new Set(queue), previous = new Map();
+  for (let i = 0; i < queue.length; i++) {
+    const node = surfaces.find(s => s.id === queue[i]);
+    if (!node) continue;
+    for (const next of surfaces) {
+      if (seen.has(next.id) || !reachable(node, next)) continue;
+      seen.add(next.id); previous.set(next.id, node.id); queue.push(next.id);
+      if (next.id !== toId) continue;
+      const path = [];
+      for (let id = toId; id !== fromId; id = previous.get(id)) path.unshift(id);
+      return path;
+    }
+  }
+  return [];
+}
+
 export function findRoute(start, goal, heightAt, maxRise = 0.4, step = 2) {
   const key = (x, z) => `${x},${z}`;
   const snap = value => Math.round(value / step) * step;

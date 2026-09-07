@@ -16,14 +16,21 @@ const shuttle = (id, x, z, tx, tz, size = 7) => ({
 export const FLOOR_PLANS = {
   3: {
     name: 'HÄNGANDE PLATTOR', drawnBy: 'Agust',
-    ground: [rect('hall', 0, 0, 110, 110)], holes: [], machines: [],
+    // Only the outlined entrance/exit banks and U are fixed ground. The white
+    // paper is an open pit, including underneath the suspended platforms.
+    blankIsVoid: true,
+    ground: [rect('south-bank', 0, 45, 38, 18), rect('north-bank', 0, -38.75, 38, 30.5),
+      rect('3-U', 29, 26, 16, 16)], holes: [], machines: [],
     elevators: [{ x: -10, z: 47 }, { x: -10, z: -47, rotation: Math.PI }],
     stairs: { down: { x: 10, z: 47 }, up: { x: 10, z: -47, rotation: Math.PI } },
-    platforms: [lift('3-S-up', -19, -9), lift('3-S-down', 8, -9, true),
-      shuttle('3-S-to-U', -1, 19, 29, 19),
-      { ...rect('3-S-still', 29, 9, 7, 7), kind: 'static', from: { x: 29, y: 0.65, z: 9 } }],
-    destinations: [rect('3-U', 29, 19, 7, 7)],
-    switch: { x: 35, z: 3 },
+    // Two-metre gaps keep the original four-platform arrangement jumpable
+    // at the spider's unchanged walking speed; no extra bridges or platforms.
+    platforms: [{ ...lift('3-S-up', -19, -9), w: 25, d: 25 },
+      { ...lift('3-S-down', 8, -9, true), w: 25, d: 25 },
+      shuttle('3-S-to-U', -1, 26, 29, 26, 16),
+      { ...rect('3-S-still', 29, 8, 13, 16), kind: 'static', from: { x: 29, y: 0.65, z: 8 } }],
+    destinations: [rect('3-U', 29, 26, 16, 16)],
+    switch: { x: 34, z: 26 },
   },
   4: {
     name: 'MASKINER OCH HÅL', drawnBy: 'Agust',
@@ -39,6 +46,7 @@ export const FLOOR_PLANS = {
   },
   6: {
     name: 'TVÅ HÖJDNIVÅER', drawnBy: 'Agust',
+    blankIsVoid: true,
     ground: [rect('W', -8, 29, 22, 22), rect('V1', 10, 14, 14, 12),
       rect('T5', 10, 28, 14, 16), rect('main-west', -30, 8, 12, 38),
       rect('main-north', -16, -5, 26, 12), rect('main-join', -22, 21, 12, 12),
@@ -83,6 +91,15 @@ export function floorHasGround(floor, x, z) {
   if (!plan) return Math.abs(x) < 55 && Math.abs(z) < 55;
   if (plan.holes.some(box => insideRect(x, z, box))) return false;
   return plan.ground.some(box => insideRect(x, z, box));
+}
+
+// These pits are separate from the labelled M holes. Not even a spider may
+// use walls or the ceiling to cross the unoutlined white areas.
+export function isBlankVoid(floor, x, z) {
+  const plan = FLOOR_PLANS[floor];
+  if (!plan?.blankIsVoid) return false;
+  return ![...plan.ground, ...plan.holes, ...(plan.upper || []), ...(plan.monsterOnly || [])]
+    .some(box => insideRect(x, z, box));
 }
 
 export function stairLocation(floor, direction) {
