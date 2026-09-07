@@ -158,5 +158,8 @@ export function createFactoryIntro(buildPlayer) {
     return lastInfo;
   }
   update(0);
-  return { scene, camera, update, snapshot: () => lastInfo };
+  return { scene, camera, update, snapshot: () => lastInfo,
+    // Shared film props keep the ending's player, blue car and fallen tree
+    // identical to the introduction. These do not affect intro playback.
+    props: { actor, car, carTree, factory, shadow, addTree: tree } };
 }

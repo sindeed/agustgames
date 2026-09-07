@@ -1,7 +1,8 @@
 import * as THREE from "./vendor/three.module.js";
 import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, isBlankVoid } from "./floor-plans.js?v=20260907-holes-1";
 import { findRoute, rectangleConnection, findSurfaceRoute } from "./navigation.js?v=20260907-holes-1";
-import { createFactoryIntro, INTRO_TIMES } from "./intro.js?v=20260907-intro-1";
+import { createFactoryIntro, INTRO_TIMES } from "./intro.js?v=20260907-ending-1";
+import { createFactoryEnding } from "./ending.js?v=20260907-ending-1";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -46,7 +47,7 @@ const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260907-intro-1";
+const VERSION = "20260907-ending-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -153,6 +154,10 @@ let messageTimer = 0;
 let resizeObserver;
 let introFilm;
 let introElapsed = 0;
+let endingFilm;
+let endingElapsed = 0;
+let endingFrames = [];
+let lastEndingSample = -Infinity;
 
 function freshState(seed = 333) {
   return {
@@ -998,6 +1003,7 @@ function addDrawnGround(parent, floor, material, wallMaterial) {
 
 function addSuspendedPlatform(parent, definition, accent) {
   const group = new THREE.Group();
+  group.name = `platform:${definition.id}`;
   parent.add(group);
   meshBox(group, [definition.w, 0.32, definition.d], [0, -0.16, 0], MATERIALS.darkMetal);
   meshBox(group, [definition.w - 0.2, 0.06, definition.d - 0.2], [0, 0, 0], accent);
@@ -1005,6 +1011,7 @@ function addSuspendedPlatform(parent, definition, accent) {
   const ropes = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const rope = meshCylinder(parent, 0.055, 0.055, 1, 7, [0, 0, 0], MATERIALS.wood);
+    rope.name = `rope:${definition.id}:${ropes.length}`;
     ropes.push({ mesh: rope, dx: sx * (definition.w / 2 - 0.22), dz: sz * (definition.d / 2 - 0.22) });
   }
   const pose = platformPose(definition, state.elapsedMs / 1000);
@@ -1103,7 +1110,15 @@ function buildFloor(floor = state.player.floor) {
   } else {
     addColliderBox(worldRoot, [1.0, wallHeight, MAP_HALF * 2], [MAP_HALF, wallHeight / 2, 0], wallMaterial, "outer-east");
   }
-  addColliderBox(worldRoot, [MAP_HALF * 2, wallHeight, 1.0], [0, wallHeight / 2, -MAP_HALF], wallMaterial, "outer-north");
+  if (floor === 6) {
+    // The existing EXIT has a real opening behind its frame. This also keeps
+    // the ending's exact-world replay from showing a wall behind the exit.
+    addColliderBox(worldRoot, [70, wallHeight, 1.0], [-20, wallHeight / 2, -MAP_HALF], wallMaterial, "exit-wall-west");
+    addColliderBox(worldRoot, [32, wallHeight, 1.0], [39, wallHeight / 2, -MAP_HALF], wallMaterial, "exit-wall-east");
+    addColliderBox(worldRoot, [8, 3, 1.0], [19, 7, -MAP_HALF], wallMaterial, "exit-wall-header");
+  } else {
+    addColliderBox(worldRoot, [MAP_HALF * 2, wallHeight, 1.0], [0, wallHeight / 2, -MAP_HALF], wallMaterial, "outer-north");
+  }
   addColliderBox(worldRoot, [MAP_HALF * 2, wallHeight, 1.0], [0, wallHeight / 2, MAP_HALF], wallMaterial, "outer-south");
 
   addFloorFixtures(worldRoot, floor, factoryLightsOn);
@@ -1522,6 +1537,7 @@ function resetInputs() {
 }
 
 function resetGame(seed = 333) {
+  clearEnding();
   state = freshState(seed);
   messageTimer = 0;
   resetInputs();
@@ -1533,6 +1549,7 @@ function resetGame(seed = 333) {
 }
 
 function startGame() {
+  clearEnding();
   const seed = state.seed || 333;
   state = freshState(seed);
   state.mode = "playing";
@@ -1558,6 +1575,7 @@ function startIntro() {
 }
 
 function returnToMenu() {
+  clearEnding();
   const seed = state.seed || 333;
   state = freshState(seed);
   state.mode = "menu";
@@ -1568,10 +1586,35 @@ function returnToMenu() {
   render();
 }
 
+function clearEnding() {
+  endingFilm?.dispose();
+  endingFilm = null;
+  endingElapsed = 0;
+  endingFrames = [];
+  lastEndingSample = -Infinity;
+}
+
+function recordEndingFrame(force = false) {
+  if (state.mode !== 'playing' || state.player.floor !== 6) return;
+  const t = state.elapsedMs / 1000;
+  if (!force && t - lastEndingSample < 0.1) return;
+  const p = state.player, m = state.monsters.find(monster => monster.kind === 'faceless');
+  endingFrames.push({ t, x:p.x, y:p.y, z:p.z, yaw:p.yaw, moving:p.moving,
+    grounded:p.grounded, supportId:p.supportId, boardsBroken:state.missions.exit.boardsBroken,
+    mx:m.x, my:monsterWorldY(m), mz:m.z, mh:m.heading });
+  lastEndingSample = t;
+  // Bound memory without discarding the start of a long successful run.
+  if (endingFrames.length > 12000) endingFrames = endingFrames.filter((_, index) => index % 2 === 0);
+}
+
 function winGame() {
   if (state.won) return;
+  recordEndingFrame(true);
   state.won = true;
-  state.mode = "won";
+  endingFilm = createFactoryEnding({world:worldRoot,lights:[hemisphereLight,keyLight,fillLight,ambientLight],
+    fog:{color:scene.fog.color.getHex()},frames:endingFrames,buildPlayer:buildPlayerModel,buildMonster:createFacelessMonster});
+  endingElapsed = 0;
+  state.mode = "ending";
   state.missions.exit.exited = true;
   state.missions.exit.complete = true;
   closeElevator();
@@ -1644,6 +1687,8 @@ function changeFloor(targetFloor, method = "elevator") {
     }
   }
   if (targetFloor === 6 && previousFloor !== 6) {
+    endingFrames = [];
+    lastEndingSample = -Infinity;
     Object.assign(state.player, FLOOR_PLANS[6].playerSpawn);
     state.factory.floor6Visited = true;
     const monster = state.monsters.find(item => item.kind === 'faceless');
@@ -1655,6 +1700,7 @@ function changeFloor(targetFloor, method = "elevator") {
   }
   closeElevator();
   buildFloor(targetFloor);
+  if (targetFloor === 6) recordEndingFrame(true);
   showMessage(`VÅNING ${targetFloor} · ${FLOOR_THEMES[targetFloor - 1].name}`, 2.6);
   return true;
 }
@@ -1792,9 +1838,11 @@ function interact() {
       showMessage("DU BEHÖVER HAMMAREN", 2.2);
       return false;
     }
+    recordEndingFrame(true);
     state.missions.exit.boardsBroken = true;
     state.factory.exitBoards = "broken";
     buildFloor(state.player.floor);
+    recordEndingFrame(true);
     showMessage("PLANKORNA ÄR BORTA · GÅ UT GENOM EXIT", 3.0);
     return true;
   }
@@ -2566,6 +2614,15 @@ function updateCamera(force = false) {
 }
 
 function update(dt) {
+  if (state.mode === 'ending') {
+    endingElapsed += dt;
+    const ending = endingFilm.update(endingElapsed);
+    if (endingElapsed >= ending.duration) {
+      state.mode = 'won';
+      setModeUi();
+    }
+    return;
+  }
   if (state.mode === 'intro') {
     introElapsed += dt;
     introFilm.update(introElapsed);
@@ -2584,6 +2641,7 @@ function update(dt) {
   if (state.mode !== "playing") return;
   updateMonsters(dt);
   if (state.mode !== "playing") return;
+  recordEndingFrame();
   findNearbyInteractable();
   updateMonsterModels();
   updateCamera();
@@ -2592,14 +2650,15 @@ function update(dt) {
 }
 
 function render() {
-  if (state.mode === 'intro' && introFilm) {
+  const film = state.mode === 'intro' ? introFilm : (state.mode === 'ending' || state.mode === 'won') ? endingFilm : null;
+  if (film) {
     // Preserve the complete film shot on portrait phones, rather than cropping
     // away the car or shadow. Gameplay still uses the full device viewport.
     const size = renderer.getSize(new THREE.Vector2());
     const height = Math.min(size.y, size.x * 9 / 16), width = height * 16 / 9;
     const left = (size.x - width) / 2, bottom = (size.y - height) / 2;
-    introFilm.camera.aspect = 16 / 9;
-    introFilm.camera.updateProjectionMatrix();
+    film.camera.aspect = 16 / 9;
+    film.camera.updateProjectionMatrix();
     introCaption.style.top = `${bottom + 14}px`;
     renderer.setScissorTest(false);
     renderer.setClearColor(0x071122);
@@ -2607,7 +2666,7 @@ function render() {
     renderer.setViewport(left, bottom, width, height);
     renderer.setScissor(left, bottom, width, height);
     renderer.setScissorTest(true);
-    renderer.render(introFilm.scene, introFilm.camera);
+    renderer.render(typeof film.scene === 'function' ? film.scene() : film.scene, film.camera);
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, size.x, size.y);
     return;
@@ -2701,6 +2760,7 @@ function bindInputs() {
       if (event.code === 'Escape') returnToMenu();
       return;
     }
+    if (state.mode === 'ending') return;
     if (state.mode === 'menu' && event.target === introButton && (event.code === 'Enter' || event.code === 'Space')) {
       event.preventDefault(); startIntro(); return;
     }
@@ -3042,6 +3102,7 @@ function renderGameToText() {
     version: state.version,
     mode: state.mode,
     intro: state.mode === 'intro' ? introFilm.snapshot() : null,
+    ending: endingFilm && (state.mode === 'ending' || state.mode === 'won') ? endingFilm.snapshot() : null,
     coordinateSystem: "Each floor has local y=0. x increases east/right, z increases south; yaw 0 looks north (-z).",
     world: {
       kind: "giant six-floor factory",
@@ -3153,6 +3214,14 @@ window.__whereIsExitTest = {
   reset: ({ seed = 333 } = {}) => resetGame(seed),
   startGame,
   startIntro,
+  endingFrames: () => endingFrames.map(frame => ({...frame})),
+  seekEnding: seconds => {
+    if (!endingFilm) return false;
+    endingElapsed = Math.max(0,seconds);
+    endingFilm.update(endingElapsed);
+    render();
+    return endingFilm.snapshot();
+  },
   snapshot: () => JSON.parse(renderGameToText()),
   setPlayerPose: ({ floor = state.player.floor, x = state.player.x, y = 0, z = state.player.z, yaw = state.player.yaw, pitch = state.player.pitch } = {}) => {
     state.player.floor = clamp(Math.floor(floor), 1, FLOOR_COUNT);
