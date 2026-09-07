@@ -47,7 +47,7 @@ const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260907-ending-2";
+const VERSION = "20260907-floor6-stay-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -1959,6 +1959,8 @@ function updateMonsterJump(monster, dt) {
 }
 
 function monsterAllowedFloors(monster) {
+  // After the first floor-six arrival, SNABBIS stays there until a new game.
+  if (monster.kind === 'faceless' && state.factory.floor6Visited) return [6, 6];
   return MONSTER_FLOOR_RANGES[monster.kind] || [1, FLOOR_COUNT];
 }
 
