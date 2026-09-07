@@ -37,11 +37,12 @@ const PLAYER_RADIUS = 0.62;
 const WALK_SPEED = 5.0;
 const SPRINT_SPEED = 8.9;
 const FACELESS_SPEED = 8.1;
+const ELEVATOR_MONSTER_CLEARANCE = 5;
 const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260907-holes-1";
+const VERSION = "20260907-elevators-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -1266,7 +1267,27 @@ function updateActorVisibility() {
   });
 }
 
+// Protect the cabin and five metres around it, at every height, even offscreen.
+function elevatorSafeAreas(floor) {
+  return (FLOOR_PLANS[floor]?.elevators || [{ x: 0, z: 47 }]).map(lift => ({
+    x: lift.x, z: lift.z, w: 12 + ELEVATOR_MONSTER_CLEARANCE * 2,
+    d: 9 + ELEVATOR_MONSTER_CLEARANCE * 2,
+  }));
+}
+
+function nearElevator(floor, x, z) {
+  return elevatorSafeAreas(floor).some(area => insideRect(x, z, area));
+}
+
+function crossesElevatorArea(monster, x, z) {
+  return elevatorSafeAreas(monster.floor).some(area => segmentHitsBox(monster.x, monster.z, x, z, {
+    minX: area.x - area.w / 2, maxX: area.x + area.w / 2,
+    minZ: area.z - area.d / 2, maxZ: area.z + area.d / 2,
+  }));
+}
+
 function collidesAt(x, z, radius = PLAYER_RADIUS, actor = null) {
+  if (actor && actor !== state.player && nearElevator(actor.floor, x, z)) return true;
   if (actor === state.player && (FLOOR_PLANS[actor.floor]?.monsterOnly || []).some(box => insideRect(x, z, box, -radius))) return true;
   if (actor && actor.surface !== 'wall' && actor.surface !== 'ceiling') {
     const feet = actor === state.player ? actor.y : (actor.baseY || 0) + (actor.jumpY || 0);
@@ -1752,9 +1773,10 @@ const PATROL_POINTS = [
 ];
 
 function chooseMonsterTarget(monster) {
-  const points = monster.floor === 3 ? [[-10,-32],[8,-9],[-19,-9],[29,8],[29,26],[-1,43]]
+  const candidates = monster.floor === 3 ? [[-10,-32],[8,-9],[-19,-9],[29,8],[29,26],[10,39]]
     : monster.floor === 4 ? [[-23,-26],[12,-36],[23,-9],[24,26],[0,37],[-22,26],[-24,0],[0,4]]
     : monster.floor === 6 ? [[10,14],[-8,28],[-30,21],[-40,-6],[-6,37],[29,32],[29,14],[29,-16]] : PATROL_POINTS;
+  const points = candidates.filter(([x, z]) => !nearElevator(monster.floor, x, z));
   monster.waypoint = (monster.waypoint + 1) % points.length;
   const point = points[(monster.waypoint + MONSTER_STARTS.findIndex((item) => item.id === monster.id) * 3) % points.length];
   monster.targetX = point[0];
@@ -1973,6 +1995,7 @@ function advanceMonsterStairTravel(monster, dt) {
 
 function monsterCanSeePlayer(monster) {
   if (monster.floor !== state.player.floor) return false;
+  if (nearElevator(state.player.floor, state.player.x, state.player.z)) return false;
   if (typeof monster.visionOverride === "boolean") return monster.visionOverride;
   const dx = state.player.x - monster.x;
   const dz = state.player.z - monster.z;
@@ -1986,6 +2009,7 @@ function monsterCanSeePlayer(monster) {
 }
 
 function monsterNavigationHeight(monster, x, z) {
+  if (nearElevator(monster.floor, x, z)) return null;
   if (monster.floor === state.player.floor && collidesAt(x, z, monster.kind === 'eight-legs' ? 0.98 : 0.76)) return null;
   const support = floorSupportAt(monster.floor, x, z);
   return support ? support.y : null;
@@ -2036,6 +2060,11 @@ function advanceHoleCrossing(monster, dt) {
   } else if (route.phase === 'cross') {
     const dx = route.exit.x - monster.x, dz = route.exit.z - monster.z, distance = Math.hypot(dx, dz);
     const step = Math.min(distance, speed * dt);
+    if (crossesElevatorArea(monster, monster.x + dx / Math.max(distance, 0.001) * step, monster.z + dz / Math.max(distance, 0.001) * step)) {
+      monster.holeCrossing = null;
+      chooseMonsterTarget(monster);
+      return true;
+    }
     monster.x += dx / Math.max(distance, 0.001) * step;
     monster.z += dz / Math.max(distance, 0.001) * step;
     monster.heading = Math.atan2(dx, dz);
@@ -2058,8 +2087,13 @@ function spiderSupportSurfaces(monster) {
 function moveSpiderOnPitFloor(monster, targetX, targetZ, speed, dt) {
   const surfaces = spiderSupportSurfaces(monster);
   const move = (point, bounds = null) => {
+    if (bounds && crossesElevatorArea(monster, point.x, point.z)) {
+      const route = findRoute(monster, point, (x, z) => insideRect(x, z, bounds, 0.15) && !nearElevator(monster.floor, x, z) ? bounds.y || 0 : null);
+      point = route.find(p => distance2D(monster.x, monster.z, p.x, p.z) > 0.2) || monster;
+    }
     const dx = point.x - monster.x, dz = point.z - monster.z, d = Math.hypot(dx, dz);
     const step = Math.min(d, speed * dt);
+    if (crossesElevatorArea(monster, monster.x + dx / Math.max(d, 0.001) * step, monster.z + dz / Math.max(d, 0.001) * step)) return d;
     if (d > 0.001) {
       monster.x += dx / d * step; monster.z += dz / d * step;
       monster.heading = Math.atan2(dx, dz);
@@ -2107,12 +2141,16 @@ function moveSpiderOnPitFloor(monster, targetX, targetZ, speed, dt) {
 }
 
 function moveMonsterToward(monster, targetX, targetZ, speed, dt, allowCrossing = true) {
+  if (nearElevator(monster.floor, targetX, targetZ)) {
+    chooseMonsterTarget(monster);
+    targetX = monster.targetX; targetZ = monster.targetZ;
+  }
   if (monster.kind === 'eight-legs' && FLOOR_PLANS[monster.floor]?.blankIsVoid) {
     return moveSpiderOnPitFloor(monster, targetX, targetZ, speed, dt);
   }
   const sameFloor = monster.floor === state.player.floor;
   if (sameFloor && allowCrossing && beginHoleCrossing(monster, targetX, targetZ)) return 1;
-  if ((sameFloor || FLOOR_PLANS[monster.floor]?.blankIsVoid) && monster.surface === 'floor' && !monsterDirectPath(monster, targetX, targetZ)) {
+  if (crossesElevatorArea(monster, targetX, targetZ) || (sameFloor || FLOOR_PLANS[monster.floor]?.blankIsVoid) && monster.surface === 'floor' && !monsterDirectPath(monster, targetX, targetZ)) {
     monster.pathTimer = (monster.pathTimer || 0) - dt;
     if (!Array.isArray(monster.path) || monster.pathTimer <= 0) {
       monster.path = findRoute(monster, { x: targetX, z: targetZ }, (x, z) => monsterNavigationHeight(monster, x, z), monsterCanJump(monster) ? 1.25 : 0.4);
@@ -2133,6 +2171,7 @@ function moveMonsterToward(monster, targetX, targetZ, speed, dt, allowCrossing =
   const beforeZ = monster.z;
   const stepX = dx / distance * step;
   const stepZ = dz / distance * step;
+  if (crossesElevatorArea(monster, monster.x + stepX, monster.z + stepZ)) { monster.pathTimer = 0; return distance; }
   if (FLOOR_PLANS[monster.floor]?.blankIsVoid) {
     if (monster.surface !== 'floor' && isBlankVoid(monster.floor, monster.x + stepX, monster.z + stepZ)) return distance;
     const nextSupport = floorSupportAt(monster.floor, monster.x + stepX, monster.z + stepZ, monsterWorldY(monster) + 0.35);
@@ -2202,6 +2241,7 @@ function monsterWorldY(monster) {
 
 function tryMonsterCatch(monster) {
   if (state.mode !== "playing" || monster.floor !== state.player.floor) return false;
+  if (nearElevator(state.player.floor, state.player.x, state.player.z)) return false;
   const verticalDistance = Math.abs(monsterWorldY(monster) - state.player.y);
   if (distance2D(monster.x, monster.z, state.player.x, state.player.z) >= 1.35 || verticalDistance >= 1.05) return false;
   caughtByMonster(monster);
@@ -2218,6 +2258,12 @@ function updateMonsters(dt) {
     monster.stairCooldown = Math.max(0, monster.stairCooldown - dt);
     monster.floorRoamTimer -= dt;
     const sameFloor = monster.floor === state.player.floor;
+    if (monster.ai === 'chase' && nearElevator(state.player.floor, state.player.x, state.player.z)) {
+      monster.ai = 'patrol'; monster.lostTime = 0;
+      monster.path = []; monster.pathTimer = 0;
+      if (monster.stairRoute?.phase === 'approach') monster.stairRoute = null;
+      chooseMonsterTarget(monster);
+    }
     if (monster.holeCrossing) { advanceHoleCrossing(monster, dt); tryMonsterCatch(monster); return; }
     if (monster.kind === "eight-legs" && !monster.stairRoute) updateSpiderSurface(monster, dt);
 
@@ -2880,6 +2926,7 @@ function renderGameToText() {
       sprintSpeed: SPRINT_SPEED,
       perspective: "first-person 3D",
       supportId: state.player.supportId,
+      safeNearElevator: nearElevator(state.player.floor, state.player.x, state.player.z),
     },
     mission: {
       active: state.activeMission,
@@ -2903,6 +2950,7 @@ function renderGameToText() {
       platformJumpsAllowed: true, fixedGround: FLOOR_PLANS[state.player.floor].ground,
     } : null,
     upperAreas: FLOOR_PLANS[state.player.floor]?.upper || [],
+    elevatorSafeAreas: elevatorSafeAreas(state.player.floor),
     monsterOnlyAreas: FLOOR_PLANS[state.player.floor]?.monsterOnly || [],
     doors: doorways.map(({ id, floor, name, x, z, rotationY, open }) => ({
       id, floor, name, x, z, rotationY, open,
@@ -3072,6 +3120,7 @@ window.__whereIsExitTest = {
   getFloorPlans: () => JSON.parse(JSON.stringify(FLOOR_PLANS)),
   getGround: (x, z, y = Infinity) => supportAt(x, z, y),
   isBlankVoid: (floor, x, z) => isBlankVoid(floor, x, z),
+  nearElevator,
   aim: (yaw, pitch = 0) => { state.player.yaw = yaw; state.player.pitch = pitch; },
   setMonsterTarget: (id, x, z) => {
     const monster = state.monsters.find(item => item.id === id);
