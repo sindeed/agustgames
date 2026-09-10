@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-5";
-import { actorMotion } from "./actor-motion.js?v=20260910-5";
+import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-6";
+import { actorMotion } from "./actor-motion.js?v=20260910-6";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -906,9 +906,15 @@ export class View {
     if (zone === "sea") {
       for (const i of s.islands) {
         let g = this.staticModels.get(i.id);
+        const distance = dist(i, p);
         const visible =
-          dist(i, p) < 1600 ||
+          distance < 1100 ||
           (s.mode === "menu" && dist(i, { x: 0, z: 0 }) < 1000);
+        if (g && distance > 1450) {
+          this.disposeModel(g);
+          this.staticModels.delete(i.id);
+          g = null;
+        }
         if (visible && !g) {
           g = this.makeIsland(i);
           this.staticModels.set(i.id, g);
@@ -916,9 +922,14 @@ export class View {
         if (g) g.visible = visible;
       }
       for (const r of s.resources) {
-        const visible =
-          r.active && dist(r, s.mode === "menu" ? { x: 0, z: 0 } : p) < 250;
+        const distance = dist(r, s.mode === "menu" ? { x: 0, z: 0 } : p),
+          visible = r.active && distance < 250;
         let g = this.staticModels.get(r.id);
+        if (g && distance > 350) {
+          this.disposeModel(g);
+          this.staticModels.delete(r.id);
+          g = null;
+        }
         if (visible && !g) {
           g = this.makeResource(r);
           this.world.add(g);

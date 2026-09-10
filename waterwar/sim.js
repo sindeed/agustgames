@@ -1,4 +1,4 @@
-export const VERSION = "20260910-5";
+export const VERSION = "20260910-6";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -85,6 +85,7 @@ export class Simulation {
     this.sharks = [];
     this.resources = [];
     this.islands = [];
+    this.islandCells = new Map();
     this.arrows = [];
     this.effects = [];
     this.rescued = 0;
@@ -215,19 +216,36 @@ export class Simulation {
     const places = [
       { x: 35, z: -65, r: 25 },
       { x: -112, z: -185, r: 43, cave: true },
+      { x: 210, z: 65, r: 28 },
+      { x: -210, z: 45, r: 32 },
+      { x: 80, z: 235, r: 32 },
+      { x: -130, z: 275, r: 28 },
+      { x: 285, z: -170, r: 36 },
+      { x: -320, z: -250, r: 29 },
+      { x: 170, z: -390, r: 32 },
+      { x: -180, z: -460, r: 30 },
+      { x: -390, z: 160, r: 33 },
+      { x: -60, z: -330, r: 27 },
     ];
-    for (let n = 0; n < 45; n++) {
-      let a = n * 2.39996,
-        r = 480 + Math.sqrt(n) * 980;
-      places.push({
-        x: Math.cos(a) * r,
-        z: Math.sin(a) * r,
-        r: 19 + this.random() * 23,
-      });
-    }
+    for (let z = -7500; z <= 7500; z += 600)
+      for (let x = -7500; x <= 7500; x += 600) {
+        const p = {
+          x: x + (this.random() - 0.5) * 180,
+          z: z + (this.random() - 0.5) * 180,
+          r: 19 + this.random() * 23,
+        };
+        if (places.every((i) => dist(i, p) > i.r + p.r + 75)) places.push(p);
+      }
     for (let i = 0; i < places.length; i++) {
       const p = { ...places[i], id: `island${i}` };
       this.islands.push(p);
+      // Only nearby shores participate in the many ground checks each frame.
+      for (let cx = Math.floor((p.x - p.r) / 128); cx <= Math.floor((p.x + p.r) / 128); cx++)
+        for (let cz = Math.floor((p.z - p.r) / 128); cz <= Math.floor((p.z + p.r) / 128); cz++) {
+          const key = `${cx},${cz}`;
+          if (!this.islandCells.has(key)) this.islandCells.set(key, []);
+          this.islandCells.get(key).push(p);
+        }
       const count = p.cave ? 10 : 5 + Math.floor(this.random() * 5);
       for (let j = 0; j < count; j++) {
         const a = j * 2.4,
@@ -285,10 +303,11 @@ export class Simulation {
       this.resources = this.resources.filter((r) => r.team !== old.team);
       this.replacements++;
     }
-    const col = slot % 7,
-      row = Math.floor(slot / 7),
-      x = (col - 3) * 1730 + 810 + (this.random() - 0.5) * 180,
+    const col = slot % 7, row = Math.floor(slot / 7);
+    let x = (col - 3) * 1730 + 810 + (this.random() - 0.5) * 180,
       z = (row - 3) * 1730 - 850 + (this.random() - 0.5) * 180;
+    for (const island of this.islands)
+      if (dist({ x, z }, island) < island.r + 16) z = island.z + island.r + 18;
     const team = slot + 1;
     const r = this.makeRaft(team, x, z);
     const bot = {
@@ -328,7 +347,7 @@ export class Simulation {
       return 0;
     }
     let ground = -0.9;
-    for (const i of this.islands) {
+    for (const i of this.islandCells.get(`${Math.floor(x / 128)},${Math.floor(z / 128)}`) || []) {
       const d = Math.hypot(x - i.x, z - i.z);
       if (d < i.r) ground = Math.max(ground, clamp((i.r - d) / 4, 0, 1) * 1.15);
     }
@@ -1014,14 +1033,15 @@ export class Simulation {
       b.think -= dt;
       if (b.think > 0) continue;
       b.think = 0.65;
-      let res = this.resources
-        .filter(
-          (x) =>
-            x.active &&
-            x.zone === b.zone &&
-            (x.team === b.team || (!x.team && dist(x, b) < 1700)),
-        )
-        .sort((a, c) => dist(a, b) - dist(c, b))[0];
+      let res = null, nearestDistance = Infinity;
+      for (const candidate of this.resources) {
+        if (!candidate.active || candidate.zone !== b.zone) continue;
+        const d = (candidate.x - b.x) ** 2 + (candidate.z - b.z) ** 2;
+        if ((candidate.team === b.team || (!candidate.team && d < 1700 ** 2)) && d < nearestDistance) {
+          res = candidate;
+          nearestDistance = d;
+        }
+      }
       if (res) {
         if (dist(b, res) < 4) {
           b.weapon = "hammer";
@@ -1648,6 +1668,7 @@ export class Simulation {
         steering: p.steering,
       },
       botCount: this.bots.length,
+      islandCount: this.islands.length,
       replacements: this.replacements,
       buildMode: this.building,
       selectedBuild: this.selectedBuild,

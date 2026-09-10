@@ -3,6 +3,7 @@
 Agusts förstapersonsspel på ett mycket stort hav, i samma 3D-stil som War of Kingdoms.
 
 - Spelaren och botkaptener får fullt liv efter två sekunder utan ny skada. Vakter och byggdelar läker inte.
+- Utforska 686 öar utspridda över hela havet, med fler öar nära starten.
 - Starta i vattnet med hammare och svärd, en liten flotte, en soffa och två bord.
 - Gå med spaken och dra på skärmen för att titta. **Byt** väljer nästa ägda vapen.
 - **Slå** använder redskapet eller vapnet. Vid ratten används samma knapp för att börja/sluta styra.
