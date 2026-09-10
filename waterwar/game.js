@@ -1,6 +1,8 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-2";
-import { View } from "./view.js?v=20260910-2";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-3";
+import { View } from "./view.js?v=20260910-3";
+import { GameAudio } from "./audio.js?v=20260910-3";
 const $ = (id) => document.getElementById(id);
+const audio = new GameAudio();
 let sim = new Simulation(),
   view,
   lastTime = performance.now(),
@@ -40,6 +42,7 @@ function clearInput() {
   sim.input = { x: 0, z: 0 };
 }
 function newGame() {
+  audio.unlock();
   clearInput();
   for (const g of view.models.values()) view.disposeModel(g);
   for (const g of view.staticModels.values()) view.disposeModel(g);
@@ -51,6 +54,7 @@ function newGame() {
   renderUI();
 }
 $("start").onclick = () => {
+  audio.unlock();
   clearInput();
   sim.start();
   renderUI();
@@ -66,9 +70,15 @@ function setPause() {
 }
 $("pause").onclick = setPause;
 $("resume").onclick = () => {
+  audio.unlock();
   sim.mode = "playing";
   renderUI();
 };
+$("sound-toggle").onclick = () => { audio.toggleSound(); renderUI(); };
+$("music-toggle").onclick = () => { audio.toggleMusic(); renderUI(); };
+document.addEventListener("pointerdown", () => {
+  if (audio.context && audio.context.state !== "running") audio.unlock();
+}, { passive: true });
 $("fullscreen").onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen?.();
   else document.documentElement.requestFullscreen?.().catch(() => {});
@@ -299,6 +309,10 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("resize", () => view.resize());
 function renderUI() {
+  $("sound-toggle").textContent = audio.enabled ? "Ljud: på" : "Ljud: av";
+  $("sound-toggle").setAttribute("aria-pressed", String(audio.enabled));
+  $("music-toggle").textContent = audio.music ? "Musik: på" : "Musik: av";
+  $("music-toggle").setAttribute("aria-pressed", String(audio.music));
   const p = sim.player;
   $("menu").hidden = sim.mode !== "menu";
   $("hud").hidden = sim.mode === "menu" || sim.mode === "dead";
@@ -400,6 +414,7 @@ function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   if (!manual) tick(dt);
+  audio.update(sim);
   view.update(dt);
   renderUI();
   requestAnimationFrame(frame);
@@ -410,10 +425,12 @@ window.advanceTime = (ms) => {
   manual = true;
   const frames = Math.max(1, Math.ceil(ms / (1000 / 60)));
   for (let i = 0; i < frames; i++) tick(ms / frames / 1000);
+  audio.update(sim);
   view.update(0);
   renderUI();
 };
 window.__waterwar = {
+  audio,
   get sim() {
     return sim;
   },

@@ -1,5 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-2";
+import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-3";
+import { actorMotion } from "./actor-motion.js?v=20260910-3";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -523,15 +524,27 @@ export class View {
     );
     for (const x of [-0.1, 0.1])
       this.sphere(body, x, 1.75, -0.262, 0.028, 0.034, 0.024, "black");
-    const left = this.box(body, -0.43, 1.05, 0, 0.2, 0.83, 0.22, cloth),
-      right = this.box(body, 0.43, 1.05, 0, 0.2, 0.83, 0.22, cloth);
-    const legs = [-0.16, 0.16].map((x) =>
-      this.box(body, x, 0.34, 0, 0.23, 0.66, 0.29, dark),
-    );
+    const [left, right] = [-0.43, 0.43].map((x) => {
+      const shoulder = this.group(body);
+      shoulder.position.set(x, 1.42, 0);
+      this.box(shoulder, 0, -0.37, 0, 0.2, 0.83, 0.22, cloth);
+      return shoulder;
+    });
+    const legs = [-0.16, 0.16].map((x) => {
+      const hip = this.group(body);
+      hip.position.set(x, 0.68, 0);
+      this.box(hip, 0, -0.16, 0, 0.23, 0.32, 0.29, dark);
+      const knee = this.group(hip);
+      knee.position.y = -0.32;
+      this.box(knee, 0, -0.17, 0, 0.23, 0.34, 0.29, dark);
+      this.box(knee, 0, -0.30, -0.04, 0.25, 0.1, 0.36, "darkIron");
+      hip.userData.knee = knee;
+      return hip;
+    });
     g.userData.legs = legs;
     g.userData.arms = [left, right];
     const weapon = this.makeWeapon(a.weapon, right);
-    weapon.position.set(0.06, -0.42, -0.15);
+    weapon.position.set(0.06, -0.79, -0.15);
     weapon.scale.setScalar(0.58);
     weapon.rotation.z = -0.3;
     if (kind === "bot") {
@@ -828,13 +841,21 @@ export class View {
           () => this.makeActor(a, kind),
           a.zone === "sea" ? this.world : this.belly,
         );
-        g.position.set(a.x, a.y, a.z);
-        const last = g.userData.last || { x: a.x, z: a.z };
-        const d = dist(a, last);
-        if (d > 0.006) g.rotation.y = Math.atan2(last.x - a.x, last.z - a.z);
-        const walk = d > 0.005 ? Math.sin(s.time * 9) * 0.3 : 0;
-        g.userData.legs.forEach((l, i) => (l.rotation.x = walk * (i ? 1 : -1)));
-        g.userData.last = { x: a.x, z: a.z };
+        const carrier = a.boatId
+          ? s.boats.find((b) => b.id === a.boatId)
+          : s.ground(a.x, a.z, a.zone, a.y).raft;
+        const motion = actorMotion(g.userData.motion, a, carrier, s.time);
+        g.userData.motion = motion;
+        g.position.set(
+          motion.x + (carrier?.x || 0), motion.y, motion.z + (carrier?.z || 0),
+        );
+        g.rotation.y = motion.yaw;
+        g.userData.legs.forEach((leg, i) => {
+          const swing = Math.sin(motion.phase + i * Math.PI) * motion.blend;
+          leg.rotation.x = swing * 0.55;
+          leg.userData.knee.rotation.x = -Math.max(0, -swing) * 0.5;
+          g.userData.arms[i].rotation.x = -swing * 0.32;
+        });
       }
     for (const a of s.sharks) {
       if (zone !== "sea" || dist(a, p) > 300) continue;

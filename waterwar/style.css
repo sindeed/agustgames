@@ -561,6 +561,9 @@ h2 {
   margin-right: 8px;
 }
 .dialog {
+  max-height: 90dvh;
+  overflow-y: auto;
+  touch-action: pan-y;
   text-align: center;
   border: 2px solid #c3a575;
   border-radius: 20px;

@@ -1,4 +1,4 @@
-export const VERSION = "20260910-2";
+export const VERSION = "20260910-3";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -77,6 +77,7 @@ export class Simulation {
     this.building = false;
     this.selectedBuild = "floor";
     this.events = [];
+    this.sounds = [];
     this.rafts = [];
     this.bots = [];
     this.guards = [];
@@ -134,6 +135,11 @@ export class Simulation {
   event(message) {
     this.events.push({ message, until: this.time + 4 });
     if (this.events.length > 8) this.events.shift();
+  }
+  sound(kind, source = this.player) {
+    if (source.zone !== this.player.zone || dist(source, this.player) > 65) return;
+    this.sounds.push({ kind, x: source.x, z: source.z, zone: source.zone });
+    if (this.sounds.length > 64) this.sounds.shift();
   }
   get raft() {
     return this.rafts.find((r) => r.team === 0);
@@ -352,6 +358,7 @@ export class Simulation {
     return { height, raft };
   }
   move(actor, dx, dz) {
+    const oldX = actor.x, oldZ = actor.z;
     const nx = clamp(
         actor.x + dx,
         actor.zone === "belly" ? -46 : -WORLD,
@@ -387,6 +394,13 @@ export class Simulation {
       actor.z = nz;
     }
     actor.y = this.ground(actor.x, actor.z, actor.zone, actor.y).height;
+    const distance = Math.hypot(actor.x - oldX, actor.z - oldZ);
+    actor.stepSoundDistance = (actor.stepSoundDistance || 0) + distance;
+    const stride = actor.y < 0 ? 1.8 : 1.4;
+    if (actor.stepSoundDistance >= stride) {
+      this.sound(actor.y < 0 ? "splash" : "step", actor);
+      actor.stepSoundDistance %= stride;
+    }
   }
   moveToward(actor, target, speed, dt) {
     const d = dist(actor, target);
@@ -514,6 +528,7 @@ export class Simulation {
         home: raft.id,
       });
     } else this.addPart(raft, type, result.x, result.z, result.y);
+    this.sound("build", { x, z, zone: owner.zone });
     if (owner === this.player) this.event(`${BUILD[type].name} byggd!`);
     return true;
   }
@@ -572,9 +587,11 @@ export class Simulation {
   }
   harvest(res, owner = this.player) {
     if (!res?.active || res.zone !== owner.zone) return false;
+    this.sound(res.kind === "ore" || res.kind === "chest" ? "metal" : "chop", res);
     res.hp -= 34;
     if (res.hp > 0) return true;
     res.active = false;
+    this.sound("break", res);
     if (res.kind === "palm") {
       owner.wood++;
       res.regrow = 30;
@@ -642,6 +659,7 @@ export class Simulation {
     if (this.interact(target)) return true;
     const w = WEAPONS[p.weapon];
     p.cooldown = w.cooldown;
+    if (!p.weapon.includes("bow")) this.sound("swing", p);
     if (p.weapon === "bow" || p.weapon === "firebow") {
       const dir = direction || {
         x: -Math.sin(p.yaw) * Math.cos(p.pitch),
@@ -688,6 +706,7 @@ export class Simulation {
     return false;
   }
   shoot(actor, dir) {
+    this.sound("bow", actor);
     this.arrows.push({
       id: this.id("arrow"),
       team: actor.team,
@@ -716,8 +735,11 @@ export class Simulation {
     });
   }
   damagePart(raft, p, amount) {
+    const source = { x: raft.x + p.x, z: raft.z + p.z, zone: raft.zone };
+    this.sound("chop", source);
     p.hp -= amount;
     if (p.hp <= 0) {
+      this.sound("break", source);
       raft.parts = raft.parts.filter((a) => a !== p);
       if (this.player.steering === raft.id && !this.hasWheel(raft))
         this.player.steering = null;
@@ -726,6 +748,7 @@ export class Simulation {
   damage(actor, amount) {
     if (actor === this.whale) return;
     if (actor === this.player && actor.invulnerable > 0) return;
+    this.sound("hit", actor);
     actor.hp = Math.max(0, actor.hp - amount);
     if (actor.hp > 0) return;
     if (actor === this.player) {
@@ -812,6 +835,25 @@ export class Simulation {
       )
       .sort((a, b) => dist(actor, a) - dist(actor, b))
       .find((a) => dist(actor, a) < range);
+  }
+  guardEnemy(guard, range = 28) {
+    const enemies = guard.escort ? [] : [this.nearestEnemy(guard, range)];
+    if (guard.zone === "sea")
+      enemies.push(...this.sharks.filter((s) => s.hp > 0 && dist(guard, s) < range));
+    return enemies.filter(Boolean).sort((a, b) => dist(guard, a) - dist(guard, b))[0];
+  }
+  approachGuardEnemy(guard, enemy, dt) {
+    const speed = guard.weapon.includes("bow") ? 1.5 : 4;
+    if (enemy.id.startsWith("shark")) {
+      const d = dist(guard, enemy);
+      if (d <= WEAPONS[guard.weapon].reach * 0.85) return;
+      const step = Math.min(d, speed * dt),
+        x = guard.x + (enemy.x - guard.x) / d * step,
+        z = guard.z + (enemy.z - guard.z) / d * step;
+      // Defend from the deck or shore instead of jumping into the water to chase.
+      if (guard.y >= 0 && this.ground(x, z, guard.zone, guard.y).height < 0) return;
+    }
+    this.moveToward(guard, enemy, speed, dt);
   }
   updateProjectiles(dt) {
     for (const a of this.arrows) {
@@ -1033,21 +1075,26 @@ export class Simulation {
   aiAttack(a, target) {
     if (a.cooldown > 0 || a.weapon === "hammer" || target.hp <= 0) return;
     const w = WEAPONS[a.weapon],
-      d = dist(a, target);
+      d = Math.max(0.001, dist(a, target));
     if (d > w.reach) return;
     a.cooldown = w.cooldown + 1.1;
+    if (!a.weapon.includes("bow")) this.sound("swing", a);
     if (a.weapon.includes("bow")) {
       this.shoot(a, {
         x: (target.x - a.x) / d,
         z: (target.z - a.z) / d,
-        y: ((target.y || 0) - (a.y || 0)) / d,
+        y: (target.y + (target.id.startsWith("shark") ? 0.2 : 1.1) - a.y - 1.45) / d,
       });
     } else this.damage(target, w.damage);
   }
   updateGuards(dt) {
     for (const g of [...this.guards]) {
       g.cooldown = Math.max(0, g.cooldown - dt);
-      if (g.boatId) continue;
+      if (g.boatId) {
+        const enemy = this.guardEnemy(g);
+        if (enemy) this.aiAttack(g, enemy);
+        continue;
+      }
       if (g.boarding) {
         const boat = this.boats.find((b) => b.id === g.boarding);
         if (boat && boat.zone === g.zone) {
@@ -1075,9 +1122,9 @@ export class Simulation {
           (r) => r.id === g.raidTarget && r.parts.length && r.zone === g.zone,
         );
         if (r) {
-          const target = this.nearestEnemy(g, 22);
+          const target = this.guardEnemy(g, 22);
           if (target) {
-            this.moveToward(g, target, 4, dt);
+            this.approachGuardEnemy(g, target, dt);
             this.aiAttack(g, target);
           } else {
             const part = r.parts.reduce((a, b) =>
@@ -1096,16 +1143,19 @@ export class Simulation {
                   z: (point.z - g.z) / (d || 1),
                   y: (part.y + 0.5 - g.y - 1.45) / (d || 1),
                 });
-              else this.damagePart(r, part, 25);
+              else {
+                this.sound("swing", g);
+                this.damagePart(r, part, 25);
+              }
             }
           }
           continue;
         }
         g.raidTarget = null;
       }
-      const enemy = g.escort ? null : this.nearestEnemy(g, 28);
+      const enemy = this.guardEnemy(g);
       if (enemy) {
-        this.moveToward(g, enemy, g.weapon.includes("bow") ? 1.5 : 4, dt);
+        this.approachGuardEnemy(g, enemy, dt);
         this.aiAttack(g, enemy);
       } else if (g.zone === "belly" && owner.zone === "belly") {
         if (dist(g, owner) > 3) this.moveToward(g, owner, 5, dt);
@@ -1191,6 +1241,7 @@ export class Simulation {
         }
         s.angle = Math.atan2(target.x - s.x, target.z - s.z);
         if (d < 2.5 && s.cooldown === 0) {
+          this.sound("bite", s);
           this.damage(target, 15);
           s.cooldown = 1.7;
         }
@@ -1218,6 +1269,7 @@ export class Simulation {
             s.x += ((t.x - s.x) / d) * 3 * dt;
             s.z += ((t.z - s.z) / d) * 3 * dt;
           } else if (s.cooldown === 0) {
+            this.sound("bite", s);
             this.damagePart(r, part, 20);
             s.cooldown = 2;
           }
@@ -1241,6 +1293,7 @@ export class Simulation {
     w.y = -60;
     w.mouth = true;
     this.event("Valen kommer!");
+    this.sound("whale");
   }
   swallowRaft(r) {
     if (r.zone === "belly") return;
@@ -1324,6 +1377,7 @@ export class Simulation {
       b.z = p.z;
     }
     this.event("Ut genom blåshålet! Du och dina vakter är fria!");
+    this.sound("escape");
     this.whale.timer = Math.max(this.whale.timer, 70);
   }
   escapeAI(a, dt) {
