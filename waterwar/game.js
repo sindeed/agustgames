@@ -1,5 +1,5 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-1";
-import { View } from "./view.js?v=20260910-1";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-2";
+import { View } from "./view.js?v=20260910-2";
 const $ = (id) => document.getElementById(id);
 let sim = new Simulation(),
   view,

@@ -1,4 +1,4 @@
-export const VERSION = "20260910-1";
+export const VERSION = "20260910-2";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -1467,8 +1467,8 @@ export class Simulation {
     } else
       this.move(
         p,
-        dx * (p.y < 0 ? 4.8 : 6) * dt,
-        dz * (p.y < 0 ? 4.8 : 6) * dt,
+        dx * (p.y < 0 ? 4.32 : 5.4) * dt,
+        dz * (p.y < 0 ? 4.32 : 5.4) * dt,
       );
     if (p.zone === "sea" && p.y < 0) p.swim += dt;
     else p.swim = 0;

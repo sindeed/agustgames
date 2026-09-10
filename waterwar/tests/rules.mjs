@@ -281,11 +281,11 @@ test("Walkable belly route reaches blowhole, companions escape and mission clear
   s.player.z = 40;
   s.player.y = 0;
   s.input.z = -1;
-  step(s, 17.5);
+  step(s, 19.5);
   assert(s.player.y >= 29);
   s.input.z = 0;
   s.input.x = -1;
-  step(s, 4.3);
+  step(s, 4.8);
   assert.equal(s.player.zone, "sea");
   assert.equal(s.raft.zone, "sea");
   assert.equal(s.guards[0].zone, "sea");
