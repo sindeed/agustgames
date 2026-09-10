@@ -1,6 +1,7 @@
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-const tune = [60, 64, 67, null, 69, 67, 64, null, 62, 64, 67, 64, 60, null, 55, null];
 const hz = (note) => 440 * 2 ** ((note - 69) / 12);
+const MUSIC_URL = new URL("./music/open-horizon.mp3", import.meta.url).href;
+const MUSIC_VOLUME = 0.18;
 
 export class GameAudio {
   constructor() {
@@ -8,8 +9,8 @@ export class GameAudio {
     this.music = true;
     this.active = false;
     this.voices = 0;
-    this.note = 0;
-    this.nextNote = 0;
+    this.musicWanted = false;
+    this.musicError = null;
     this.played = {};
     try {
       const saved = JSON.parse(localStorage.getItem("waterwar-audio") || "null");
@@ -19,7 +20,7 @@ export class GameAudio {
       }
     } catch {}
   }
-  unlock() {
+  unlock(playing = false) {
     try {
       if (!this.context) {
         const Context = window.AudioContext || window.webkitAudioContext;
@@ -32,16 +33,49 @@ export class GameAudio {
         limiter.ratio.value = 8;
         this.master.connect(limiter).connect(this.context.destination);
         this.musicBus = this.context.createGain();
-        this.musicBus.gain.value = this.music ? 0.13 : 0;
+        this.musicBus.gain.value = this.music ? MUSIC_VOLUME : 0;
         this.musicBus.connect(this.master);
+        // Stream the MP3 instead of decoding the whole song into iPad memory.
+        this.musicElement = new Audio();
+        this.musicElement.preload = "none";
+        this.musicElement.loop = true;
+        this.musicElement.src = MUSIC_URL;
+        this.musicSource = this.context.createMediaElementSource(this.musicElement);
+        this.musicSource.connect(this.musicBus);
         this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
         const data = this.noiseBuffer.getChannelData(0);
         for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
       }
       if (this.context.state !== "running") this.context.resume().catch(() => {});
+      // Safari needs the first media play() call inside the Start/touch gesture.
+      if (playing) this.syncMusic(this.enabled && this.music && !document.hidden, true);
     } catch {
       // Audio must never prevent the game from starting.
     }
+  }
+  syncMusic(wanted, retry = false) {
+    if (!this.musicElement || (wanted === this.musicWanted && !retry)) return;
+    this.musicWanted = wanted;
+    if (!wanted) {
+      this.musicElement.pause();
+      return;
+    }
+    if (this.musicPlayPending) return;
+    this.musicError = null;
+    this.musicPlayPending = this.musicElement.play()
+      .then(() => {
+        if (!this.musicWanted) this.musicElement.pause();
+      })
+      .catch((error) => {
+        // A missing file or denied autoplay must not interrupt the game or SFX.
+        if (error.name !== "AbortError") this.musicError = error.name;
+      })
+      .finally(() => {
+        this.musicPlayPending = null;
+        // A quick pause/resume can cancel a play() that is still loading.
+        if (this.musicWanted && this.musicElement.paused && !this.musicError)
+          this.syncMusic(true, true);
+      });
   }
   save() {
     try {
@@ -56,7 +90,10 @@ export class GameAudio {
   toggleMusic() {
     this.music = !this.music;
     this.save();
-    if (this.context) this.musicBus.gain.setTargetAtTime(this.music ? 0.13 : 0, this.context.currentTime, 0.05);
+    if (this.context) {
+      this.musicBus.gain.setTargetAtTime(this.music ? MUSIC_VOLUME : 0, this.context.currentTime, 0.05);
+      this.syncMusic(this.active && this.music);
+    }
   }
   voice(source, destination, volume, duration, when) {
     if (this.voices >= 32) return false;
@@ -124,25 +161,17 @@ export class GameAudio {
   }
   update(sim) {
     const events = sim.sounds.splice(0);
-    if (!this.context || this.context.state !== "running") return;
+    if (!this.context) return;
     const active = this.enabled && sim.mode === "playing" && !document.hidden;
+    // Backgrounding can suspend Safari's context before visibilitychange runs.
+    if (active && this.context.state !== "running") return;
+    this.syncMusic(active && this.music);
     if (active !== this.active) {
       this.active = active;
       this.master.gain.setTargetAtTime(active ? 0.65 : 0, this.context.currentTime, 0.035);
-      this.nextNote = this.context.currentTime;
     }
     if (!active) return;
     for (const event of events.slice(-12))
       if (event.zone === sim.player.zone) this.effect(event, sim.player);
-    if (!this.music) return;
-    const now = this.context.currentTime;
-    if (this.nextNote < now - 0.2) this.nextNote = now;
-    if (this.nextNote < now + 0.08) {
-      const note = tune[this.note % tune.length];
-      if (note !== null) this.tone(hz(note), 0.65, 0.28, "sine", hz(note), this.musicBus, this.nextNote);
-      if (this.note % 4 === 0) this.tone(hz(this.note % 16 < 8 ? 48 : 45), 1.2, 0.20, "triangle", hz(this.note % 16 < 8 ? 48 : 45), this.musicBus, this.nextNote);
-      this.note++;
-      this.nextNote += 0.65;
-    }
   }
 }

@@ -19,7 +19,7 @@ På dator: WASD/piltangenter, dra med musen, mellanslag för Slå, E/Tab för By
 
 Ren HTML/CSS/JavaScript. `sim.js` innehåller spelregler, `view.js` 3D-scenen och `game.js` gränssnitt/styrning. Spelet återanvänder repoets MIT-licensierade Three.js från `war-of-kingdoms/vendor/`.
 
-Ljud och musik skapas i `audio.js` med Web Audio utan externa ljudfiler. `actor-motion.js` mjukar upp AI-rörelser och driver gånganimationen.
+Ljudeffekterna skapas i `audio.js` med Web Audio. Bakgrundsmusiken **Open Horizon** strömmas från `music/open-horizon.mp3`, upprepas och pausas med spelet. Den börjar efter tryck på Start. Musik och ljudeffekter kan stängas av i pausmenyn. `actor-motion.js` mjukar upp AI-rörelser och driver gånganimationen.
 
 Kör en lokal webbserver i repoets rot. Regeltest: `node waterwar/tests/rules.mjs`.
 Webbläsartesterna använder Playwright. Installera paketet lokalt eller ange sökvägen till dess ES-modul med `PLAYWRIGHT_MODULE`. `WATERWAR_URL` och `WATERWAR_OUTPUT` kan ändra adress och resultatmapp för testerna.

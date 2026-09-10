@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-6";
-import { View } from "./view.js?v=20260910-6";
-import { GameAudio } from "./audio.js?v=20260910-6";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-7";
+import { View } from "./view.js?v=20260910-7";
+import { GameAudio } from "./audio.js?v=20260910-7";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
@@ -42,7 +42,7 @@ function clearInput() {
   sim.input = { x: 0, z: 0 };
 }
 function newGame() {
-  audio.unlock();
+  audio.unlock(true);
   clearInput();
   for (const g of view.models.values()) view.disposeModel(g);
   for (const g of view.staticModels.values()) view.disposeModel(g);
@@ -54,7 +54,7 @@ function newGame() {
   renderUI();
 }
 $("start").onclick = () => {
-  audio.unlock();
+  audio.unlock(true);
   clearInput();
   sim.start();
   renderUI();
@@ -64,20 +64,21 @@ $("restart").onclick = newGame;
 function setPause() {
   if (sim.mode === "playing") {
     sim.mode = "paused";
+    audio.update(sim);
     clearInput();
     renderUI();
   }
 }
 $("pause").onclick = setPause;
 $("resume").onclick = () => {
-  audio.unlock();
+  audio.unlock(true);
   sim.mode = "playing";
   renderUI();
 };
 $("sound-toggle").onclick = () => { audio.toggleSound(); renderUI(); };
 $("music-toggle").onclick = () => { audio.toggleMusic(); renderUI(); };
 document.addEventListener("pointerdown", () => {
-  if (audio.context && audio.context.state !== "running") audio.unlock();
+  if (audio.context && audio.context.state !== "running") audio.unlock(sim.mode === "playing");
 }, { passive: true });
 $("fullscreen").onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen?.();
@@ -306,6 +307,7 @@ document.addEventListener("visibilitychange", () => {
     clearInput();
     if (sim.mode === "playing") setPause();
   }
+  audio.update(sim);
 });
 window.addEventListener("resize", () => view.resize());
 function renderUI() {

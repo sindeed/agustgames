@@ -1,0 +1,76 @@
+const { webkit } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+const out=process.env.WATERWAR_OUTPUT || '/tmp/waterwar-mp3-browser';await fs.mkdir(out,{recursive:true});
+const browser=await webkit.launch();const page=await browser.newPage({viewport:{width:1024,height:768},hasTouch:true,isMobile:true});
+const errors=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+await page.goto(process.env.WATERWAR_URL || 'http://127.0.0.1:8789/waterwar/');
+assert.equal(await page.locator('#menu button').count(),1);
+assert.equal(await page.evaluate(()=>!!__waterwar.audio.context),false,'no audio before gesture');
+await page.locator('#start').tap();
+await page.waitForFunction(()=>__waterwar.audio.context?.state==='running' && __waterwar.audio.active);
+await page.waitForFunction(()=>__waterwar.audio.musicElement?.currentTime > 0.3 && !__waterwar.audio.musicElement.paused);
+assert.equal(await page.evaluate(()=>__waterwar.audio.musicError),null);
+await page.evaluate(()=>{
+ advanceTime(0);const a=__waterwar.audio;window.audioMeter=a.context.createAnalyser();audioMeter.fftSize=2048;a.master.connect(audioMeter);
+});
+const energy=await page.evaluate(async()=>{
+ let peak=0,sum=0;const values=new Float32Array(2048);
+ for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,30));audioMeter.getFloatTimeDomainData(values);for(const v of values){peak=Math.max(peak,Math.abs(v));sum+=v*v;}}
+ return {peak,rms:Math.sqrt(sum/(10*2048))};
+});
+assert(energy.rms>1e-5,'audio graph produces non-silent music');assert(energy.peak<0.9,'conservative audio level');
+await page.locator('#hit').tap();
+await page.waitForFunction(()=>__waterwar.audio.played.swing>0);
+const kinds=['step','splash','swing','chop','metal','hit','bite','bow','break','build','whale','escape'];
+for(const kind of kinds){
+ await page.evaluate(kind=>{const s=__waterwar.sim;s.sound(kind);advanceTime(0);},kind);
+ await page.waitForTimeout(40);
+}
+const played=await page.evaluate(()=>({...__waterwar.audio.played}));
+for(const kind of kinds)assert(played[kind]>0,kind+' reaches audio renderer');
+await page.locator('#pause').tap();await page.waitForFunction(()=>!__waterwar.audio.active);
+const pausedAt=await page.evaluate(()=>__waterwar.audio.musicElement.currentTime);
+await page.waitForTimeout(200);
+assert.equal(await page.evaluate(()=>__waterwar.audio.musicElement.paused),true);
+assert(Math.abs(await page.evaluate(()=>__waterwar.audio.musicElement.currentTime)-pausedAt)<0.05,'pause preserves position');
+await page.locator('#resume').tap();
+await page.waitForFunction(t=>__waterwar.audio.musicElement.currentTime>t+0.1,pausedAt);
+await page.locator('#shop').tap();await page.waitForFunction(()=>__waterwar.audio.musicElement.paused);
+await page.locator('#close-shop').tap();await page.waitForFunction(()=>!__waterwar.audio.musicElement.paused);
+const track=await page.evaluate(()=>{const m=__waterwar.audio.musicElement;return {src:m.currentSrc,duration:m.duration,loop:m.loop}});
+assert(track.src.endsWith('/waterwar/music/open-horizon.mp3'));assert(track.duration>140 && track.duration<160);assert(track.loop);
+await page.evaluate(()=>{const m=__waterwar.audio.musicElement;m.currentTime=m.duration-0.3});
+await page.waitForFunction(()=>__waterwar.audio.musicElement.currentTime<2,null,{timeout:5000});
+await page.waitForFunction(()=>__waterwar.audio.musicElement.currentTime>0.4 && !__waterwar.audio.musicElement.paused);
+await page.locator('#pause').tap();await page.waitForFunction(()=>!__waterwar.audio.active);
+await page.locator('#music-toggle').tap();assert.equal(await page.locator('#music-toggle').innerText(),'Musik: av');
+await page.locator('#sound-toggle').tap();assert.equal(await page.locator('#sound-toggle').innerText(),'Ljud: av');
+await page.screenshot({path:out+'/audio-pause-ipad.png'});
+await page.locator('#resume').tap();await page.waitForTimeout(120);
+assert.equal(await page.evaluate(()=>__waterwar.audio.active),false,'mute persists after resume');
+await page.locator('#pause').tap();await page.locator('#sound-toggle').tap();await page.locator('#resume').tap();
+await page.waitForFunction(()=>__waterwar.audio.active);
+assert.equal(await page.evaluate(()=>__waterwar.audio.music),false,'effects can stay on while music is off');
+assert.equal(await page.evaluate(()=>__waterwar.audio.musicElement.paused),true,'MP3 remains paused while music disabled');
+await page.locator('#hit').tap();await page.waitForTimeout(120);
+assert.equal(await page.evaluate(()=>__waterwar.audio.musicElement.paused),true);
+await page.reload();await page.waitForFunction(()=>window.__waterwar);
+assert.equal(await page.evaluate(()=>__waterwar.audio.music),false,'music preference survives refresh');
+await page.locator('#start').tap();await page.waitForFunction(()=>__waterwar.audio.context?.state==='running');
+await page.locator('#pause').tap();await page.locator('#music-toggle').tap();
+await page.setViewportSize({width:768,height:1024});await page.screenshot({path:out+'/audio-pause-portrait.png'});
+await page.locator('#resume').tap();await page.waitForFunction(()=>!__waterwar.audio.musicElement.paused && __waterwar.audio.musicElement.currentTime>0.2);
+await page.evaluate(async()=>{
+ const a=__waterwar.audio;window.savedMusicElement=a.musicElement;
+ await a.context.suspend();__waterwar.sim.mode='paused';a.update(__waterwar.sim);__waterwar.render();
+});
+assert.equal(await page.evaluate(()=>__waterwar.audio.musicElement.paused),true,'pause works after Safari context suspension');
+await page.locator('#resume').tap();await page.waitForFunction(()=>!__waterwar.audio.musicElement.paused);
+await page.locator('#pause').tap();await page.locator('#restart').tap();await page.waitForFunction(()=>!__waterwar.audio.musicElement.paused);
+assert(await page.evaluate(()=>savedMusicElement===__waterwar.audio.musicElement),'restart reuses one music player');
+await page.evaluate(()=>{__waterwar.sim.mode='dead';__waterwar.audio.update(__waterwar.sim);__waterwar.render()});
+assert.equal(await page.evaluate(()=>__waterwar.audio.musicElement.paused),true,'music pauses on death');
+await page.locator('#retry').tap();await page.waitForFunction(()=>!__waterwar.audio.musicElement.paused);
+assert.deepEqual(errors,[]);await fs.writeFile(out+'/report.json',JSON.stringify({passed:true,track,energy,played,errors},null,2));
+console.log(JSON.stringify({passed:true,engine:'WebKit',track,energy,played,errors}));await browser.close();
