@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0c5667" />
+    <title>WaterWar · Agust Games</title>
+    <link rel="icon" href="../favicon.ico" />
+    <link rel="stylesheet" href="style.css?v=20260910-1" />
+  </head>
+  <body>
+    <canvas
+      id="game"
+      aria-label="WaterWar, ett äventyr på havet i första person"
+    ></canvas>
+    <section id="menu" class="screen">
+      <a class="back" href="../">‹ Agust Games</a>
+      <div class="title-card">
+        <div class="eyebrow">AGUST GAMES PRESENTERAR</div>
+        <div class="crest" aria-hidden="true">⚓</div>
+        <h1>WaterWar</h1>
+        <p class="tagline">DITT HAV. DIN FLOTTE. DITT ÄVENTYR.</p>
+        <div class="menu-instructions">
+          Börja med en liten flotte.<br />Bygg, utforska och håll utkik efter
+          valen.
+        </div>
+        <button id="start" class="primary">Start <span>▶</span></button>
+        <p class="controls-note">
+          Gå med spaken · Dra på skärmen för att titta<br />Dator: WASD / pilar
+          · Dra med musen · Mellanslag: slå
+        </p>
+        <small id="loading">Lastar havet…</small>
+      </div>
+    </section>
+    <div id="hud" hidden>
+      <header class="topbar">
+        <div class="health">
+          <span>♥</span><strong id="hp">100</strong>
+          <div class="health-track"><i id="hp-fill"></i></div>
+        </div>
+        <div class="resource">
+          <span class="wood-symbol">▰</span><strong id="wood">0</strong
+          ><small>TRÄ</small>
+        </div>
+        <div class="resource">
+          <span class="gold-symbol">▰</span><strong id="gold">0</strong
+          ><small>GULD</small>
+        </div>
+        <div class="compass">
+          <strong id="compass">N</strong><small id="daylight">Dag</small>
+        </div>
+        <button id="pause" class="icon-btn" aria-label="Pausa">Ⅱ</button>
+      </header>
+      <div id="mission" role="status" hidden>
+        <small>UPPDRAG</small><strong>Ta dig ut genom blåshålet!</strong
+        ><span id="mission-detail">Följ de ljusa stenarna uppåt.</span>
+      </div>
+      <div id="warning" role="alert" hidden>Valen kommer!</div>
+      <div id="crosshair" aria-hidden="true">+</div>
+      <div id="context"></div>
+      <div id="toast" role="status" hidden></div>
+      <div id="mode-label">SIMMAR</div>
+      <div id="joystick" aria-label="Spak för att gå eller styra flotten">
+        <span id="stick"></span>
+      </div>
+      <div id="equipped">
+        <span id="weapon-icon">⚒</span><strong id="weapon-name">Hammare</strong>
+      </div>
+      <button id="dispatch" hidden>ta vakten till båten</button>
+      <div id="actions">
+        <button id="switch" class="action"><span>↻</span>Byt</button>
+        <button id="build" class="action"><span>▦</span>Bygg</button>
+        <button id="shop" class="action"><span>◈</span>Shop</button>
+        <button id="hit" class="action hit"><span>⚔</span>Slå</button>
+      </div>
+      <section id="gallery" class="panel" hidden>
+        <header>
+          <div>
+            <small>BYGGLÄGE</small>
+            <h2>Bygggallerian</h2>
+          </div>
+          <button id="close-build" aria-label="Stäng byggläget">✕</button>
+        </header>
+        <div id="build-items"></div>
+        <p>
+          Välj en sak. Tryck där du vill bygga.<br />Grön markering = här går
+          det att bygga.
+        </p>
+      </section>
+    </div>
+    <section id="shop-screen" class="screen shop-screen" hidden>
+      <div class="shop-card">
+        <header>
+          <div>
+            <small>UTRUSTA DIN FLOTTE</small>
+            <h2>Shop</h2>
+          </div>
+          <button id="close-shop" aria-label="Stäng shop">✕</button>
+        </header>
+        <p id="shop-money"></p>
+        <div id="shop-items"></div>
+        <div id="skin-items"></div>
+        <p class="shop-help">
+          Vakter följer dig och försvarar flotten. Bygg en liten båt så kan de
+          åka ut och kriga.
+        </p>
+      </div>
+    </section>
+    <section id="pause-screen" class="screen" hidden>
+      <div class="dialog">
+        <h2>Paus</h2>
+        <p>Havet väntar på dig.</p>
+        <button id="resume" class="primary">Fortsätt</button
+        ><button id="fullscreen">Helskärm</button
+        ><button id="restart">Börja om</button><a href="../">Agust Games</a>
+      </div>
+    </section>
+    <section id="dead-screen" class="screen" hidden>
+      <div class="dialog">
+        <h2>Äventyret tog slut</h2>
+        <p>En ny flotte väntar på dig.</p>
+        <button id="retry" class="primary">Start</button
+        ><a href="../">Agust Games</a>
+      </div>
+    </section>
+    <div id="error" hidden></div>
+    <script type="module" src="game.js?v=20260910-1"></script>
+  </body>
+</html>

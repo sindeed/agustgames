@@ -279,6 +279,11 @@
       letter-spacing: 0.32em;
       text-shadow: none;
     }
+    .card.waterwar-card {position:relative;overflow:hidden;background:radial-gradient(ellipse at 90% 0%,#50bbbf66,transparent 60%),repeating-linear-gradient(175deg,transparent 0 26px,#71dae214 27px 28px),linear-gradient(145deg,#155366,#0b2f4a);border-color:#d9bf7c;}
+    .card.waterwar-card h2 {font-family:Georgia,serif;font-size:36px;color:#ffe2a0;letter-spacing:-.05em;text-shadow:0 2px 0 #735124;}
+    .card.waterwar-card p {color:#d2e4e8;}
+    .card.waterwar-card .play {background:linear-gradient(#ffe4a2,#e5b45b);color:#332b1d;}
+    .card.waterwar-card::after {content:"NYTT ÄVENTYR";position:absolute;top:15px;right:15px;font-size:9px;font-weight:900;letter-spacing:.1em;color:#ffe6a2;}
     footer { margin-top: 44px; color: #6b7384; font-size: 14px; }
   </style>
 </head>
@@ -287,6 +292,13 @@
   <p class="tagline">Spel gjorda av Agust 🎮</p>
 
   <div class="games">
+    <a class="card waterwar-card" href="waterwar/?v=20260910-1">
+      <div class="icon">🐋</div>
+      <h2>WaterWar</h2>
+      <p>Bygg din flotte, utforska öarna och styr över havet. Håll utkik efter hajar och den jättestora valen!</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
     <a class="card kingdoms-card" href="war-of-kingdoms/?v=20260830-treasure-choice">
       <div class="icon">🏰</div>
       <h2 class="kingdoms-title">WAR OF KINGDOMS</h2>

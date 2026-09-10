@@ -14,6 +14,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
+| WaterWar | [`waterwar/`](waterwar/) | Förstapersonsäventyr till havs: bygg en flotte, utforska öar, utrusta vakter och fly genom den jättestora valens blåshål. |
 | War of Kingdoms | [`war-of-kingdoms/`](war-of-kingdoms/) | Förstapersons-3D där du är kung. Bygg armén, försvara borg och gruva, kriga mot sex kungar och sök en skatt i det övergivna jätteslottets labyrint. |
 | Party Game | [`party-game/`](party-game/) | Färgglatt fysik-partyspel med spelaren och nio bottar. Utforska fredligt i Fred eller kör alla mot alla med kanoner, bilar och borgvapen i Fri. |
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |

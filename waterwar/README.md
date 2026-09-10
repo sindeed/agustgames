@@ -1,0 +1,22 @@
+# WaterWar
+
+Agusts förstapersonsspel på ett mycket stort hav, i samma 3D-stil som War of Kingdoms.
+
+- Starta i vattnet med hammare och svärd, en liten flotte, en soffa och två bord.
+- Gå med spaken och dra på skärmen för att titta. **Byt** väljer nästa ägda vapen.
+- **Slå** använder redskapet eller vapnet. Vid ratten används samma knapp för att börja/sluta styra.
+- **Bygg** öppnar bygggallerian. Välj en del och tryck på en plats att bygga den.
+- **Shop** säljer vapen och vakter. Skins låses upp vid 25 plattor.
+- Nära en egen vakt visas **ta vakten till båten** när både en egen båt och en annan flotte finns i närheten.
+- Valen kan komma både dag och natt. I magen är uppdraget att fly genom blåshålet.
+
+På dator: WASD/piltangenter, dra med musen, mellanslag för Slå, E/Tab för Byt, B för Bygg, P för Shop, Escape för paus.
+
+## Utveckling
+
+Ren HTML/CSS/JavaScript. `sim.js` innehåller spelregler, `view.js` 3D-scenen och `game.js` gränssnitt/styrning. Spelet återanvänder repoets MIT-licensierade Three.js från `war-of-kingdoms/vendor/`.
+
+Kör en lokal webbserver i repoets rot. Regeltest: `node waterwar/tests/rules.mjs`.
+Webbläsartesterna använder Playwright. Installera paketet lokalt eller ange sökvägen till dess ES-modul med `PLAYWRIGHT_MODULE`. `WATERWAR_URL` och `WATERWAR_OUTPUT` kan ändra adress och resultatmapp för testerna.
+
+Testkrokar: `render_game_to_text()` ger en JSON-snapshot och `advanceTime(ms)` stegar simuleringen deterministiskt. De ändrar inga externa data.
