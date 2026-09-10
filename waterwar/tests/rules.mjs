@@ -108,7 +108,7 @@ test("All six building types and their exact costs/health", () => {
   assert(s.build("strong", 0, 0));
   assert.equal(s.raft.parts.at(-1).hp, 200);
   assert(s.build("stairs", 0, 0));
-  assert(s.build("wall", 0, 0));
+  assert(s.build("wall", 1.5, 0));
   assert(s.build("boat", 5, 0));
   assert.equal(s.boats[0].hp, 100);
 });

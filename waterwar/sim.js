@@ -1,4 +1,4 @@
-export const VERSION = "20260910-3";
+export const VERSION = "20260910-4";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -176,7 +176,7 @@ export class Simulation {
     this.addPart(r, "floor", 0, 0, 0);
     return r;
   }
-  addPart(raft, type, x, z, y = 0) {
+  addPart(raft, type, x, z, y = 0, rotation = 0) {
     const p = {
       id: this.id("part"),
       raftId: raft.id,
@@ -184,6 +184,7 @@ export class Simulation {
       x,
       z,
       y,
+      rotation,
       hp: BUILD[type].hp,
       burning: 0,
       spread: 0,
@@ -372,22 +373,30 @@ export class Simulation {
     let blocked = false;
     for (const r of this.rafts) {
       if (r.zone !== actor.zone || dist(r, actor) > 80) continue;
-      for (const p of r.parts)
-        if (
-          (p.type === "wall" || p.type === "strong") &&
-          p.hp > 0 &&
-          actor.y >= p.y - 0.4 &&
-          actor.y < p.y + 3 &&
-          Math.abs(nx - r.x - p.x) < 1.65 &&
-          Math.abs(nz - r.z - p.z) < 0.37 &&
-          !(
-            Math.abs(actor.x - r.x - p.x) < 1.65 &&
-            Math.abs(actor.z - r.z - p.z) < 0.37
-          )
-        ) {
+      for (const p of r.parts) {
+        if (!['wall', 'strong'].includes(p.type) || p.hp <= 0 ||
+            actor.y < p.y - 0.4 || actor.y >= p.y + 3) continue;
+        const halfX = p.rotation ? 0.37 : 1.65,
+          halfZ = p.rotation ? 1.65 : 0.37,
+          x = actor.x - r.x - p.x,
+          z = actor.z - r.z - p.z;
+        // An actor already overlapping a newly built wall can step out.
+        if (Math.abs(x) < halfX && Math.abs(z) < halfZ) continue;
+        let enter = 0, leave = 1;
+        for (const [start, delta, half] of [[x, nx - actor.x, halfX], [z, nz - actor.z, halfZ]]) {
+          if (Math.abs(delta) < 1e-9) {
+            if (Math.abs(start) >= half) { enter = 2; break; }
+          } else {
+            const a = (-half - start) / delta, b = (half - start) / delta;
+            enter = Math.max(enter, Math.min(a, b));
+            leave = Math.min(leave, Math.max(a, b));
+          }
+        }
+        if (enter <= leave) {
           blocked = true;
           break;
         }
+      }
     }
     if (!blocked) {
       actor.x = nx;
@@ -449,6 +458,24 @@ export class Simulation {
     r.x += dx;
     r.z += dz;
   }
+  wallPlacement(x, z, y, raft) {
+    const localX = x - raft.x, localZ = z - raft.z;
+    let nearest = null, distance = Infinity;
+    for (const floor of raft.parts) {
+      if (floor.type !== "floor" || floor.hp <= 0 || floor.y !== y) continue;
+      for (const [dx, dz, rotation] of [[0, -1.5, 0], [1.5, 0, Math.PI / 2], [0, 1.5, 0], [-1.5, 0, Math.PI / 2]]) {
+        const ex = floor.x + dx, ez = floor.z + dz,
+          along = rotation ? Math.abs(localZ - ez) : Math.abs(localX - ex),
+          across = rotation ? Math.abs(localX - ex) : Math.abs(localZ - ez),
+          d = Math.hypot(across, Math.max(0, along - 1.5));
+        if (d < distance) {
+          distance = d;
+          nearest = { x: ex, z: ez, y, rotation };
+        }
+      }
+    }
+    return distance <= 1.6 ? nearest : null;
+  }
   canBuild(type, x, z, y = 0, raft = this.raft, owner = this.player) {
     if (!BUILD[type] || !raft || raft.zone !== owner.zone)
       return { ok: false, reason: "Du behöver din flotte här." };
@@ -460,6 +487,16 @@ export class Simulation {
       if (this.baseGround(x, z, raft.zone) > 0 && raft.zone === "sea")
         return { ok: false, reason: "Bygg båten på vattnet." };
       return { ok: true, x, z, y: 0 };
+    }
+    if (type === "wall" || type === "strong") {
+      const edge = this.wallPlacement(x, z, Math.max(0, Math.round(y / 3) * 3), raft);
+      if (!edge) return { ok: false, reason: "Placera väggen vid kanten av en platta." };
+      if (Math.hypot(edge.x, edge.z) > 72 || dist(owner, { x: raft.x + edge.x, z: raft.z + edge.z }) > 20)
+        return { ...edge, ok: false, reason: "Bygg närmare flotten." };
+      if (raft.parts.some((p) => ["wall", "strong"].includes(p.type) && p.hp > 0 &&
+          p.x === edge.x && p.z === edge.z && p.y === edge.y && (p.rotation || 0) === edge.rotation))
+        return { ...edge, ok: false, reason: "Det finns redan en vägg på den kanten." };
+      return { ...edge, ok: true };
     }
     const gx = Math.round((x - raft.x) / 3) * 3,
       gz = Math.round((z - raft.z) / 3) * 3,
@@ -527,7 +564,7 @@ export class Simulation {
         target: null,
         home: raft.id,
       });
-    } else this.addPart(raft, type, result.x, result.z, result.y);
+    } else this.addPart(raft, type, result.x, result.z, result.y, result.rotation || 0);
     this.sound("build", { x, z, zone: owner.zone });
     if (owner === this.player) this.event(`${BUILD[type].name} byggd!`);
     return true;
@@ -1059,7 +1096,8 @@ export class Simulation {
         }
         if (b.wood >= 5 && !r.parts.some((p) => p.type === "strong")) {
           b.wood -= 5;
-          this.addPart(r, "strong", -3, -3);
+          const floor = r.parts.find((p) => p.type === "floor");
+          this.addPart(r, "strong", floor.x, floor.z - 1.5, floor.y);
         }
         if (b.wood >= 3 && !r.parts.some((p) => p.type === "stairs")) {
           b.wood -= 3;
@@ -1067,7 +1105,8 @@ export class Simulation {
         }
         if (b.wood >= 2 && !r.parts.some((p) => p.type === "wall")) {
           b.wood -= 2;
-          this.addPart(r, "wall", 3, -3);
+          const floor = r.parts.find((p) => p.type === "floor");
+          this.addPart(r, "wall", floor.x + 1.5, floor.z, floor.y, Math.PI / 2);
         }
       }
     }
@@ -1612,6 +1651,7 @@ export class Simulation {
               x: a.x,
               z: a.z,
               y: a.y,
+              rotation: a.rotation || 0,
               hp: a.hp,
               burning: round(a.burning),
             })),

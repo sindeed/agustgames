@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-3";
-import { actorMotion } from "./actor-motion.js?v=20260910-3";
+import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-4";
+import { actorMotion } from "./actor-motion.js?v=20260910-4";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -439,6 +439,7 @@ export class View {
       g.userData.wheel = wheel;
     }
     g.position.set(p.x, p.y, p.z);
+    g.rotation.y = p.rotation || 0;
     return g;
   }
   makeBoat(b) {
@@ -1048,6 +1049,8 @@ export class View {
       let o = partHit.object;
       while (o && !o.userData.target) o = o.parent;
       const target = o.userData.target;
+      if (["wall", "strong"].includes(this.sim.selectedBuild))
+        return { x: partHit.point.x, z: partHit.point.z, y: target.entity.y };
       return {
         x: target.raft.x + target.entity.x,
         z: target.raft.z + target.entity.z,
@@ -1133,19 +1136,17 @@ export class View {
         this.ghost.visible = true;
         this.ghost.material.color.set(v.ok ? 0x8cffb4 : 0xff7466);
         const x =
-            v.ok && s.selectedBuild !== "boat"
+            Number.isFinite(v.x) && s.selectedBuild !== "boat"
               ? r.x + v.x
               : Math.round((point.x - r.x) / 3) * 3 + r.x,
           z =
-            v.ok && s.selectedBuild !== "boat"
+            Number.isFinite(v.z) && s.selectedBuild !== "boat"
               ? r.z + v.z
               : Math.round((point.z - r.z) / 3) * 3 + r.z;
-        this.ghost.position.set(x, 0.82 + point.y, z);
-        this.ghost.scale.set(
-          1,
-          ["wall", "strong"].includes(s.selectedBuild) ? 15 : 1,
-          1,
-        );
+        const wall = ["wall", "strong"].includes(s.selectedBuild);
+        this.ghost.position.set(x, (wall ? 2 : 0.82) + point.y, z);
+        this.ghost.rotation.y = wall ? v.rotation || 0 : 0;
+        this.ghost.scale.set(1, wall ? 2.5 / 0.14 : 1, wall ? 0.22 / 2.96 : 1);
       }
     }
     this.renderer.render(this.scene, this.camera);

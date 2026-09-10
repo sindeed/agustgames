@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-3";
-import { View } from "./view.js?v=20260910-3";
-import { GameAudio } from "./audio.js?v=20260910-3";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-4";
+import { View } from "./view.js?v=20260910-4";
+import { GameAudio } from "./audio.js?v=20260910-4";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
