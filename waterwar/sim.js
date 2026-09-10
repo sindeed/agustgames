@@ -1,4 +1,4 @@
-export const VERSION = "20260910-7";
+export const VERSION = "20260910-8";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;

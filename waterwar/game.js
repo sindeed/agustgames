@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-7";
-import { View } from "./view.js?v=20260910-7";
-import { GameAudio } from "./audio.js?v=20260910-7";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-8";
+import { View } from "./view.js?v=20260910-8";
+import { GameAudio } from "./audio.js?v=20260910-8";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
@@ -42,6 +42,7 @@ function clearInput() {
   sim.input = { x: 0, z: 0 };
 }
 function newGame() {
+  audio.selectMusic("sea");
   audio.unlock(true);
   clearInput();
   for (const g of view.models.values()) view.disposeModel(g);

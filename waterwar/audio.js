@@ -1,6 +1,9 @@
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const hz = (note) => 440 * 2 ** ((note - 69) / 12);
-const MUSIC_URL = new URL("./music/open-horizon.mp3", import.meta.url).href;
+const MUSIC_URLS = {
+  sea: new URL("./music/open-horizon.mp3", import.meta.url).href,
+  belly: new URL("./music/circuit-tension.mp3", import.meta.url).href,
+};
 const MUSIC_VOLUME = 0.18;
 
 export class GameAudio {
@@ -11,6 +14,8 @@ export class GameAudio {
     this.voices = 0;
     this.musicWanted = false;
     this.musicError = null;
+    this.musicTrack = "sea";
+    this.musicGeneration = 0;
     this.played = {};
     try {
       const saved = JSON.parse(localStorage.getItem("waterwar-audio") || "null");
@@ -39,9 +44,15 @@ export class GameAudio {
         this.musicElement = new Audio();
         this.musicElement.preload = "none";
         this.musicElement.loop = true;
-        this.musicElement.src = MUSIC_URL;
+        this.musicElement.src = MUSIC_URLS[this.musicTrack];
         this.musicSource = this.context.createMediaElementSource(this.musicElement);
         this.musicSource.connect(this.musicBus);
+        this.musicElement.addEventListener("playing", () => {
+          const gain = this.musicBus.gain, now = this.context.currentTime;
+          gain.cancelScheduledValues(now);
+          gain.setValueAtTime(0, now);
+          gain.setTargetAtTime(this.music ? MUSIC_VOLUME : 0, now, 0.12);
+        });
         this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
         const data = this.noiseBuffer.getChannelData(0);
         for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -53,6 +64,21 @@ export class GameAudio {
       // Audio must never prevent the game from starting.
     }
   }
+  selectMusic(zone) {
+    const track = zone === "belly" ? "belly" : "sea";
+    if (track === this.musicTrack) return;
+    this.musicTrack = track;
+    this.musicGeneration++;
+    this.musicPlayPending = null;
+    this.musicWanted = false;
+    this.musicError = null;
+    if (this.musicElement) {
+      // Keep the same gesture-unlocked Safari player when changing the song.
+      this.musicElement.pause();
+      this.musicElement.src = MUSIC_URLS[track];
+      this.musicElement.load();
+    }
+  }
   syncMusic(wanted, retry = false) {
     if (!this.musicElement || (wanted === this.musicWanted && !retry)) return;
     this.musicWanted = wanted;
@@ -62,15 +88,19 @@ export class GameAudio {
     }
     if (this.musicPlayPending) return;
     this.musicError = null;
+    const generation = this.musicGeneration;
     this.musicPlayPending = this.musicElement.play()
       .then(() => {
+        if (generation !== this.musicGeneration) return;
         if (!this.musicWanted) this.musicElement.pause();
       })
       .catch((error) => {
+        if (generation !== this.musicGeneration) return;
         // A missing file or denied autoplay must not interrupt the game or SFX.
         if (error.name !== "AbortError") this.musicError = error.name;
       })
       .finally(() => {
+        if (generation !== this.musicGeneration) return;
         this.musicPlayPending = null;
         // A quick pause/resume can cancel a play() that is still loading.
         if (this.musicWanted && this.musicElement.paused && !this.musicError)
@@ -161,6 +191,7 @@ export class GameAudio {
   }
   update(sim) {
     const events = sim.sounds.splice(0);
+    this.selectMusic(sim.player.zone);
     if (!this.context) return;
     const active = this.enabled && sim.mode === "playing" && !document.hidden;
     // Backgrounding can suspend Safari's context before visibilitychange runs.
