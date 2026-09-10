@@ -1,4 +1,4 @@
-export const VERSION = "20260910-4";
+export const VERSION = "20260910-5";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -122,6 +122,7 @@ export class Simulation {
       steering: null,
       skin: "sailor",
       invulnerable: 8,
+      healAt: null,
     };
     this.makeIslands();
     this.makeRaft(0, 0, 0);
@@ -309,6 +310,7 @@ export class Simulation {
       hostile: this.random() < 0.35,
       skin: "sailor",
       raftId: r.id,
+      healAt: null,
     };
     this.bots.push(bot);
     this.startFurniture(team, x, z);
@@ -785,8 +787,11 @@ export class Simulation {
   damage(actor, amount) {
     if (actor === this.whale) return;
     if (actor === this.player && actor.invulnerable > 0) return;
+    if (amount <= 0 || actor.hp <= 0) return;
     this.sound("hit", actor);
     actor.hp = Math.max(0, actor.hp - amount);
+    if (actor === this.player || this.bots.includes(actor))
+      actor.healAt = actor.hp > 0 ? this.time + 2 : null;
     if (actor.hp > 0) return;
     if (actor === this.player) {
       this.mode = "dead";
@@ -816,6 +821,15 @@ export class Simulation {
     };
     this.sharks.push(s);
     return s;
+  }
+  updateHealing() {
+    for (const actor of [this.player, ...this.bots]) {
+      if (actor.hp > 0 && actor.hp < 100 && Number.isFinite(actor.healAt) &&
+          this.time + 1e-9 >= actor.healAt) {
+        actor.hp = 100;
+        actor.healAt = null;
+      }
+    }
   }
   startWar(a, b) {
     if (a !== undefined && b !== undefined && a !== b)
@@ -1584,6 +1598,7 @@ export class Simulation {
     }
     this.updateProjectiles(dt);
     this.updateWhale(dt);
+    this.updateHealing();
     this.events = this.events.filter((e) => e.until > this.time);
     this.effects = this.effects.filter((e) => (e.life -= dt) > 0);
   }

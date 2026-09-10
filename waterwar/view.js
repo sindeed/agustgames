@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-4";
-import { actorMotion } from "./actor-motion.js?v=20260910-4";
+import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-5";
+import { actorMotion } from "./actor-motion.js?v=20260910-5";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
