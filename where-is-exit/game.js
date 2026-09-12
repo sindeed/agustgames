@@ -3,6 +3,7 @@ import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, i
 import { findRoute, rectangleConnection, findSurfaceRoute } from "./navigation.js?v=20260907-holes-1";
 import { createFactoryIntro, INTRO_TIMES } from "./intro.js?v=20260907-ending-1";
 import { createFactoryEnding } from "./ending.js?v=20260907-ending-2";
+import { FactoryMusic } from "./music.js?v=20260912-music-2";
 
 const canvas = document.getElementById("gameCanvas");
 const frameElement = canvas.closest(".canvas-frame");
@@ -23,6 +24,8 @@ const touchControls = document.getElementById("touchControls");
 const touchJoystick = document.getElementById("touchJoystick");
 const touchKnob = document.getElementById("touchKnob");
 const fullscreenButton = document.getElementById("fullscreenButton");
+const musicButton = document.getElementById("musicButton");
+const music = new FactoryMusic();
 const crosshair = document.getElementById("crosshair");
 const elevatorOverlay = document.getElementById("elevatorOverlay");
 const elevatorFloorButtons = document.getElementById("elevatorFloorButtons");
@@ -47,7 +50,7 @@ const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260907-floor6-stay-1";
+const VERSION = "20260912-music-2";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -1514,6 +1517,8 @@ function updatePrompt(dt) {
 
 function setModeUi() {
   const playing = state.mode === "playing";
+  music.setActive(playing);
+  updateMusicButton();
   introOverlay.hidden = state.mode !== 'intro';
   startOverlay.hidden = state.mode !== "menu";
   gameHud.hidden = !playing;
@@ -1553,6 +1558,7 @@ function startGame() {
   const seed = state.seed || 333;
   state = freshState(seed);
   state.mode = "playing";
+  music.restart();
   resetInputs();
   buildFloor(1);
   setModeUi();
@@ -1564,6 +1570,7 @@ function startGame() {
 
 function startIntro() {
   resetGame(state.seed || 333);
+  music.unlock(true);
   introFilm ||= createFactoryIntro(buildPlayerModel);
   introElapsed = 0;
   state.mode = 'intro';
@@ -2749,14 +2756,30 @@ function toggleFullscreen() {
   else frameElement.requestFullscreen?.();
 }
 
+function updateMusicButton() {
+  musicButton.textContent = music.enabled ? '♫' : '♫̸';
+  musicButton.setAttribute('aria-pressed', String(music.enabled));
+  musicButton.setAttribute('aria-label', music.enabled ? 'Stäng av musiken' : 'Slå på musiken');
+  musicButton.title = music.enabled ? 'Musik på' : 'Musik av';
+}
+
 function bindInputs() {
   startButton.addEventListener("click", startGame);
   introButton.addEventListener('click', startIntro);
   winMenuButton?.addEventListener("click", returnToMenu);
   elevatorCloseButton?.addEventListener("click", closeElevator);
   fullscreenButton?.addEventListener("click", toggleFullscreen);
+  musicButton.addEventListener('click', () => { music.toggle(); updateMusicButton(); });
+  const resumeMusic = () => { if (state.mode === 'playing') music.unlock(); };
+  document.addEventListener('pointerdown', resumeMusic, { capture: true, passive: true });
+  document.addEventListener('keydown', resumeMusic, { capture: true });
 
   window.addEventListener("keydown", (event) => {
+    if (event.target === musicButton && ['Space', 'Enter'].includes(event.code)) {
+      event.preventDefault();
+      if (!event.repeat) musicButton.click();
+      return;
+    }
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
     if (state.mode === 'intro') {
       if (event.code === 'Escape') returnToMenu();
@@ -3103,6 +3126,7 @@ function renderGameToText() {
   return JSON.stringify({
     version: state.version,
     mode: state.mode,
+    music: music.snapshot(),
     intro: state.mode === 'intro' ? introFilm.snapshot() : null,
     ending: endingFilm && (state.mode === 'ending' || state.mode === 'won') ? endingFilm.snapshot() : null,
     coordinateSystem: "Each floor has local y=0. x increases east/right, z increases south; yaw 0 looks north (-z).",
@@ -3213,6 +3237,7 @@ window.advanceTime = (milliseconds) => {
   render();
 };
 window.__whereIsExitTest = {
+  music,
   reset: ({ seed = 333 } = {}) => resetGame(seed),
   startGame,
   startIntro,

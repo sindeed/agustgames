@@ -760,6 +760,12 @@ a:focus-visible,
 
   .game-nav {
     top: max(92px, calc(env(safe-area-inset-top) + 92px));
+    display: grid;
+    grid-template-columns: repeat(2, 48px);
+  }
+
+  #musicButton {
+    grid-column: 2;
   }
 
   .hud-message {
@@ -811,7 +817,7 @@ a:focus-visible,
   }
 
   .hud-message {
-    top: max(184px, calc(env(safe-area-inset-top) + 184px));
+    top: max(208px, calc(env(safe-area-inset-top) + 208px));
     max-width: calc(100% - 24px);
   }
 
