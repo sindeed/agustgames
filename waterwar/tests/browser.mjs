@@ -276,9 +276,14 @@ await check(
     await page.screenshot({ path: out + "/belly-open.png" });
     await page.evaluate(() => {
       const s = __waterwar.sim;
-      s.player.x = 0;
-      s.player.z = -65;
-      s.player.y = 30;
+      const q = s.bellyQuests.get(0);
+      for (const stone of q.stones) {
+        Object.assign(s.player, {x:stone.x,z:stone.z,y:0,cooldown:0});
+        s.collectBellyStone(stone);
+      }
+      Object.assign(s.player, {x:q.site.x,z:q.site.z,y:0});
+      for (let i=0;i<5;i++) { s.player.cooldown=0; s.buildStoneStep(); }
+      Object.assign(s.player, {x:0,z:-65,y:5});
       advanceTime(200);
     });
     assert.equal(await page.evaluate(() => __waterwar.sim.player.zone), "sea");

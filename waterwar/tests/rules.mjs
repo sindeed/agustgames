@@ -272,20 +272,24 @@ test("Whale warns before swallowing, is immortal, takes raft and guards", () => 
   s.damage(s.whale, 10000);
   assert.equal(s.whale.hp, Infinity);
 });
+function buildEscapeStairs(s) {
+  const q = s.bellyQuests.get(0);
+  for (const stone of q.stones) {
+    Object.assign(s.player, { x: stone.x, z: stone.z, y: 0, cooldown: 0 });
+    assert(s.collectBellyStone(stone));
+  }
+  Object.assign(s.player, { x: q.site.x, z: q.site.z, y: 0 });
+  for (let i = 0; i < 5; i++) { s.player.cooldown = 0; assert(s.buildStoneStep()); }
+}
 test("Walkable belly route reaches blowhole, companions escape and mission clears", () => {
   const s = fresh();
   s.player.gold = 3;
   s.buy("sword", true);
   s.swallowRaft(s.raft);
-  s.player.x = 25;
-  s.player.z = 40;
-  s.player.y = 0;
+  buildEscapeStairs(s);
+  s.player.x = 0; s.player.z = -49; s.player.y = 0;
   s.input.z = -1;
-  step(s, 19.5);
-  assert(s.player.y >= 29);
-  s.input.z = 0;
-  s.input.x = -1;
-  step(s, 4.8);
+  step(s, 3);
   assert.equal(s.player.zone, "sea");
   assert.equal(s.raft.zone, "sea");
   assert.equal(s.guards[0].zone, "sea");
@@ -303,9 +307,10 @@ test("Enemy guard rescue is an interaction with hammer in belly", () => {
   g.z = s.player.z;
   assert(s.interact({ kind: "guard", entity: g, distance: 2 }));
   assert(g.escort);
+  buildEscapeStairs(s);
   s.player.x = 0;
   s.player.z = -65;
-  s.player.y = 30;
+  s.player.y = 5;
   s.escape();
   assert.equal(g.zone, "sea");
   assert.equal(s.rescued, 1);

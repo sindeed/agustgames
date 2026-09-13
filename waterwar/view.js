@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp } from "./sim.js?v=20260910-8";
-import { actorMotion } from "./actor-motion.js?v=20260910-8";
+import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint } from "./sim.js?v=20260913-1";
+import { actorMotion } from "./actor-motion.js?v=20260913-1";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -635,44 +635,14 @@ export class View {
       rib.rotation.z = 0;
       rib.scale.y = 0.85;
     }
-    this.box(this.belly, 25, 14.5, -12.5, 14, 1, 109, "ramp").rotation.x =
-      Math.atan(30 / 105);
-    this.box(this.belly, 12, 29.6, -65, 40, 0.8, 12, "ramp");
-    for (let j = 0; j < 24; j++) {
-      const z = 38 - j * 4.5,
-        y = clamp((40 - z) / 105, 0, 1) * 30;
-      for (const x of [19.5, 31])
-        this.sphere(
-          this.belly,
-          x,
-          y + 0.5,
-          z,
-          0.36,
-          0.24,
-          0.55,
-          this.mat("glow", 0xbce9e4, {
-            emissive: 0x548685,
-            emissiveIntensity: 0.65,
-          }),
-        );
-    }
-    for (let j = 0; j < 14; j++) {
-      const rock = this.mesh(
-        this.geometries.rock,
-        "rib",
-        this.belly,
-        -35 + Math.sin(j * 2.4) * 8,
-        1,
-        65 - j * 10,
-      );
-      rock.scale.set(2, 2, 3);
-    }
-    this.makeSign(this.belly, "BLÅSHÅLET →", 8, 4, 38, 3.1);
-    this.makeSign(this.belly, "↑ UT GENOM BLÅSHÅLET", 0, 34, -66, 3);
+    this.exitLanding = this.cylinder(this.belly, 0, 4.6, -65, 4, 0.8, "ramp", 20);
+    this.exitLanding.visible = false;
+    this.makeSign(this.belly, "SAMLA FEM STENAR", 0, 4, 35, 3.1);
+    this.makeSign(this.belly, "↑ BLÅSHÅLET", 0, 8, -66, 3);
     const hole = this.cylinder(
       this.belly,
       0,
-      32,
+      6.5,
       -65,
       5,
       0.3,
@@ -682,10 +652,10 @@ export class View {
     const shaft = this.cylinder(
       this.belly,
       0,
-      43,
+      30,
       -65,
       6.4,
-      22,
+      48,
       this.mat("shaft", 0x45616c, { side: THREE.BackSide }),
       24,
     );
@@ -703,7 +673,7 @@ export class View {
       new THREE.MeshBasicMaterial({ color: 0xc7efff }),
     );
     this.exitLight = new THREE.PointLight(0xc1eeff, 70, 40, 1);
-    this.exitLight.position.set(0, 34, -65);
+    this.exitLight.position.set(0, 9, -65);
     this.belly.add(this.exitLight);
   }
   disposeModel(g) {
@@ -898,6 +868,48 @@ export class View {
       g.position.set(a.x, a.y, a.z);
       g.lookAt(a.x + a.vx, a.y + a.vy, a.z + a.vz);
     }
+    this.exitLanding.visible = [...s.bellyQuests.values()].some(q => q.built === 5);
+    if (zone === "belly") for (const q of s.bellyQuests.values()) {
+      for (const stone of q.stones) {
+        if (stone.collected || q.exited) continue;
+        live.add(stone.id);
+        const g = this.syncModel(stone.id, () => {
+          const group = this.group();
+          const rock = this.mesh(this.geometries.rock, q.team === 0
+            ? this.mat("questStone", 0xc3eee8, { emissive: 0x386962, emissiveIntensity: 0.6 })
+            : this.materials.rib, group, 0, 0, 0);
+          rock.scale.set(0.85, 0.65, 0.85);
+          if (q.team === 0) group.userData.target = { kind: "questStone", entity: stone };
+          return group;
+        }, this.belly);
+        g.position.set(stone.x, stone.y, stone.z);
+      }
+      if (!q.exited && q.built < 5) {
+        const id = q.id + "-site"; live.add(id);
+        const g = this.syncModel(id, () => {
+          const group = this.group();
+          this.cylinder(group, 0, 0.08, 0, 1.6, 0.16, q.team === 0 ? "gold" : "rib", 12);
+          this.makeSign(group, q.team === 0 ? "STENTRAPPA · SLÅ" : "STENTRAPPA", 0, 1.5, 0, 1.35);
+          if (q.team === 0) group.userData.target = { kind: "stoneStair", entity: q };
+          return group;
+        }, this.belly);
+        g.position.set(q.site.x, 0, q.site.z); g.rotation.y = q.angle;
+      }
+      for (let i = 0; i < q.built; i++) {
+        const id = q.id + "-step-" + i; live.add(id);
+        const point = stoneStairPoint(q, i);
+        const g = this.syncModel(id, () => {
+          const group = this.group();
+          this.box(group, 0, point.y / 2, 0, 3.5, point.y, 2,
+            this.mat("stoneStep", 0xa5b2ac, { roughness: 1 }));
+          // The light edge makes each of the five stone steps readable in the dark.
+          this.box(group, 0, point.y + 0.025, 0.8, 3.3, 0.05, 0.16,
+            this.mat("stepEdge", 0xbce9e4, { emissive: 0x548685, emissiveIntensity: 0.5 }));
+          return group;
+        }, this.belly);
+        g.position.set(point.x, 0, point.z); g.rotation.y = q.angle;
+      }
+    }
     for (const [id, g] of this.models)
       if (!live.has(id)) {
         this.disposeModel(g);
@@ -1032,6 +1044,19 @@ export class View {
         ) {
           result = { kind: "resource", entity: r, distance, point: target };
         }
+      }
+    }
+    if (this.sim.player.zone === "belly") {
+      const q = this.sim.bellyQuests.get(0);
+      const targets = q ? [
+        ...q.stones.filter(s => !s.collected).map(s => ({ kind: "questStone", entity: s, x: s.x, y: s.y, z: s.z })),
+        ...(q.built < 5 ? [{ kind: "stoneStair", entity: q, x: q.site.x, y: 1.2, z: q.site.z }] : []),
+      ] : [];
+      for (const candidate of targets) {
+        const point = new THREE.Vector3(candidate.x, candidate.y, candidate.z),
+          delta = point.clone().sub(this.camera.position), distance = delta.length();
+        if (distance < 4.5 && delta.normalize().dot(this.ray.ray.direction) > 0.94 && (!result || result.distance > distance))
+          result = { kind: candidate.kind, entity: candidate.entity, distance, point };
       }
     }
     return result;

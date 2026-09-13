@@ -63,7 +63,11 @@ try {
   await page.waitForFunction(() => __waterwar.audio.musicElement.currentTime < 2, null, { timeout: 5000 });
   await playing("belly");
   await page.evaluate(() => {
-    const s = __waterwar.sim; Object.assign(s.player, { x: 0, z: -65, y: 30 });
+    const s = __waterwar.sim; const q = s.bellyQuests.get(0);
+    for (const stone of q.stones) { Object.assign(s.player, {x:stone.x,z:stone.z,y:0,cooldown:0}); s.collectBellyStone(stone); }
+    Object.assign(s.player, {x:q.site.x,z:q.site.z,y:0});
+    for (let i=0;i<5;i++) {s.player.cooldown=0;s.buildStoneStep();}
+    Object.assign(s.player, { x: 0, z: -65, y: 5 });
     s.updateWhale(0); advanceTime(0);
   });
   assert.equal(await page.evaluate(() => __waterwar.sim.player.zone), "sea", "blowhole escape switches back");

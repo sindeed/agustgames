@@ -11,7 +11,7 @@ Agusts förstapersonsspel på ett mycket stort hav, i samma 3D-stil som War of K
 - **Shop** säljer vapen och vakter. Skins låses upp vid 25 plattor.
 - Nära en egen vakt visas **ta vakten till båten** när både en egen båt och en annan flotte finns i närheten.
 - Vakter försvarar också mot hajar. Steg, slag, hugg och bett har ljud, och låg musik spelas i bakgrunden. Ljud och musik kan stängas av i pausmenyn.
-- Valen kan komma både dag och natt. I magen är uppdraget att fly genom blåshålet.
+- Valen kan komma både dag och natt. I magen: plocka upp fem ljusa stenar med **Slå**, gå till byggplatsen vid blåshålet och tryck **Slå** fem gånger. Gå uppför stentrappan; din flotte, dina vakter och närliggande småbåtar följer med ut utan skada från flykten. Andra besättningar kan anlända och strida mot varandra i magen.
 
 På dator: WASD/piltangenter, dra med musen, mellanslag för Slå, E/Tab för Byt, B för Bygg, P för Shop, Escape för paus.
 

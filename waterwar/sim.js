@@ -1,7 +1,12 @@
-export const VERSION = "20260910-8";
+export const VERSION = "20260913-1";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
+export const BLOWHOLE = { x: 0, z: -65, y: 5 };
+export function stoneStairPoint(quest, step = -1) {
+  const radius = 13 - step * 2;
+  return { x: Math.sin(quest.angle) * radius, z: -65 + Math.cos(quest.angle) * radius, y: Math.max(0, step + 1) };
+}
 export const BUILD = {
   floor: { name: "Vanlig platta", cost: 1, hp: 100 },
   wall: { name: "Vanlig vägg", cost: 2, hp: 100 },
@@ -91,6 +96,7 @@ export class Simulation {
     this.rescued = 0;
     this.replacements = 0;
     this.wars = new Set();
+    this.bellyQuests = new Map();
     this.current = { x: 0.09, z: -0.12, next: 30 };
     this.whale = {
       phase: "deep",
@@ -296,6 +302,7 @@ export class Simulation {
   spawnBot(slot) {
     const old = this.bots.find((b) => b.slot === slot);
     if (old) {
+      this.bellyQuests.delete(old.team);
       this.bots = this.bots.filter((b) => b !== old);
       this.rafts = this.rafts.filter((r) => r.team !== old.team);
       this.guards = this.guards.filter((g) => g.team !== old.team);
@@ -341,10 +348,16 @@ export class Simulation {
   }
   baseGround(x, z, zone) {
     if (zone === "belly") {
-      if (x > 18 && x < 33 && z < 43 && z > -69)
-        return clamp((40 - z) / 105, 0, 1) * 30;
-      if (x >= -6 && x <= 33 && z >= -72 && z <= -59) return 30;
-      return 0;
+      let height = 0;
+      for (const quest of this.bellyQuests.values()) {
+        const along = x * Math.sin(quest.angle) + (z + 65) * Math.cos(quest.angle),
+          across = x * Math.cos(quest.angle) - (z + 65) * Math.sin(quest.angle);
+        if (Math.abs(across) < 1.8)
+          for (let i = 0; i < quest.built; i++)
+            if (along >= 12 - i * 2 && along <= 14 - i * 2) height = Math.max(height, i + 1);
+        if (quest.built === 5 && Math.hypot(x, z + 65) < 4.05) height = 5;
+      }
+      return height;
     }
     let ground = -0.9;
     for (const i of this.islandCells.get(`${Math.floor(x / 128)},${Math.floor(z / 128)}`) || []) {
@@ -419,6 +432,7 @@ export class Simulation {
         }
       }
     }
+    if (actor.zone === "belly" && this.baseGround(nx, nz, "belly") > actor.y + 1.15) blocked = true;
     if (!blocked) {
       actor.x = nx;
       actor.z = nz;
@@ -686,6 +700,10 @@ export class Simulation {
     }
     if (!target) return false;
     const { kind, entity, raft, distance = Infinity } = target;
+    if (distance < 4.5 && p.zone === "belly") {
+      if (kind === "questStone") return this.collectBellyStone(entity, p);
+      if (kind === "stoneStair") return this.buildStoneStep(p);
+    }
     if (
       kind === "part" &&
       entity.type === "wheel" &&
@@ -1006,9 +1024,16 @@ export class Simulation {
       b.cooldown = Math.max(0, b.cooldown - dt);
       b.age += dt;
       if (b.zone === "belly") {
-        const enemy = this.nearestEnemy(b, 10);
-        if (enemy && b.cooldown === 0) this.aiAttack(b, enemy);
-        else this.escapeAI(b, dt);
+        const quest = this.bellyQuests.get(b.team);
+        if (b.hostile && quest && this.time - quest.enteredAt > 5) {
+          const encounter = this.nearestEnemy(b, 30, true);
+          if (encounter) this.startWar(b.team, encounter.team);
+        }
+        const enemy = this.nearestEnemy(b, 45);
+        if (enemy) {
+          if (dist(b, enemy) > WEAPONS[b.weapon].reach * 0.85) this.moveToward(b, enemy, 3.5, dt);
+          this.aiAttack(b, enemy);
+        } else this.escapeAI(b, dt);
         continue;
       }
       const r = this.rafts.find((r) => r.id === b.raftId);
@@ -1235,8 +1260,6 @@ export class Simulation {
       } else if (dist(g, owner) > 3) {
         this.moveToward(g, owner, 5, dt);
       }
-      if (g.zone === "belly" && g.y >= 27 && dist(g, { x: 0, z: -65 }) < 6)
-        this.escapeActor(g);
     }
   }
   updateBoats(dt) {
@@ -1368,45 +1391,82 @@ export class Simulation {
     this.event("Valen kommer!");
     this.sound("whale");
   }
+  beginBellyQuest(team, origin) {
+    const previous = this.bellyQuests.get(team);
+    if (previous && !previous.exited) return previous;
+    const quest = {
+      id: this.id("bellyQuest"), team, angle: team === 0 ? 0 : (team * 2.3999632297) % TAU,
+      enteredAt: this.time, collected: 0, built: 0, exited: false, stones: [],
+    };
+    for (let i = 0; i < 5; i++) quest.stones.push({
+      id: this.id("bellyStone"), team, zone: "belly", collected: false,
+      x: clamp(origin.x + (i === 4 ? 0 : i % 2 ? 6 : -6), -40, 40),
+      z: clamp(origin.z - 8 - i * 6, -35, 65), y: 0.65,
+    });
+    quest.site = { ...stoneStairPoint(quest), zone: "belly", team };
+    this.bellyQuests.set(team, quest);
+    return quest;
+  }
+  collectBellyStone(stone, actor = this.player) {
+    const q = this.bellyQuests.get(actor.team);
+    if (actor.zone !== "belly" || !q || !q.stones.includes(stone) || stone.collected ||
+        actor.cooldown > 0 || dist(actor, stone) >= 4.5 || Math.abs(actor.y - stone.y) > 3) return false;
+    stone.collected = true;
+    q.collected++;
+    actor.cooldown = 0.3;
+    this.sound("metal", actor);
+    if (actor === this.player) this.event(q.collected === 5 ? "Fem stenar! Gå till byggplatsen vid blåshålet." : `Stenar: ${q.collected}/5`);
+    return true;
+  }
+  buildStoneStep(actor = this.player) {
+    const q = this.bellyQuests.get(actor.team);
+    if (actor.zone !== "belly" || !q || actor.cooldown > 0 || dist(actor, q.site) >= 4.5 || actor.y > 3) return false;
+    if (q.collected < 5) {
+      if (actor === this.player) this.event(`Samla alla fem stenar först: ${q.collected}/5.`);
+      return true;
+    }
+    if (q.built >= 5) return false;
+    q.built++;
+    actor.cooldown = 0.45;
+    this.sound("build", actor);
+    if (actor === this.player) this.event(q.built === 5 ? "Stentrappan är klar! Gå upp genom blåshålet." : `Stentrappa: ${q.built}/5 · Tryck Slå igen`);
+    return true;
+  }
+  canEscape(actor) {
+    return actor.zone === "belly" && this.bellyQuests.get(actor.team)?.built === 5 &&
+      actor.y >= 4.5 && dist(actor, BLOWHOLE) < 4.8;
+  }
   swallowRaft(r) {
     if (r.zone === "belly") return;
     const old = { x: r.x, z: r.z };
     const index = this.whale.swallows++ % 6;
-    const nx = -20 + (index % 3) * 19,
-      nz = 45 - Math.floor(index / 3) * 22;
+    const nx = -20 + (index % 3) * 19, nz = 45 - Math.floor(index / 3) * 22;
     r.zone = "belly";
-    r.x = nx;
-    r.z = nz;
-    r.returnPos = old;
-    for (const a of [this.player, ...this.bots, ...this.guards])
-      if (
-        a.zone === "sea" &&
-        dist(a, old) <
-          Math.max(25, ...r.parts.map((p) => Math.hypot(p.x, p.z) + 8))
-      ) {
-        a.zone = "belly";
-        a.x = nx + clamp(a.x - old.x, -7, 7);
-        a.z = nz + clamp(a.z - old.z, -7, 7);
-        a.y = 0.72;
-        a.boatId = null;
-        a.boarding = null;
-        a.raidTarget = null;
-        a.steering = null;
-        if (a === this.player) {
-          this.building = false;
-          a.swim = 0;
-          a.invulnerable = 5;
-          this.event("Du är i valens mage! Ta dig ut genom blåshålet.");
-        }
+    r.x = nx; r.z = nz; r.returnPos = old;
+    // Transfer each fleet together; adjacent rafts keep their own crews.
+    for (const a of [this.player, ...this.bots, ...this.guards]) {
+      if (a.zone !== "sea" || a.team !== r.team) continue;
+      const aboardBoat = a.boatId && this.boats.some(b => b.id === a.boatId && dist(b, old) < 90);
+      if (a !== this.player && a.slot === undefined && !aboardBoat &&
+          dist(a, old) >= Math.max(25, ...r.parts.map(p => Math.hypot(p.x, p.z) + 8))) continue;
+      a.zone = "belly";
+      a.x = nx + clamp(a.x - old.x, -7, 7);
+      a.z = nz + clamp(a.z - old.z, -7, 7);
+      a.y = 0.72;
+      a.boarding = null; a.raidTarget = null; a.steering = null;
+      if (a === this.player || a.slot !== undefined) this.beginBellyQuest(a.team, a);
+      if (a === this.player) {
+        this.building = false; a.swim = 0; a.invulnerable = 5;
+        this.event("Du är i valens mage! Samla fem stenar med Slå.");
       }
-    for (const b of this.boats)
-      if (b.zone === "sea" && dist(b, old) < 90) {
-        b.zone = "belly";
-        b.x = nx + 8;
-        b.z = nz;
-        b.crew = [];
-        b.target = null;
+    }
+    for (const b of this.boats) {
+      if (b.zone !== "sea" || b.team !== r.team || dist(b, old) >= 90) continue;
+      b.zone = "belly"; b.x = nx + 8; b.z = nz; b.target = null;
+      for (const g of this.guards.filter(g => g.boatId === b.id)) {
+        g.x = b.x; g.z = b.z; g.y = 0.65;
       }
+    }
   }
   escapeActor(a) {
     a.zone = "sea";
@@ -1423,59 +1483,55 @@ export class Simulation {
     }
     if (a === this.player) a.invulnerable = 10;
   }
-  escape() {
-    const p = this.player;
-    const companions = this.guards.filter(
-      (g) => g.zone === "belly" && (g.team === 0 || g.escort),
-    );
-    this.escapeActor(p);
-    const r = this.raft;
-    if (r?.zone === "belly") {
-      r.zone = "sea";
-      r.x = p.x;
-      r.z = p.z;
-      p.y = this.ground(p.x, p.z, "sea").height;
+  escapeCrew(captain) {
+    if (!this.canEscape(captain)) return false;
+    const team = captain.team, q = this.bellyQuests.get(team);
+    const companions = this.guards.filter(g => g.zone === "belly" &&
+      (g.team === team || (team === 0 && g.escort)));
+    const boats = this.boats.filter(b => b.team === team && b.zone === "belly");
+    const boatAssignments = new Map(companions.map(g => [g.id, g.boatId]));
+    this.escapeActor(captain);
+    const r = this.rafts.find(r => r.team === team && r.zone === "belly");
+    if (r) {
+      r.zone = "sea"; r.x = captain.x; r.z = captain.z;
+      const floor = r.parts.find(part => part.type === "floor");
+      if (floor) { captain.x += floor.x; captain.z += floor.z; captain.y = 0.72 + floor.y; }
     }
-    for (const g of companions) {
+    boats.forEach((b, i) => { b.zone = "sea"; b.x = captain.x + 9 + i * 5; b.z = captain.z; b.target = null; });
+    companions.forEach((g, i) => {
       this.escapeActor(g);
-      g.x = p.x + (this.random() - 0.5) * 4;
-      g.z = p.z + (this.random() - 0.5) * 4;
-      g.y = p.y;
-    }
-    for (const b of this.boats.filter(
-      (b) => b.team === 0 && b.zone === "belly",
-    )) {
-      b.zone = "sea";
-      b.x = p.x + 9;
-      b.z = p.z;
-    }
-    this.event("Ut genom blåshålet! Du och dina vakter är fria!");
-    this.sound("escape");
-    this.whale.timer = Math.max(this.whale.timer, 70);
-  }
-  escapeAI(a, dt) {
-    const target =
-      a.z > 40
-        ? { x: 25, z: 40 }
-        : a.x < 18 && a.y < 25
-          ? { x: 25, z: a.z }
-          : a.y < 29
-            ? { x: 25, z: -65 }
-            : { x: 0, z: -65 };
-    this.moveToward(a, target, 3.5, dt);
-    if (a.y >= 27 && dist(a, { x: 0, z: -65 }) < 5) {
-      const team = a.team;
-      this.escapeActor(a);
-      const r = this.rafts.find((r) => r.team === team);
-      if (r?.zone === "belly") {
-        r.zone = "sea";
-        r.x = a.x;
-        r.z = a.z;
+      const boat = boats.find(b => b.id === boatAssignments.get(g.id));
+      if (boat) {
+        g.boatId = boat.id; g.x = boat.x; g.z = boat.z; g.y = 0.65;
+      } else {
+        const floors = r?.parts.filter(part => part.type === "floor") || [];
+        const floor = floors[i % Math.max(1, floors.length)];
+        g.x = floor ? r.x + floor.x : captain.x;
+        g.z = floor ? r.z + floor.z : captain.z;
+        g.y = floor ? 0.72 + floor.y : captain.y;
       }
-      for (const g of this.guards.filter(
-        (g) => g.team === team && g.zone === "belly" && !g.escort,
-      ))
-        this.escapeActor(g);
+    });
+    q.exited = true;
+    if (captain === this.player) {
+      this.event("Ut genom blåshålet! Flotten och vakterna följer med!");
+      this.sound("escape");
+      this.whale.timer = Math.max(this.whale.timer, 70);
+    }
+    return true;
+  }
+  escape() { return this.escapeCrew(this.player); }
+  escapeAI(a, dt) {
+    const q = this.bellyQuests.get(a.team) || this.beginBellyQuest(a.team, a);
+    if (q.collected < 5) {
+      const stone = q.stones.filter(s => !s.collected).sort((b, c) => dist(a, b) - dist(a, c))[0];
+      if (this.moveToward(a, stone, 3.5, dt) < 2.8) this.collectBellyStone(stone, a);
+    } else if (q.built < 5) {
+      if (this.moveToward(a, q.site, 3.5, dt) < 2.8) this.buildStoneStep(a);
+    } else {
+      if (dist(a, q.site) < 0.8) q.climbing = true;
+      const target = q.climbing ? BLOWHOLE : q.site;
+      this.moveToward(a, target, 3.5, dt);
+      this.escapeCrew(a);
     }
   }
   updateWhale(dt) {
@@ -1502,6 +1558,7 @@ export class Simulation {
           this.player.y = 0;
           this.player.steering = null;
           this.player.swim = 0;
+          this.beginBellyQuest(0, this.player);
         }
         const other = this.rafts
           .filter((r) => r.team !== 0 && r.zone === "sea")
@@ -1515,7 +1572,7 @@ export class Simulation {
         w.mouth = false;
       }
     }
-    if (this.player.zone === "belly") {
+    if ([this.player, ...this.bots].some(a => a.zone === "belly")) {
       w.nextMouth -= dt;
       if (w.nextMouth < 0) {
         w.mouth = !w.mouth;
@@ -1529,9 +1586,7 @@ export class Simulation {
       }
     }
     if (
-      this.player.zone === "belly" &&
-      this.player.y >= 27 &&
-      dist(this.player, { x: 0, z: -65 }) < 5
+      this.canEscape(this.player)
     )
       this.escape();
   }
@@ -1657,6 +1712,7 @@ export class Simulation {
         hp: p.hp,
         wood: p.wood,
         gold: p.gold,
+        stones: (this.bellyQuests.get(0)?.collected || 0) - (this.bellyQuests.get(0)?.built || 0),
         weapon: p.weapon,
         weapons: p.weapons,
         skin: p.skin,
@@ -1735,7 +1791,13 @@ export class Simulation {
         mouthOpen: this.whale.mouth,
         ...pos(this.whale),
       },
-      mission: p.zone === "belly" ? "Ta dig ut genom blåshålet!" : null,
+      mission: p.zone === "belly" ? "Samla fem stenar och bygg stentrappan till blåshålet!" : null,
+      stoneQuest: p.zone === "belly" && this.bellyQuests.has(0) ? {
+        collected: this.bellyQuests.get(0).collected,
+        built: this.bellyQuests.get(0).built,
+        site: this.bellyQuests.get(0).site,
+        stones: this.bellyQuests.get(0).stones.filter(s => !s.collected).map(s => ({ id: s.id, ...pos(s) })),
+      } : null,
       rescued: this.rescued,
       arrows: this.arrows.length,
       toast: this.events.at(-1)?.message || null,

@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260910-8";
-import { View } from "./view.js?v=20260910-8";
-import { GameAudio } from "./audio.js?v=20260910-8";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260913-1";
+import { View } from "./view.js?v=20260913-1";
+import { GameAudio } from "./audio.js?v=20260913-1";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
@@ -124,6 +124,7 @@ function hit() {
   const target = view.pick();
   const direction = view.camera.getWorldDirection(view.tmp);
   sim.attack(target, { x: direction.x, y: direction.y, z: direction.z });
+  if (target?.kind === "questStone" || target?.kind === "stoneStair") held = false;
   renderUI();
 }
 $("hit").addEventListener("pointerdown", (e) => {
@@ -337,6 +338,12 @@ function renderUI() {
   ];
   $("warning").hidden = sim.whale.phase !== "warning" || p.zone === "belly";
   $("mission").hidden = p.zone !== "belly";
+  const quest = sim.bellyQuests.get(0);
+  if (p.zone === "belly" && quest) $("mission-detail").textContent = quest.collected < 5
+    ? `Stenar: ${quest.collected}/5 · Sikta på en ljus sten och tryck Slå`
+    : quest.built < 5
+      ? `Stentrappa: ${quest.built}/5 · Tryck Slå vid byggplatsen`
+      : "Stentrappan är klar! Gå upp · Flotten och vakterna följer med";
   $("mode-label").textContent = p.steering
     ? "STYR FLOTTEN"
     : p.zone === "belly"
@@ -370,7 +377,9 @@ function renderUI() {
   if (p.steering) context = "Styr med spaken · Slå för att släppa ratten";
   else if (sim.building) context = "Tryck där du vill bygga";
   else if (target && target.distance < 8) {
-    if (target.kind === "resource") {
+    if (target.kind === "questStone") context = "Plocka upp sten · Slå";
+    else if (target.kind === "stoneStair") context = quest?.collected < 5 ? "Byggplats · Samla fem stenar först" : `Bygg stentrappa · Slå · ${quest?.built || 0}/5`;
+    else if (target.kind === "resource") {
       const r = target.entity,
         name = {
           sofa: "Soffa · 2 trä",
