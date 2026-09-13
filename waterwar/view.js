@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint } from "./sim.js?v=20260913-1";
-import { actorMotion } from "./actor-motion.js?v=20260913-1";
+import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint } from "./sim.js?v=20260913-2";
+import { actorMotion } from "./actor-motion.js?v=20260913-2";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -1168,7 +1168,7 @@ export class View {
       const point = this.buildPoint();
       if (point) {
         const v = s.canBuild(s.selectedBuild, point.x, point.z, point.y);
-        const r = s.raft;
+        const r = v.origin || s.raft;
         this.ghost.visible = true;
         this.ghost.material.color.set(v.ok ? 0x8cffb4 : 0xff7466);
         const x =

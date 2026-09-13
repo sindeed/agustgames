@@ -8,6 +8,7 @@ Agusts förstapersonsspel på ett mycket stort hav, i samma 3D-stil som War of K
 - Gå med spaken och dra på skärmen för att titta. **Byt** väljer nästa ägda vapen.
 - **Slå** använder redskapet eller vapnet. Vid ratten används samma knapp för att börja/sluta styra.
 - **Bygg** öppnar bygggallerian. Välj en del och tryck på en plats att bygga den.
+- Om hela flotten förstörs: välj **Bygg → Vanlig platta** och tryck på vattnet nära dig. En ny flotte kostar **1 trä** och kan sedan byggas större.
 - **Shop** säljer vapen och vakter. Skins låses upp vid 25 plattor.
 - Nära en egen vakt visas **ta vakten till båten** när både en egen båt och en annan flotte finns i närheten.
 - Vakter försvarar också mot hajar. Steg, slag, hugg och bett har ljud, och låg musik spelas i bakgrunden. Ljud och musik kan stängas av i pausmenyn.

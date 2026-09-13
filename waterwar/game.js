@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260913-1";
-import { View } from "./view.js?v=20260913-1";
-import { GameAudio } from "./audio.js?v=20260913-1";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260913-2";
+import { View } from "./view.js?v=20260913-2";
+import { GameAudio } from "./audio.js?v=20260913-2";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
@@ -88,6 +88,8 @@ $("fullscreen").onclick = () => {
 function toggleBuild() {
   if (sim.mode !== "playing") return;
   sim.building = !sim.building;
+  if (sim.building && !sim.raft.parts.some((p) => p.hp > 0))
+    sim.selectedBuild = "floor";
   sim.player.steering = null;
   held = false;
   renderUI();

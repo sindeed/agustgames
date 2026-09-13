@@ -1,4 +1,4 @@
-export const VERSION = "20260913-1";
+export const VERSION = "20260913-2";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -512,10 +512,20 @@ export class Simulation {
     return distance <= 1.6 ? nearest : null;
   }
   canBuild(type, x, z, y = 0, raft = this.raft, owner = this.player) {
-    if (!BUILD[type] || !raft || raft.zone !== owner.zone)
+    if (!BUILD[type] || !raft)
+      return { ok: false, reason: "Du behöver din flotte här." };
+    const rebuilding = type === "floor" && !raft.parts.some((p) => p.hp > 0);
+    if (raft.zone !== owner.zone && !rebuilding)
       return { ok: false, reason: "Du behöver din flotte här." };
     if (owner.wood < BUILD[type].cost)
       return { ok: false, reason: `Du behöver ${BUILD[type].cost} trä.` };
+    if (rebuilding) {
+      if (dist(owner, { x, z }) > 20)
+        return { ok: false, reason: "Bygg den nya flotten närmare dig." };
+      if (y !== 0 || (owner.zone === "sea" && this.baseGround(x, z, "sea") > 0))
+        return { ok: false, reason: "Bygg den första plattan på vattnet." };
+      return { ok: true, x: 0, z: 0, y: 0, origin: { x, z, zone: owner.zone } };
+    }
     if (type === "boat") {
       if (dist(owner, { x, z }) > 18)
         return { ok: false, reason: "Bygg båten närmare dig." };
@@ -586,6 +596,8 @@ export class Simulation {
       return false;
     }
     owner.wood -= BUILD[type].cost;
+    // An empty raft keeps its identity, but its new first tile starts here.
+    if (result.origin) Object.assign(raft, result.origin);
     if (type === "boat") {
       this.boats.push({
         id: this.id("boat"),
@@ -601,7 +613,7 @@ export class Simulation {
       });
     } else this.addPart(raft, type, result.x, result.z, result.y, result.rotation || 0);
     this.sound("build", { x, z, zone: owner.zone });
-    if (owner === this.player) this.event(`${BUILD[type].name} byggd!`);
+    if (owner === this.player) this.event(result.origin ? "Ny flotte byggd!" : `${BUILD[type].name} byggd!`);
     return true;
   }
   buy(type, guard = false, owner = this.player) {
@@ -1058,6 +1070,8 @@ export class Simulation {
       b.think -= dt;
       if (b.think > 0) continue;
       b.think = 0.65;
+      if (b.wood >= 1 && !r.parts.some((p) => p.hp > 0))
+        this.build("floor", b.x, b.z, 0, b, r);
       let res = null, nearestDistance = Infinity;
       for (const candidate of this.resources) {
         if (!candidate.active || candidate.zone !== b.zone) continue;
@@ -1077,6 +1091,7 @@ export class Simulation {
       }
       if (
         b.wood >= 1 &&
+        r.parts.some((p) => p.hp > 0) &&
         r.parts.filter((p) => p.type === "floor").length < 35
       ) {
         const n = r.parts.filter((p) => p.type === "floor").length;
