@@ -66,7 +66,7 @@ export class GameAudio {
     }
   }
   selectMusic(zone, diving = false) {
-    const track = zone === "belly" || zone === "throat" ? "belly" : diving ? "deep" : "sea";
+    const track = zone === "belly" || zone === "throat" ? "belly" : zone === "ship" || diving ? "deep" : "sea";
     if (track === this.musicTrack) return;
     this.musicTrack = track;
     this.musicGeneration++;

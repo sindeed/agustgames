@@ -825,15 +825,37 @@ h2 {
   z-index: 6;
   font-size: 16px;
 }
-#dive {
+#depth-controls {
   position: absolute;
-  left: 28px;
-  bottom: 150px;
+  left: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 10px;
   z-index: 6;
+}
+#depth-controls button {
   background: linear-gradient(#82dded, #237a9c);
   border: 2px solid #c7fbff;
   color: #062d40;
   font-weight: 900;
+  min-width: 96px;
+  min-height: 52px;
+  touch-action: none;
+}
+#depth-controls span {
+  font-size: 18px;
+}
+#ship-action {
+  position: absolute;
+  left: 50%;
+  top: 59%;
+  transform: translateX(-50%);
+  background: linear-gradient(#ffe2a0, #d2a258);
+  color: #342815;
+  border: 2px solid #ffe4a0;
+  z-index: 6;
+  font-size: 16px;
 }
 #actions {
   gap: 9px;
@@ -891,7 +913,9 @@ h2 {
     width: 210px;
     font-size: 14px;
   }
-  #dive { left: 18px; bottom: 130px; }
+  #depth-controls { left: 14px; }
+  #depth-controls button { min-width: 84px; min-height: 48px; }
+  #ship-action { top: 60%; width: 220px; font-size: 14px; }
   #joystick {
     bottom: 40px;
   }

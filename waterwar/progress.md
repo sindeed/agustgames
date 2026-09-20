@@ -139,3 +139,9 @@ Original prompt: Agust dictated WaterWar, asked to build and publish it in Agust
 - Added an unchanged copied `Circuit Warmth A` MP3 for diving, selected from the archive catalog's warm electronic description. The source library was not modified. Blender 5.2.2 preview is at `art/waterwar-blender-style-preview.blend`.
 - Verified: deterministic depth test; full core rules; stone escape; healing; walls; guard/shark defense; island coverage; Chromium browser flow; deep browser flow; official client screenshot/state; and WebKit iPad-size smoke test. No browser errors in passing suites.
 - Published commit `603cc24` with the Sindeed account. Live `sim.js?v=20260920-1` reports the correct version and the live deep browser flow passes: Dive/Up, raft following, deep whale approach, five-second throat and belly arrival. Ready for an iPad page refresh.
+
+## Water depth controls and pirate ship doors, 2026-09-20
+
+- Replaced the one-tap dive control with two held iPad buttons at left-middle: **Upp** floats toward the surface and **Ner** floats toward the deep. They are only visible while the player is in water.
+- The sunken pirate ship now has a deliberate centre-screen entrance action, deck entry, a walkable roof reached from its stair, and a contextual exit. Its four-by-four large-room layout has visible framed doors and matching collision walls: walls stop the player and door gaps allow passage.
+- Added deterministic and browser checks for both depth directions, raft following, deliberate ship entry, wall/door collision, roof, exit, five-second whale throat and belly arrival. Local publication verification is still pending.

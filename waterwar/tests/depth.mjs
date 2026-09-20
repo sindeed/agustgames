@@ -20,6 +20,39 @@ const step = (s, seconds) => {
 {
   const s = new Simulation();
   s.start();
+  assert(s.setDiveDirection(-1));
+  step(s, 1);
+  assert(s.player.y < -6, "Ner moves the swimmer down through the water");
+  assert(s.player.diving);
+  assert(s.setDiveDirection(1));
+  step(s, 3);
+  assert(s.player.y >= -0.9, "Upp reaches the surface or the raft floating on it");
+  assert.equal(s.player.diving, false);
+}
+{
+  const s = new Simulation();
+  s.start();
+  Object.assign(s.player, { x: PIRATE_SHIP.x, z: PIRATE_SHIP.z + 74, y: DEEP_Y, diving: true });
+  assert(s.enterPirateShip(), "the nearby wreck has a deliberate enter action");
+  assert.equal(s.player.zone, "ship");
+  s.player.x = PIRATE_SHIP.x - 40;
+  s.player.z = PIRATE_SHIP.z;
+  s.move(s.player, 30, 0);
+  assert.equal(s.player.x, PIRATE_SHIP.x - 40, "a ship wall blocks movement outside a door");
+  s.player.z = PIRATE_SHIP.z + 16.5;
+  s.move(s.player, 30, 0);
+  assert(s.player.x > PIRATE_SHIP.x - 20, "the matching doorway lets the player reach the next room");
+  Object.assign(s.player, { x: PIRATE_SHIP.x, z: PIRATE_SHIP.z + 50 });
+  assert(s.toggleShipRoof());
+  assert.equal(s.player.shipRoof, true);
+  assert(s.toggleShipRoof());
+  s.player.z = PIRATE_SHIP.z + 66;
+  assert(s.exitPirateShip());
+  assert.equal(s.player.zone, "sea");
+}
+{
+  const s = new Simulation();
+  s.start();
   s.player.diving = true;
   s.player.y = DEEP_Y;
   s.startThroat(s.raft);
@@ -49,4 +82,4 @@ const step = (s, seconds) => {
   s.damagePart(botRaft, botPart, 1000);
   assert(!botRaft.parts.includes(botPart), "bot skin never protects parts");
 }
-console.log("PASS deep dive, five-second whale throat, surface raft follow, and player-only skin protection");
+console.log("PASS depth buttons, pirate ship doors and roof, whale throat, raft follow, and skin protection");

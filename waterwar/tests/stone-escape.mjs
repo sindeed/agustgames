@@ -22,7 +22,7 @@ function build(s,a=s.player,n=5){const q=s.bellyQuests.get(a.team);Object.assign
  s.swallowRaft(s.raft);assert.equal(s.bellyQuests.get(0).built,0,'new visit requires a new staircase');assert.equal(s.bellyQuests.get(0).collected,0);
 }
 {
- const s=fresh();s.swallowRaft(s.raft);const first=s.bellyQuests.get(0).id;s.whale.mouth=false;s.whale.nextMouth=0;s.updateWhale(.1);
+ const s=fresh();s.swallowRaft(s.raft);const first=s.bellyQuests.get(0).id;s.whale.mouth=false;s.whale.nextMouth=0;s.updateWhale(.1);s.time+=5;s.updateThroats();
  const b=s.bots.find(b=>b.zone==='belly');assert(b,'opening mouth admits another crew');assert(s.rafts.find(r=>r.team===b.team).zone==='belly');assert.equal(s.bellyQuests.get(0).id,first);
  collect(s,b);build(s,b);Object.assign(s.player,{x:0,z:-65,y:5});assert.equal(s.escape(),false,'another crew cannot complete the player quest');
 }

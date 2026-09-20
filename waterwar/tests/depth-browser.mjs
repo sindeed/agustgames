@@ -11,12 +11,39 @@ page.on("console", message => { if (message.type() === "error") errors.push(mess
 try {
   await page.goto(process.env.WATERWAR_URL || "http://127.0.0.1:17777/waterwar/");
   await page.locator("#start").click();
-  await page.locator("#dive").click();
+  assert(await page.locator("#depth-controls").isVisible());
+  const down = await page.locator("#down").boundingBox();
+  await page.mouse.move(down.x + down.width / 2, down.y + down.height / 2);
+  await page.mouse.down();
   await page.evaluate(() => advanceTime(800));
+  await page.mouse.up();
   assert.equal(await page.evaluate(() => __waterwar.sim.player.diving), true);
   assert.equal(await page.locator("#mode-label").innerText(), "I DJUPET");
   assert.equal(await page.evaluate(() => Math.hypot(__waterwar.sim.raft.x - __waterwar.sim.player.x, __waterwar.sim.raft.z - __waterwar.sim.player.z) < .2), true);
+  await page.evaluate(() => {
+    const p = __waterwar.sim.player;
+    Object.assign(p, { x: 0, z: -45, y: -16, diving: true });
+    advanceTime(0);
+  });
+  assert(await page.locator("#ship-action").isVisible());
+  assert.equal(await page.locator("#ship-action").innerText(), "Gå in i piratskeppet");
   await page.screenshot({ path: out + "/deep-pirate-ship.png" });
+  await page.locator("#ship-action").click();
+  assert.equal(await page.evaluate(() => __waterwar.sim.player.zone), "ship");
+  assert.equal(await page.locator("#mode-label").innerText(), "I PIRATSKEPPET");
+  await page.evaluate(() => {
+    Object.assign(__waterwar.sim.player, { x: 0, z: -70, shipRoof: false });
+    advanceTime(0);
+  });
+  assert.equal(await page.locator("#ship-action").innerText(), "Gå upp på taket");
+  await page.locator("#ship-action").click();
+  assert.equal(await page.evaluate(() => __waterwar.sim.player.shipRoof), true);
+  await page.screenshot({ path: out + "/pirate-ship-roof.png" });
+  await page.locator("#ship-action").click();
+  await page.evaluate(() => { Object.assign(__waterwar.sim.player, { z: -54 }); advanceTime(0); });
+  assert.equal(await page.locator("#ship-action").innerText(), "Gå ut ur piratskeppet");
+  await page.locator("#ship-action").click();
+  assert.equal(await page.evaluate(() => __waterwar.sim.player.zone), "sea");
   await page.evaluate(() => { const s = __waterwar.sim; s.warnWhale(); advanceTime(8200); });
   assert.equal(await page.evaluate(() => __waterwar.sim.player.zone), "throat");
   assert(await page.locator("#warning").isHidden());
@@ -24,5 +51,5 @@ try {
   await page.evaluate(() => advanceTime(5000));
   assert.equal(await page.evaluate(() => __waterwar.sim.player.zone), "belly");
   assert.deepEqual(errors, []);
-  console.log("PASS deep dive button, surface raft following, deep whale chase, five-second throat, and belly arrival");
+  console.log("PASS depth buttons, deliberate pirate ship entry, roof, exit, deep whale chase, throat, and belly arrival");
 } finally { await browser.close(); }

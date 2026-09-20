@@ -1,4 +1,4 @@
-export const VERSION = "20260920-1";
+export const VERSION = "20260920-2";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
@@ -134,6 +134,8 @@ export class Simulation {
       invulnerable: 8,
       healAt: null,
       diving: false,
+      verticalInput: 0,
+      shipRoof: false,
     };
     this.makeIslands();
     this.makeRaft(0, 0, 0);
@@ -355,6 +357,7 @@ export class Simulation {
   }
   baseGround(x, z, zone) {
     if (zone === "throat") return 0;
+    if (zone === "ship") return DEEP_Y + 0.72;
     if (zone === "belly") {
       let height = 0;
       for (const quest of this.bellyQuests.values()) {
@@ -405,13 +408,13 @@ export class Simulation {
     const oldX = actor.x, oldZ = actor.z;
     const nx = clamp(
         actor.x + dx,
-        actor.zone === "belly" ? -46 : -WORLD,
-        actor.zone === "belly" ? 46 : WORLD,
+        actor.zone === "belly" ? -46 : actor.zone === "ship" ? PIRATE_SHIP.x - 43 : -WORLD,
+        actor.zone === "belly" ? 46 : actor.zone === "ship" ? PIRATE_SHIP.x + 43 : WORLD,
       ),
       nz = clamp(
         actor.z + dz,
-        actor.zone === "belly" ? -81 : -WORLD,
-        actor.zone === "belly" ? 80 : WORLD,
+        actor.zone === "belly" ? -81 : actor.zone === "ship" ? PIRATE_SHIP.z - 70 : -WORLD,
+        actor.zone === "belly" ? 80 : actor.zone === "ship" ? PIRATE_SHIP.z + 70 : WORLD,
       );
     let blocked = false;
     for (const r of this.rafts) {
@@ -441,13 +444,16 @@ export class Simulation {
         }
       }
     }
+    if (actor.zone === "ship" && !actor.shipRoof && this.shipWallBlocks(actor.x, actor.z, nx, nz)) blocked = true;
     if (actor.zone === "belly" && this.baseGround(nx, nz, "belly") > actor.y + 1.15) blocked = true;
     if (!blocked) {
       actor.x = nx;
       actor.z = nz;
     }
     actor.y = actor.diving && actor.zone === "sea"
-      ? DEEP_Y
+      ? actor.y
+      : actor.zone === "ship" && actor.shipRoof
+        ? DEEP_Y + 9.2
       : this.ground(actor.x, actor.z, actor.zone, actor.y).height;
     const distance = Math.hypot(actor.x - oldX, actor.z - oldZ);
     actor.stepSoundDistance = (actor.stepSoundDistance || 0) + distance;
@@ -691,9 +697,68 @@ export class Simulation {
       this.event(actor.diving ? "Du dyker ner i djupet! Flotten följer på ytan." : "Du simmar upp till ytan.");
     return true;
   }
+  setDiveDirection(direction) {
+    if (this.player.zone !== "sea" || this.player.steering) return false;
+    this.player.verticalInput = clamp(direction, -1, 1);
+    return true;
+  }
+  nearPirateShip(actor = this.player) {
+    return actor.zone === "sea" && actor.diving && dist(actor, PIRATE_SHIP) < 78;
+  }
+  enterPirateShip(actor = this.player) {
+    if (!this.nearPirateShip(actor)) return false;
+    actor.zone = "ship";
+    actor.x = PIRATE_SHIP.x;
+    actor.z = PIRATE_SHIP.z + 66;
+    actor.y = DEEP_Y + 0.72;
+    actor.verticalInput = 0;
+    actor.shipRoof = false;
+    this.building = false;
+    if (actor === this.player) this.event("Du går in på piratskeppets däck.");
+    return true;
+  }
+  exitPirateShip(actor = this.player) {
+    if (actor.zone !== "ship" || actor.z < PIRATE_SHIP.z + 60) return false;
+    actor.zone = "sea";
+    actor.x = PIRATE_SHIP.x;
+    actor.z = PIRATE_SHIP.z + 76;
+    actor.y = DEEP_Y + 0.72;
+    actor.diving = true;
+    actor.shipRoof = false;
+    if (actor === this.player) this.event("Du simmar ut från piratskeppet.");
+    return true;
+  }
+  toggleShipRoof(actor = this.player) {
+    if (actor.zone !== "ship") return false;
+    const stair = { x: PIRATE_SHIP.x, z: PIRATE_SHIP.z + 50 };
+    if (!actor.shipRoof && dist(actor, stair) > 11) return false;
+    actor.shipRoof = !actor.shipRoof;
+    actor.y = actor.shipRoof ? DEEP_Y + 9.2 : DEEP_Y + 0.72;
+    if (actor === this.player) this.event(actor.shipRoof ? "Du går upp på piratskeppets tak." : "Du går ner till däcket.");
+    return true;
+  }
+  shipWallBlocks(x, z, nx, nz) {
+    const lx = x - PIRATE_SHIP.x, lz = z - PIRATE_SHIP.z;
+    const tx = nx - PIRATE_SHIP.x, tz = nz - PIRATE_SHIP.z;
+    const hitsWall = (vertical, line, from, to, doors) => {
+      const a = vertical ? lx - line : lz - line;
+      const b = vertical ? tx - line : tz - line;
+      if (a === 0 || a * b > 0) return false;
+      const ratio = a / (a - b);
+      const along = vertical ? lz + (tz - lz) * ratio : lx + (tx - lx) * ratio;
+      return along >= from && along <= to && !doors.some((door) => Math.abs(along - door) < 3.8);
+    };
+    // Four by four large rooms: every dividing wall has a clear doorway.
+    for (const line of [-21, 0, 21])
+      if (hitsWall(true, line, -63, 63, [-49.5, -16.5, 16.5, 49.5])) return true;
+    for (const line of [-33, 0, 33])
+      if (hitsWall(false, line, -42, 42, [-31.5, -10.5, 10.5, 31.5])) return true;
+    // The front deck has one broad entrance door to the rooms.
+    return hitsWall(false, 63.5, -42, 42, [0]);
+  }
   teamDiving(team) {
     const captain = team === 0 ? this.player : this.bots.find((b) => b.team === team);
-    return !!captain?.diving && captain.zone === "sea";
+    return !!captain?.diving && ["sea", "ship"].includes(captain.zone);
   }
   harvest(res, owner = this.player) {
     if (!res?.active || res.zone !== owner.zone) return false;
@@ -1628,7 +1693,7 @@ export class Simulation {
     w.timer -= dt;
     if (w.phase === "deep") {
       w.y = -95 + Math.sin(this.time * 0.05) * 10;
-      if (w.timer <= 0) this.warnWhale();
+      if (w.timer <= 0 && this.player.zone === "sea") this.warnWhale();
     } else if (w.phase === "deep-warning") {
       // In the deep the whale chases the swimmer with an open mouth; it is faster.
       const p = this.player;
@@ -1698,6 +1763,10 @@ export class Simulation {
         z: Math.cos(a) * 0.12,
         next: this.time + 25 + this.random() * 25,
       };
+    }
+    if (p.zone === "sea" && p.verticalInput) {
+      p.y = clamp(p.y + p.verticalInput * 7.2 * dt, DEEP_Y, -0.9);
+      p.diving = p.y < -1;
     }
     // A diver's raft stays directly above its captain on the surface.
     for (const r of this.rafts) {
@@ -1838,6 +1907,8 @@ export class Simulation {
         pitch: round(p.pitch),
         swimming: p.y < 0,
         swimSeconds: round(p.swim),
+        depthControl: p.verticalInput,
+        onPirateShipRoof: p.shipRoof,
         steering: p.steering,
       },
       botCount: this.bots.length,

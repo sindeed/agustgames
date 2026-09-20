@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint, PIRATE_SHIP, DEEP_Y } from "./sim.js?v=20260920-1";
-import { actorMotion } from "./actor-motion.js?v=20260920-1";
+import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint, PIRATE_SHIP, DEEP_Y } from "./sim.js?v=20260920-2";
+import { actorMotion } from "./actor-motion.js?v=20260920-2";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -756,7 +756,13 @@ export class View {
     const g = this.group();
     g.position.set(PIRATE_SHIP.x, PIRATE_SHIP.y, PIRATE_SHIP.z);
     const rooms = ["DÄCK", "KAPTENENS HYTT", "SKATTRUM", "KARTARUM", "KANONRUM", "FÄNGELSE", "TRAPPA", "LASTRUM", "KRUTRUM", "SMEDJA", "SOVHYTT", "KÖK", "SJUKHYTT", "BIBLIOTEK", "MUSIKRUM", "HEMLIGT RUM"];
-    this.sphere(g, 0, -3.2, 0, 45, 3.4, 80, "deepWood");
+    // Keep the broken hull below the diver's eye line so the deck and entrance are visible from outside.
+    this.sphere(g, 0, -7, 0, 45, 3.4, 80, "deepWood");
+    // A broad roof is walkable in the simulation, with a stair from the front deck.
+    this.box(g, 0, 8.55, 0, 80, 0.7, 132, "darkWood");
+    this.makeSign(g, "TAK · GÅ VID TRAPPAN", 0, 9.1, 48, 1.25);
+    for (let step = 0; step < 5; step++)
+      this.box(g, 0, 0.75 + step * 1.55, 57 - step * 2.3, 7, 1.5 + step * 1.55, 2.5, "wood");
     for (let i = 0; i < rooms.length; i++) {
       const room = this.group(g), x = (i % 4 - 1.5) * 21, z = (Math.floor(i / 4) - 1.5) * 33;
       room.position.set(x, 0, z);
@@ -764,6 +770,13 @@ export class View {
       this.box(room, -9.2, 4, 0, 0.7, 8, 28, "deepWood");
       this.box(room, 9.2, 4, 0, 0.7, 8, 28, "deepWood");
       this.box(room, 0, 4, -13.7, 19, 8, 0.7, "deepWood");
+      // The front wall is split around an open, framed doorway. Every room is reachable.
+      this.box(room, -6.6, 4, 13.7, 5.2, 8, 0.7, "deepWood");
+      this.box(room, 6.6, 4, 13.7, 5.2, 8, 0.7, "deepWood");
+      this.box(room, -2.65, 3.1, 13.7, 0.5, 6.2, 0.9, "wood");
+      this.box(room, 2.65, 3.1, 13.7, 0.5, 6.2, 0.9, "wood");
+      this.box(room, 0, 6.05, 13.7, 5.8, 0.5, 0.9, "wood");
+      this.makeSign(room, "DÖRR", 0, 5.1, 13.18, 0.42);
       this.makeSign(room, rooms[i], 0, 6, 13.3, 1.45);
       if (rooms[i] === "SKATTRUM") for (let c = -2; c <= 2; c++) {
         const chest = this.group(room); chest.position.set(c * 3, 0.7, -3);
@@ -808,15 +821,15 @@ export class View {
     const s = this.sim,
       p = s.player,
       zone = p.zone;
-    this.world.visible = zone === "sea";
+    this.world.visible = zone === "sea" || zone === "ship";
     this.belly.visible = zone === "belly";
     this.throat.visible = zone === "throat";
-    this.pirateShip.visible = zone === "sea" && p.diving;
+    this.pirateShip.visible = (zone === "sea" && p.diving) || zone === "ship";
     const live = new Set();
     for (const r of s.rafts) {
       if (r.zone !== zone || (dist(r, p) > 850 && s.mode !== "menu")) continue;
       live.add(r.id);
-      const parent = r.zone === "sea" ? this.world : r.zone === "belly" ? this.belly : this.throat;
+      const parent = r.zone === "sea" || r.zone === "ship" ? this.world : r.zone === "belly" ? this.belly : this.throat;
       const g = this.syncModel(r.id, () => this.group(), parent);
       g.position.set(r.x, 0, r.z);
       if (g.userData.skin !== r.skin) {
@@ -893,7 +906,7 @@ export class View {
       const g = this.syncModel(
         b.id,
         () => this.makeBoat(b),
-        b.zone === "sea" ? this.world : b.zone === "belly" ? this.belly : this.throat,
+        b.zone === "sea" || b.zone === "ship" ? this.world : b.zone === "belly" ? this.belly : this.throat,
       );
       g.position.set(b.x, Math.sin(s.time * 1.5) * 0.04, b.z);
     }
@@ -915,7 +928,7 @@ export class View {
         g = this.syncModel(
           a.id,
           () => this.makeActor(a, kind),
-          a.zone === "sea" ? this.world : a.zone === "belly" ? this.belly : this.throat,
+          a.zone === "sea" || a.zone === "ship" ? this.world : a.zone === "belly" ? this.belly : this.throat,
         );
         const carrier = a.boatId
           ? s.boats.find((b) => b.id === a.boatId)
@@ -968,7 +981,7 @@ export class View {
           );
           return g;
         },
-        zone === "sea" ? this.world : zone === "belly" ? this.belly : this.throat,
+        zone === "sea" || zone === "ship" ? this.world : zone === "belly" ? this.belly : this.throat,
       );
       g.position.set(a.x, a.y, a.z);
       g.lookAt(a.x + a.vx, a.y + a.vy, a.z + a.vz);
@@ -1213,7 +1226,7 @@ export class View {
     this.nearTimer -= dt;
     this.sync();
     this.setWeapon();
-    const inside = p.zone === "belly" || p.zone === "throat" || s.cave || p.diving;
+    const inside = p.zone === "belly" || p.zone === "throat" || p.zone === "ship" || s.cave || p.diving;
     const daylight = s.daylight;
     const sky = new THREE.Color(0x73c9f4).lerp(
       new THREE.Color(0x122c51),
@@ -1223,16 +1236,18 @@ export class View {
       p.zone === "belly"
         ? new THREE.Color(0x695269)
         : p.zone === "throat" ? new THREE.Color(0x315f82)
+        : p.zone === "ship" ? new THREE.Color(0x164b62)
         : p.diving ? new THREE.Color(0x0a4765) : sky,
     );
     this.scene.fog.color.copy(
       p.zone === "belly"
         ? new THREE.Color(0x695269)
         : p.zone === "throat" ? new THREE.Color(0x315f82)
+        : p.zone === "ship" ? new THREE.Color(0x164b62)
         : p.diving ? new THREE.Color(0x0a4765) : sky,
     );
-    this.scene.fog.near = p.zone === "belly" || p.zone === "throat" ? 35 : p.diving ? 25 : 250;
-    this.scene.fog.far = p.zone === "belly" || p.zone === "throat" ? 260 : p.diving ? 430 : 1150;
+    this.scene.fog.near = p.zone === "belly" || p.zone === "throat" || p.zone === "ship" ? 35 : p.diving ? 25 : 250;
+    this.scene.fog.far = p.zone === "belly" || p.zone === "throat" || p.zone === "ship" ? 260 : p.diving ? 430 : 1150;
     this.hemi.intensity = p.zone === "throat" ? 1.7 : inside ? 1.25 : 1 + daylight * 0.85;
     this.sun.intensity = p.zone === "throat" ? 0.85 : inside ? 0.4 : 0.4 + daylight * 2.25;
     this.fill.intensity = inside ? 0.25 : 0.4;
@@ -1241,7 +1256,7 @@ export class View {
     this.sun.position.set(p.x - 28, p.y + 65, p.z + 18);
     this.sun.target.position.set(p.x, p.y, p.z);
     this.sky.position.set(p.x * 0.75, 0, p.z * 0.75);
-    this.sunOrb.visible = !s.night && !p.diving;
+    this.sunOrb.visible = !s.night && !p.diving && p.zone !== "ship";
     this.waterMaterial.uniforms.time.value = s.time;
     this.waterMaterial.uniforms.light.value = daylight;
     this.waterMaterial.uniforms.direction.value.set(

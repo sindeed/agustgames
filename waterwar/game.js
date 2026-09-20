@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260920-1";
-import { View } from "./view.js?v=20260920-1";
-import { GameAudio } from "./audio.js?v=20260920-1";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260920-2";
+import { View } from "./view.js?v=20260920-2";
+import { GameAudio } from "./audio.js?v=20260920-2";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
@@ -40,6 +40,7 @@ function clearInput() {
   look = null;
   $("stick").style.transform = "";
   sim.input = { x: 0, z: 0 };
+  sim.player.verticalInput = 0;
 }
 function newGame() {
   audio.selectMusic("sea");
@@ -142,8 +143,22 @@ $("dispatch").onclick = () => {
   if (dispatchGuard) sim.dispatchGuard(dispatchGuard);
   renderUI();
 };
-$("dive").onclick = () => {
-  sim.toggleDive();
+for (const [id, direction] of [["up", 1], ["down", -1]]) {
+  const button = $(id);
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    if (sim.mode !== "playing") return;
+    button.setPointerCapture(event.pointerId);
+    sim.setDiveDirection(direction);
+  });
+  for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
+    button.addEventListener(event, () => sim.setDiveDirection(0));
+}
+$("ship-action").onclick = () => {
+  const p = sim.player;
+  if (p.zone === "sea") sim.enterPirateShip();
+  else if (p.shipRoof) sim.toggleShipRoof();
+  else if (!sim.exitPirateShip()) sim.toggleShipRoof();
   renderUI();
 };
 for (const [type, item] of Object.entries(BUILD)) {
@@ -345,8 +360,16 @@ function renderUI() {
   $("warning").hidden = sim.whale.phase !== "warning" || p.zone === "belly";
   $("warning").hidden = !["warning", "deep-warning"].includes(sim.whale.phase) || p.zone === "belly" || p.zone === "throat";
   $("mission").hidden = p.zone !== "belly";
-  $("dive").hidden = sim.mode !== "playing" || p.zone !== "sea";
-  $("dive").textContent = p.diving ? "Upp" : "Dyka";
+  $("depth-controls").hidden = sim.mode !== "playing" || p.zone !== "sea" || p.y >= 0;
+  const nearShip = sim.nearPirateShip();
+  $("ship-action").hidden = sim.mode !== "playing" || !(nearShip || p.zone === "ship");
+  $("ship-action").textContent = p.zone === "sea"
+    ? "Gå in i piratskeppet"
+    : p.shipRoof
+      ? "Gå ner till däcket"
+      : p.z >= -60
+        ? "Gå ut ur piratskeppet"
+        : "Gå upp på taket";
   const quest = sim.bellyQuests.get(0);
   if (p.zone === "belly" && quest) $("mission-detail").textContent = quest.collected < 5
     ? `Stenar: ${quest.collected}/5 · Sikta på en ljus sten och tryck Slå`
@@ -359,6 +382,8 @@ function renderUI() {
       ? "VALENS HALS · 5 SEKUNDER"
       : p.zone === "belly"
       ? "VALENS MAGE"
+      : p.zone === "ship"
+      ? p.shipRoof ? "PIRATSKEPPETS TAK" : "I PIRATSKEPPET"
       : sim.cave
         ? "GULDGRUVAN"
         : p.diving
