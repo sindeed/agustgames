@@ -265,6 +265,8 @@ test("Whale warns before swallowing, is immortal, takes raft and guards", () => 
   step(s, 13);
   assert.equal(s.player.zone, "sea");
   step(s, 1.2);
+  assert.equal(s.player.zone, "throat", "the whale carries the crew through its water-filled throat first");
+  step(s, 5.1);
   assert.equal(s.player.zone, "belly");
   assert.equal(s.raft.zone, "belly");
   assert.equal(s.guards[0].zone, "belly");

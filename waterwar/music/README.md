@@ -13,3 +13,7 @@ Original SHA-256: `cd567d514572d643d106433bb396bfdbe4e0b4132f49e0abcd23834c31b76
 Source track: https://suno.com/song/812645f9-41a3-46d3-9d69-f366e27c2344
 
 Original and game copy SHA-256: `1d5467ce6d6460008d82d4f09df06468638385c15a0dd50de19aa06e89273b58`.
+
+**Circuit Warmth**, take A, plays while diving in the deep sea. It was chosen from the archive catalog's warm electronic description for the requested cozy underwater feeling. This is a catalog-based choice, not a human listening review. The game copy is byte-for-byte unchanged; source and archive remain untouched.
+
+Game copy SHA-256: `8f9a41343e29b280a9fe171c3ed3809ad27f05d845f61b1c30017be865990f0b`.

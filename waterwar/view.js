@@ -1,6 +1,6 @@
 import * as THREE from "../war-of-kingdoms/vendor/three.module.js";
-import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint } from "./sim.js?v=20260913-2";
-import { actorMotion } from "./actor-motion.js?v=20260913-2";
+import { TAU, dist, BUILD, WEAPONS, clamp, stoneStairPoint, PIRATE_SHIP, DEEP_Y } from "./sim.js?v=20260920-1";
+import { actorMotion } from "./actor-motion.js?v=20260920-1";
 const colors = [
   0x348ee5, 0xc84a44, 0x885cc5, 0xe5a340, 0x3aaf81, 0xda769a, 0x5393aa,
 ];
@@ -35,7 +35,8 @@ export class View {
     this.scene.add(this.camera);
     this.world = new THREE.Group();
     this.belly = new THREE.Group();
-    this.scene.add(this.world, this.belly);
+    this.throat = new THREE.Group();
+    this.scene.add(this.world, this.belly, this.throat);
     this.hemi = new THREE.HemisphereLight(0xc8efff, 0x405b52, 1.85);
     this.sun = new THREE.DirectionalLight(0xffefd1, 2.65);
     this.sun.castShadow = true;
@@ -63,6 +64,9 @@ export class View {
     this.initMaterials();
     this.makeSea();
     this.makeBelly();
+    this.makeThroat();
+    this.pirateShip = this.makePirateShip();
+    this.world.add(this.pirateShip);
     this.whale = this.makeWhale();
     this.world.add(this.whale);
     this.makeSky();
@@ -118,6 +122,9 @@ export class View {
     this.mat("white", 0xf1f3df);
     this.mat("black", 0x101d29);
     this.mat("flame", 0xff981a, { emissive: 0xff5210, emissiveIntensity: 2 });
+    this.mat("deepWood", 0x4d3027);
+    this.mat("bronze", 0xa66a2d, { roughness: 0.35, metalness: 0.55 });
+    this.mat("shield", 0x7d9fbb, { roughness: 0.35, metalness: 0.58 });
   }
   woodTexture() {
     const c = document.createElement("canvas");
@@ -300,7 +307,7 @@ export class View {
       for (let j = 0; j < 5; j++) {
         const trunk = this.cylinder(
           g,
-          j * 0.08,
+          j * 0.025,
           0.9 + j * 1.15,
           0,
           0.32 - j * 0.025,
@@ -308,7 +315,7 @@ export class View {
           "wood",
           7,
         );
-        trunk.rotation.z = -0.06;
+        trunk.rotation.z = -0.025;
       }
       for (let j = 0; j < 7; j++) {
         const a = (j * TAU) / 7;
@@ -364,6 +371,14 @@ export class View {
         );
         gold.rotation.y = i * 0.6;
       }
+    } else if (r.kind === "chest" && Number(r.id.replace(/\D/g, "")) % 2 === 0) {
+      // Blender barrel treasure: it deliberately keeps the ordinary chest's HP and reward.
+      this.cylinder(g, 0, 0.76, 0, 0.68, 1.25, "wood", 12);
+      this.cylinder(g, 0, 0.16, 0, 0.79, 0.16, "wood", 12);
+      this.cylinder(g, 0, 1.35, 0, 0.79, 0.16, "wood", 12);
+      for (const y of [0.42, 1.03])
+        this.mesh(new THREE.TorusGeometry(0.73, 0.055, 6, 12), "iron", g, 0, y, 0);
+      this.box(g, 0, 0.88, 0.7, 0.25, 0.3, 0.12, "gold");
     } else {
       this.box(g, 0, 0.45, 0, 1.6, 0.9, 1.15, "wood");
       this.box(g, 0, 0.93, 0, 1.65, 0.18, 1.2, "darkWood");
@@ -382,6 +397,15 @@ export class View {
       for (const z of [-1.05, 1.05]) {
         this.box(g, 0, 0.15, z, 3, 0.19, 0.18, "darkWood");
         this.box(g, 0, 0.697, z, 2.95, 0.025, 0.045, "rope");
+      }
+      // Skins only decorate raft floors: shields and cannons never become weapons.
+      if (raft.skin === "medieval") {
+        const shield = this.mesh(new THREE.SphereGeometry(0.38, 8, 5), "shield", g, 0, 0.92, -1.15);
+        shield.scale.z = 0.2;
+      } else if (raft.skin === "pirate") {
+        const cannon = this.cylinder(g, 0, 0.88, -0.55, 0.23, 1.18, "darkIron", 8);
+        cannon.rotation.x = Math.PI / 2;
+        this.sphere(g, 0, 0.59, 0.1, 0.28, 0.16, 0.28, "bronze");
       }
     } else if (p.type === "wall" || p.type === "strong") {
       for (let j = 0; j < 5; j++)
@@ -468,27 +492,35 @@ export class View {
   makeWeapon(type, parent) {
     const g = this.group(parent);
     if (type === "hammer") {
-      this.box(g, 0, 0.25, 0, 0.1, 1, 0.1, "darkWood");
-      this.box(g, 0, 0.77, 0, 0.7, 0.34, 0.32, "iron");
-      this.box(g, 0, 0.77, 0, 0.18, 0.4, 0.36, "gold");
+      // Blender low-poly hammer: warm shaft with a chunky two-sided iron head.
+      this.box(g, 0, 0.25, 0, 0.12, 1.15, 0.12, "wood");
+      this.cylinder(g, 0, -0.3, 0, 0.19, 0.28, "darkWood");
+      this.box(g, -0.22, 0.86, 0, 0.46, 0.38, 0.34, "iron");
+      this.box(g, 0.22, 0.86, 0, 0.46, 0.38, 0.34, "iron");
+      this.box(g, 0, 0.86, 0, 0.16, 0.48, 0.4, "darkIron");
     } else if (type === "sword") {
-      this.box(g, 0, 0.68, 0, 0.14, 1.5, 0.075, "iron");
+      // Blender low-poly sword: a four-sided pointed blade and gold guard.
+      this.mesh(new THREE.ConeGeometry(0.27, 1.75, 4), "iron", g, 0, 0.76, 0);
       this.box(g, 0, -0.1, 0, 0.65, 0.1, 0.17, "gold");
       this.box(g, 0, -0.4, 0, 0.16, 0.5, 0.16, "darkWood");
+      this.sphere(g, 0, -0.68, 0, 0.17, 0.17, 0.17, "gold");
     } else if (type === "spear") {
       this.box(g, 0, 0.5, 0, 0.08, 2.2, 0.08, "wood");
       this.mesh(new THREE.ConeGeometry(0.13, 0.48, 5), "iron", g, 0, 1.8, 0);
+      this.cylinder(g, 0, 1.5, 0, 0.13, 0.14, "gold");
     } else {
+      // Rounded bow limbs: still low-poly, but clearly curved rather than angular.
+      const wood = type === "firebow" ? "darkWood" : "wood";
       const arc = this.mesh(
-        new THREE.TorusGeometry(0.58, 0.06, 7, 22, Math.PI * 1.45),
-        type === "firebow" ? "darkWood" : "wood",
+        new THREE.TorusGeometry(0.73, 0.065, 8, 22, Math.PI * 1.3),
+        wood,
         g,
       );
-      arc.rotation.z = -Math.PI * 0.73;
+      arc.rotation.z = -Math.PI * 0.65;
       const pts = [
-        new THREE.Vector3(-0.42, -0.42, 0),
-        new THREE.Vector3(0.02, 0, 0),
-        new THREE.Vector3(-0.42, 0.42, 0),
+        new THREE.Vector3(-0.48, -0.48, 0),
+        new THREE.Vector3(0.04, 0.3, 0),
+        new THREE.Vector3(-0.48, 1.06, 0),
       ];
       g.add(
         new THREE.Line(
@@ -496,9 +528,13 @@ export class View {
           new THREE.LineBasicMaterial({ color: 0xe9e4d4 }),
         ),
       );
-      this.box(g, 0, 0, 0, 0.025, 1.35, 0.025, "wood").rotation.z = Math.PI / 2;
-      if (type === "firebow")
-        this.sphere(g, 0.65, 0, 0, 0.12, 0.1, 0.09, "flame");
+      this.box(g, 0, 0.3, 0, 0.11, 0.18, 0.14, "darkWood");
+      if (type === "firebow") {
+        this.box(g, 0.6, 0.3, 0, 1.15, 0.045, 0.045, "darkWood");
+        this.mesh(new THREE.ConeGeometry(0.13, 0.4, 6), "iron", g, 1.35, 0.3, 0).rotation.z = -Math.PI / 2;
+        this.sphere(g, 1.48, 0.3, 0, 0.22, 0.18, 0.18, "flame");
+        this.sphere(g, 1.62, 0.3, 0, 0.12, 0.1, 0.1, "gold");
+      }
     }
     return g;
   }
@@ -605,17 +641,38 @@ export class View {
   }
   makeWhale() {
     const g = this.group();
+    // Blender-inspired low-poly whale silhouette: full body, dorsal fin, flukes and open mouth.
     this.sphere(g, 0, 0, 0, 34, 28, 90, "whale");
     this.sphere(g, 0, -14, 26, 28, 15, 58, "whaleBelly");
     this.sphere(g, 0, -5, 63, 30, 24, 30, "whale");
     const mouth = this.sphere(g, 0, -12, 86, 22, 12, 8, "black");
     g.userData.mouth = mouth;
+    const dorsal = this.mesh(
+      new THREE.ConeGeometry(14, 35, 8),
+      "whale",
+      g,
+      0,
+      31,
+      -5,
+    );
+    dorsal.rotation.z = Math.PI;
     for (const side of [-1, 1]) {
       const fin = this.sphere(g, side * 33, -8, 0, 31, 3, 16, "whale");
       fin.rotation.z = side * 0.4;
       this.sphere(g, side * 26, 2, 66, 1.3, 1.4, 1.2, "black");
       const tail = this.sphere(g, side * 24, 0, -90, 30, 4, 14, "whale");
       tail.rotation.z = side * 0.1;
+    }
+    for (let i = -5; i <= 5; i++) {
+      const tooth = this.mesh(
+        new THREE.ConeGeometry(1.6, 8, 6),
+        "white",
+        g,
+        i * 3.1,
+        -20,
+        88 + Math.abs(i) * 0.35,
+      );
+      tooth.rotation.x = Math.PI;
     }
     this.sphere(g, 0, 27.4, 18, 3, 0.6, 4, "black");
     return g;
@@ -676,6 +733,50 @@ export class View {
     this.exitLight.position.set(0, 9, -65);
     this.belly.add(this.exitLight);
   }
+  makeThroat() {
+    const tube = this.mesh(new THREE.CylinderGeometry(18, 9, 100, 16, 1, true), "belly", this.throat, 0, 0, 0);
+    tube.rotation.x = Math.PI / 2;
+    const water = this.mesh(
+      new THREE.PlaneGeometry(22, 100, 8, 20),
+      new THREE.MeshStandardMaterial({ color: 0x3e9cc5, transparent: true, opacity: 0.72, roughness: 0.25, metalness: 0.08 }),
+      this.throat,
+      0,
+      -0.45,
+      0,
+    );
+    water.rotation.x = -Math.PI / 2;
+    water.receiveShadow = false;
+    for (let i = 0; i < 18; i++) {
+      const ring = this.mesh(new THREE.TorusGeometry(12 - i * 0.35, 0.42, 6, 16), "rib", this.throat, 0, 0, -40 + i * 5.3);
+      ring.rotation.x = Math.PI / 2;
+    }
+  }
+  makePirateShip() {
+    // The room grid is deliberately large so several bots can explore it at once.
+    const g = this.group();
+    g.position.set(PIRATE_SHIP.x, PIRATE_SHIP.y, PIRATE_SHIP.z);
+    const rooms = ["DÄCK", "KAPTENENS HYTT", "SKATTRUM", "KARTARUM", "KANONRUM", "FÄNGELSE", "TRAPPA", "LASTRUM", "KRUTRUM", "SMEDJA", "SOVHYTT", "KÖK", "SJUKHYTT", "BIBLIOTEK", "MUSIKRUM", "HEMLIGT RUM"];
+    this.sphere(g, 0, -3.2, 0, 45, 3.4, 80, "deepWood");
+    for (let i = 0; i < rooms.length; i++) {
+      const room = this.group(g), x = (i % 4 - 1.5) * 21, z = (Math.floor(i / 4) - 1.5) * 33;
+      room.position.set(x, 0, z);
+      this.box(room, 0, -0.1, 0, 19, 0.6, 28, "wood");
+      this.box(room, -9.2, 4, 0, 0.7, 8, 28, "deepWood");
+      this.box(room, 9.2, 4, 0, 0.7, 8, 28, "deepWood");
+      this.box(room, 0, 4, -13.7, 19, 8, 0.7, "deepWood");
+      this.makeSign(room, rooms[i], 0, 6, 13.3, 1.45);
+      if (rooms[i] === "SKATTRUM") for (let c = -2; c <= 2; c++) {
+        const chest = this.group(room); chest.position.set(c * 3, 0.7, -3);
+        this.box(chest, 0, 0.45, 0, 1.6, 0.9, 1.15, "wood");
+        this.box(chest, 0, 0.95, 0, 1.65, 0.18, 1.2, "darkWood");
+        this.box(chest, 0, 0.65, 0.62, 0.22, 0.25, 0.1, "gold");
+      }
+      if (rooms[i] === "KANONRUM") for (const x2 of [-5, 0, 5]) {
+        const cannon = this.cylinder(room, x2, 0.9, -3, 0.52, 3.5, "darkIron", 10); cannon.rotation.x = Math.PI / 2;
+      }
+    }
+    return g;
+  }
   disposeModel(g) {
     g.traverse((o) => {
       if (o.isMesh) {
@@ -709,15 +810,19 @@ export class View {
       zone = p.zone;
     this.world.visible = zone === "sea";
     this.belly.visible = zone === "belly";
+    this.throat.visible = zone === "throat";
+    this.pirateShip.visible = zone === "sea" && p.diving;
     const live = new Set();
     for (const r of s.rafts) {
       if (r.zone !== zone || (dist(r, p) > 850 && s.mode !== "menu")) continue;
       live.add(r.id);
-      const parent = r.zone === "sea" ? this.world : this.belly;
+      const parent = r.zone === "sea" ? this.world : r.zone === "belly" ? this.belly : this.throat;
       const g = this.syncModel(r.id, () => this.group(), parent);
       g.position.set(r.x, 0, r.z);
       if (g.userData.skin !== r.skin) {
         if (g.userData.decoration) this.disposeModel(g.userData.decoration);
+        for (const child of [...g.children])
+          if (child.userData.partId) this.disposeModel(child);
         g.userData.skin = r.skin;
         if (r.skin !== "sailor") {
           const flag = this.group(g);
@@ -788,7 +893,7 @@ export class View {
       const g = this.syncModel(
         b.id,
         () => this.makeBoat(b),
-        b.zone === "sea" ? this.world : this.belly,
+        b.zone === "sea" ? this.world : b.zone === "belly" ? this.belly : this.throat,
       );
       g.position.set(b.x, Math.sin(s.time * 1.5) * 0.04, b.z);
     }
@@ -810,7 +915,7 @@ export class View {
         g = this.syncModel(
           a.id,
           () => this.makeActor(a, kind),
-          a.zone === "sea" ? this.world : this.belly,
+          a.zone === "sea" ? this.world : a.zone === "belly" ? this.belly : this.throat,
         );
         const carrier = a.boatId
           ? s.boats.find((b) => b.id === a.boatId)
@@ -863,7 +968,7 @@ export class View {
           );
           return g;
         },
-        zone === "sea" ? this.world : this.belly,
+        zone === "sea" ? this.world : zone === "belly" ? this.belly : this.throat,
       );
       g.position.set(a.x, a.y, a.z);
       g.lookAt(a.x + a.vx, a.y + a.vy, a.z + a.vz);
@@ -1108,29 +1213,35 @@ export class View {
     this.nearTimer -= dt;
     this.sync();
     this.setWeapon();
-    const inside = p.zone === "belly" || s.cave;
+    const inside = p.zone === "belly" || p.zone === "throat" || s.cave || p.diving;
     const daylight = s.daylight;
     const sky = new THREE.Color(0x73c9f4).lerp(
       new THREE.Color(0x122c51),
       1 - daylight,
     );
     this.scene.background.copy(
-      p.zone === "belly" ? new THREE.Color(0x695269) : sky,
+      p.zone === "belly"
+        ? new THREE.Color(0x695269)
+        : p.zone === "throat" ? new THREE.Color(0x315f82)
+        : p.diving ? new THREE.Color(0x0a4765) : sky,
     );
     this.scene.fog.color.copy(
-      p.zone === "belly" ? new THREE.Color(0x695269) : sky,
+      p.zone === "belly"
+        ? new THREE.Color(0x695269)
+        : p.zone === "throat" ? new THREE.Color(0x315f82)
+        : p.diving ? new THREE.Color(0x0a4765) : sky,
     );
-    this.scene.fog.near = p.zone === "belly" ? 80 : 250;
-    this.scene.fog.far = p.zone === "belly" ? 260 : 1150;
-    this.hemi.intensity = inside ? 1.25 : 1 + daylight * 0.85;
-    this.sun.intensity = inside ? 0.4 : 0.4 + daylight * 2.25;
+    this.scene.fog.near = p.zone === "belly" || p.zone === "throat" ? 35 : p.diving ? 25 : 250;
+    this.scene.fog.far = p.zone === "belly" || p.zone === "throat" ? 260 : p.diving ? 430 : 1150;
+    this.hemi.intensity = p.zone === "throat" ? 1.7 : inside ? 1.25 : 1 + daylight * 0.85;
+    this.sun.intensity = p.zone === "throat" ? 0.85 : inside ? 0.4 : 0.4 + daylight * 2.25;
     this.fill.intensity = inside ? 0.25 : 0.4;
     this.lantern.intensity = inside ? 8 : 0;
     this.lantern.position.set(p.x, p.y + 3, p.z);
     this.sun.position.set(p.x - 28, p.y + 65, p.z + 18);
     this.sun.target.position.set(p.x, p.y, p.z);
     this.sky.position.set(p.x * 0.75, 0, p.z * 0.75);
-    this.sunOrb.visible = !s.night;
+    this.sunOrb.visible = !s.night && !p.diving;
     this.waterMaterial.uniforms.time.value = s.time;
     this.waterMaterial.uniforms.light.value = daylight;
     this.waterMaterial.uniforms.direction.value.set(
@@ -1152,7 +1263,7 @@ export class View {
         p.z,
       );
       this.camera.rotation.set(p.pitch, p.yaw, 0, "YXZ");
-      this.weaponRig.visible = !s.building;
+      this.weaponRig.visible = !s.building && p.zone !== "throat";
       const swing = p.cooldown / WEAPONS[p.weapon].cooldown;
       this.weaponRig.rotation.set(
         Math.sin(swing * Math.PI) * -0.5,

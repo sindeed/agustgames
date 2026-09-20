@@ -825,6 +825,16 @@ h2 {
   z-index: 6;
   font-size: 16px;
 }
+#dive {
+  position: absolute;
+  left: 28px;
+  bottom: 150px;
+  z-index: 6;
+  background: linear-gradient(#82dded, #237a9c);
+  border: 2px solid #c7fbff;
+  color: #062d40;
+  font-weight: 900;
+}
 #actions {
   gap: 9px;
 }
@@ -881,6 +891,7 @@ h2 {
     width: 210px;
     font-size: 14px;
   }
+  #dive { left: 18px; bottom: 130px; }
   #joystick {
     bottom: 40px;
   }

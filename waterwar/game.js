@@ -1,6 +1,6 @@
-import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260913-2";
-import { View } from "./view.js?v=20260913-2";
-import { GameAudio } from "./audio.js?v=20260913-2";
+import { Simulation, BUILD, WEAPONS, clamp, dist } from "./sim.js?v=20260920-1";
+import { View } from "./view.js?v=20260920-1";
+import { GameAudio } from "./audio.js?v=20260920-1";
 const $ = (id) => document.getElementById(id);
 const audio = new GameAudio();
 let sim = new Simulation(),
@@ -140,6 +140,10 @@ for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
   $("hit").addEventListener(event, () => (held = false));
 $("dispatch").onclick = () => {
   if (dispatchGuard) sim.dispatchGuard(dispatchGuard);
+  renderUI();
+};
+$("dive").onclick = () => {
+  sim.toggleDive();
   renderUI();
 };
 for (const [type, item] of Object.entries(BUILD)) {
@@ -339,7 +343,10 @@ function renderUI() {
     Math.round(a / 45) % 8
   ];
   $("warning").hidden = sim.whale.phase !== "warning" || p.zone === "belly";
+  $("warning").hidden = !["warning", "deep-warning"].includes(sim.whale.phase) || p.zone === "belly" || p.zone === "throat";
   $("mission").hidden = p.zone !== "belly";
+  $("dive").hidden = sim.mode !== "playing" || p.zone !== "sea";
+  $("dive").textContent = p.diving ? "Upp" : "Dyka";
   const quest = sim.bellyQuests.get(0);
   if (p.zone === "belly" && quest) $("mission-detail").textContent = quest.collected < 5
     ? `Stenar: ${quest.collected}/5 · Sikta på en ljus sten och tryck Slå`
@@ -348,11 +355,15 @@ function renderUI() {
       : "Stentrappan är klar! Gå upp · Flotten och vakterna följer med";
   $("mode-label").textContent = p.steering
     ? "STYR FLOTTEN"
-    : p.zone === "belly"
+    : p.zone === "throat"
+      ? "VALENS HALS · 5 SEKUNDER"
+      : p.zone === "belly"
       ? "VALENS MAGE"
       : sim.cave
         ? "GULDGRUVAN"
-        : p.y < 0
+        : p.diving
+          ? "I DJUPET"
+          : p.y < 0
           ? "SIMMAR"
           : sim.ground(p.x, p.z, p.zone, p.y).raft
             ? "PÅ FLOTTEN"
@@ -372,7 +383,7 @@ function renderUI() {
       .filter((g) => sim.canDispatch(g))
       .sort((a, b) => dist(a, p) - dist(b, p))[0] || null;
   $("dispatch").hidden =
-    !dispatchGuard || sim.building || sim.mode !== "playing";
+    !dispatchGuard || sim.building || sim.mode !== "playing" || p.zone === "throat";
   if (sim.mode !== "playing") return;
   const target = view.pick();
   let context = "";

@@ -255,6 +255,12 @@ await check(
     await page.evaluate(() => advanceTime(14200));
     assert.equal(
       await page.evaluate(() => __waterwar.sim.player.zone),
+      "throat",
+    );
+    await page.screenshot({ path: out + "/whale-throat.png" });
+    await page.evaluate(() => advanceTime(5000));
+    assert.equal(
+      await page.evaluate(() => __waterwar.sim.player.zone),
       "belly",
     );
     assert(await page.locator("#mission").isVisible());

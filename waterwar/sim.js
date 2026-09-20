@@ -1,8 +1,11 @@
-export const VERSION = "20260913-2";
+export const VERSION = "20260920-1";
 export const TAU = Math.PI * 2;
 export const WORLD = 8000;
 export const TILE = 3;
 export const BLOWHOLE = { x: 0, z: -65, y: 5 };
+export const DEEP_Y = -16;
+// The wreck is directly beneath the starting sea area and visible after a short deep swim north.
+export const PIRATE_SHIP = { x: 0, z: -120, y: DEEP_Y };
 export function stoneStairPoint(quest, step = -1) {
   const radius = 13 - step * 2;
   return { x: Math.sin(quest.angle) * radius, z: -65 + Math.cos(quest.angle) * radius, y: Math.max(0, step + 1) };
@@ -101,9 +104,9 @@ export class Simulation {
     this.whale = {
       phase: "deep",
       timer: 180,
-      x: 0,
-      z: -120,
-      y: -95,
+      x: 1100,
+      z: -900,
+      y: DEEP_Y,
       hp: Infinity,
       mouth: false,
       swallows: 0,
@@ -130,6 +133,7 @@ export class Simulation {
       skin: "sailor",
       invulnerable: 8,
       healAt: null,
+      diving: false,
     };
     this.makeIslands();
     this.makeRaft(0, 0, 0);
@@ -196,6 +200,7 @@ export class Simulation {
       hp: BUILD[type].hp,
       burning: 0,
       spread: 0,
+      skinProtected: false,
     };
     raft.parts.push(p);
     return p;
@@ -337,6 +342,8 @@ export class Simulation {
       skin: "sailor",
       raftId: r.id,
       healAt: null,
+      diving: false,
+      nextDive: 55 + this.random() * 160,
     };
     this.bots.push(bot);
     this.startFurniture(team, x, z);
@@ -347,6 +354,7 @@ export class Simulation {
     this.event("Hammaren är redo. Slå sönder soffan och de två borden!");
   }
   baseGround(x, z, zone) {
+    if (zone === "throat") return 0;
     if (zone === "belly") {
       let height = 0;
       for (const quest of this.bellyQuests.values()) {
@@ -393,6 +401,7 @@ export class Simulation {
     return { height, raft };
   }
   move(actor, dx, dz) {
+    if (actor.zone === "throat") return;
     const oldX = actor.x, oldZ = actor.z;
     const nx = clamp(
         actor.x + dx,
@@ -437,7 +446,9 @@ export class Simulation {
       actor.x = nx;
       actor.z = nz;
     }
-    actor.y = this.ground(actor.x, actor.z, actor.zone, actor.y).height;
+    actor.y = actor.diving && actor.zone === "sea"
+      ? DEEP_Y
+      : this.ground(actor.x, actor.z, actor.zone, actor.y).height;
     const distance = Math.hypot(actor.x - oldX, actor.z - oldZ);
     actor.stepSoundDistance = (actor.stepSoundDistance || 0) + distance;
     const stride = actor.y < 0 ? 1.8 : 1.4;
@@ -665,9 +676,24 @@ export class Simulation {
       return false;
     r.skin = skin;
     owner.skin = skin;
+    // Only the player's existing floor/raft pieces become fireproof and unbreakable.
+    if (owner === this.player)
+      for (const part of r.parts) part.skinProtected = true;
     for (const g of this.guards.filter((g) => g.team === owner.team))
       g.skin = skin;
     return true;
+  }
+  toggleDive(actor = this.player) {
+    if (actor.zone !== "sea" || actor.steering) return false;
+    actor.diving = !actor.diving;
+    actor.y = actor.diving ? DEEP_Y : -0.9;
+    if (actor === this.player)
+      this.event(actor.diving ? "Du dyker ner i djupet! Flotten följer på ytan." : "Du simmar upp till ytan.");
+    return true;
+  }
+  teamDiving(team) {
+    const captain = team === 0 ? this.player : this.bots.find((b) => b.team === team);
+    return !!captain?.diving && captain.zone === "sea";
   }
   harvest(res, owner = this.player) {
     if (!res?.active || res.zone !== owner.zone) return false;
@@ -811,6 +837,7 @@ export class Simulation {
     });
   }
   ignite(raft, part) {
+    if (part.skinProtected) return;
     if (part.burning || part.hp <= 0) return;
     part.burning = 5;
     part.spread = 0.55;
@@ -823,6 +850,7 @@ export class Simulation {
     });
   }
   damagePart(raft, p, amount) {
+    if (p.skinProtected) return;
     const source = { x: raft.x + p.x, z: raft.z + p.z, zone: raft.zone };
     this.sound("chop", source);
     p.hp -= amount;
@@ -1339,6 +1367,7 @@ export class Simulation {
       const swimmers = [p, ...this.bots].filter(
         (a) =>
           a.zone === "sea" &&
+          !a.diving &&
           a.y < 0 &&
           (a === p ? p.swim > 14 : a.age > 90) &&
           dist(a, s) < 90,
@@ -1361,6 +1390,7 @@ export class Simulation {
           (r) =>
             r.zone === "sea" &&
             r.parts.length &&
+            !this.teamDiving(r.team) &&
             dist(r, s) < 40 &&
             this.time > 90,
         );
@@ -1396,12 +1426,12 @@ export class Simulation {
   warnWhale() {
     const p = this.player,
       w = this.whale;
-    w.phase = "warning";
-    w.timer = 14;
+    w.phase = p.diving ? "deep-warning" : "warning";
+    w.timer = p.diving ? 8 : 14;
     w.x = p.zone === "sea" ? p.x : 0;
     // Keep the camera outside the whale until the swallowing transition.
-    w.z = p.zone === "sea" ? p.z - 130 : 0;
-    w.y = -60;
+    w.z = p.zone === "sea" ? p.z - (p.diving ? 92 : 130) : 0;
+    w.y = p.diving ? DEEP_Y : -60;
     w.mouth = true;
     this.event("Valen kommer!");
     this.sound("whale");
@@ -1451,6 +1481,49 @@ export class Simulation {
     return actor.zone === "belly" && this.bellyQuests.get(actor.team)?.built === 5 &&
       actor.y >= 4.5 && dist(actor, BLOWHOLE) < 4.8;
   }
+  startThroat(r) {
+    if (!r || r.zone !== "sea") return false;
+    const old = { x: r.x, z: r.z };
+    r.zone = "throat";
+    r.returnPos = old;
+    r.throatUntil = this.time + 5;
+    // The whole crew and its surface raft travel together for five seconds.
+    for (const a of [this.player, ...this.bots, ...this.guards]) {
+      if (a.zone !== "sea" || a.team !== r.team) continue;
+      a.zone = "throat";
+      a.diving = false;
+      a.x = 0;
+      a.z = 18;
+      a.y = 0;
+      a.steering = null;
+      a.boarding = null;
+      a.raidTarget = null;
+    }
+    for (const b of this.boats) {
+      if (b.zone === "sea" && b.team === r.team && dist(b, old) < 90) {
+        b.zone = "throat";
+        b.x = 0;
+        b.z = 20;
+        b.target = null;
+      }
+    }
+    if (r.team === 0) {
+      this.building = false;
+      this.player.swim = 0;
+      this.event("Du åker genom valens hals i vatten! 5 sekunder kvar.");
+    }
+    return true;
+  }
+  updateThroats() {
+    for (const r of this.rafts.filter((raft) => raft.zone === "throat" && this.time >= raft.throatUntil)) {
+      for (const a of [this.player, ...this.bots, ...this.guards])
+        if (a.team === r.team && a.zone === "throat") a.zone = "sea";
+      for (const b of this.boats)
+        if (b.team === r.team && b.zone === "throat") b.zone = "sea";
+      r.zone = "sea";
+      this.swallowRaft(r);
+    }
+  }
   swallowRaft(r) {
     if (r.zone === "belly") return;
     const old = { x: r.x, z: r.z };
@@ -1487,7 +1560,8 @@ export class Simulation {
     a.zone = "sea";
     a.x = this.whale.x + 150 + (a.team || 0) * 0.4;
     a.z = this.whale.z + 40;
-    a.y = -0.9;
+    a.diving = true;
+    a.y = DEEP_Y;
     a.swim = 0;
     a.boatId = null;
     a.boarding = null;
@@ -1555,6 +1629,21 @@ export class Simulation {
     if (w.phase === "deep") {
       w.y = -95 + Math.sin(this.time * 0.05) * 10;
       if (w.timer <= 0) this.warnWhale();
+    } else if (w.phase === "deep-warning") {
+      // In the deep the whale chases the swimmer with an open mouth; it is faster.
+      const p = this.player;
+      const d = Math.max(1, dist(w, p));
+      w.x += ((p.x - w.x) / d) * 18 * dt;
+      w.z += ((p.z - w.z) / d) * 18 * dt;
+      w.y = DEEP_Y;
+      if (w.timer <= 0) {
+        w.phase = "feeding";
+        w.timer = 18;
+        this.startThroat(this.raft);
+        const diver = this.bots.filter((b) => b.diving && b.zone === "sea").sort((a, b) => dist(a, w) - dist(b, w))[0];
+        if (diver && dist(diver, w) < 145)
+          this.startThroat(this.rafts.find((r) => r.team === diver.team));
+      }
     } else if (w.phase === "warning") {
       w.y = -60 + (14 - w.timer) * 4;
       if (w.timer <= 0) {
@@ -1564,21 +1653,11 @@ export class Simulation {
         const rafts = this.rafts.filter(
           (r) => r.zone === "sea" && dist(r, w) < 145,
         );
-        for (const r of rafts) this.swallowRaft(r);
-        if (this.player.zone === "sea" && dist(this.player, w) < 145) {
-          this.building = false;
-          this.player.zone = "belly";
-          this.player.x = 0;
-          this.player.z = 58;
-          this.player.y = 0;
-          this.player.steering = null;
-          this.player.swim = 0;
-          this.beginBellyQuest(0, this.player);
-        }
+        for (const r of rafts) this.startThroat(r);
         const other = this.rafts
           .filter((r) => r.team !== 0 && r.zone === "sea")
           .sort((a, b) => dist(a, w) - dist(b, w))[0];
-        if (other) this.swallowRaft(other);
+        if (other) this.startThroat(other);
       }
     } else if (w.phase === "feeding") {
       if (w.timer <= 0) {
@@ -1596,7 +1675,7 @@ export class Simulation {
           const other = this.rafts.find(
             (r) => r.team !== 0 && r.zone === "sea",
           );
-          if (other) this.swallowRaft(other);
+          if (other) this.startThroat(other);
         }
       }
     }
@@ -1620,12 +1699,18 @@ export class Simulation {
         next: this.time + 25 + this.random() * 25,
       };
     }
+    // A diver's raft stays directly above its captain on the surface.
     for (const r of this.rafts) {
       if (r.zone !== "sea") continue;
+      const captain = r.team === 0 ? this.player : this.bots.find((b) => b.team === r.team);
+      if (captain?.diving) {
+        r.x = captain.x;
+        r.z = captain.z;
+      }
       if (!this.hasWheel(r)) {
         let dx = this.current.x * dt,
           dz = this.current.z * dt;
-        this.translateRaft(
+        if (!captain?.diving) this.translateRaft(
           r,
           clamp(r.x + dx, -WORLD, WORLD) - r.x,
           clamp(r.z + dz, -WORLD, WORLD) - r.z,
@@ -1667,6 +1752,10 @@ export class Simulation {
         dx * (p.y < 0 ? 4.32 : 5.4) * dt,
         dz * (p.y < 0 ? 4.32 : 5.4) * dt,
       );
+    if (p.diving && this.raft?.zone === "sea") {
+      this.raft.x = p.x;
+      this.raft.z = p.z;
+    }
     if (p.zone === "sea" && p.y < 0) p.swim += dt;
     else p.swim = 0;
     for (const res of this.resources)
@@ -1682,11 +1771,24 @@ export class Simulation {
       const aiDt = this.aiClock;
       this.aiClock = 0;
       this.updateBots(aiDt);
+      for (const b of this.bots) {
+        if (b.zone !== "sea") continue;
+        if (!b.diving && this.time >= b.nextDive) {
+          b.diving = true;
+          b.y = DEEP_Y;
+          b.nextDive = this.time + 24 + this.random() * 32;
+        } else if (b.diving && this.time >= b.nextDive) {
+          b.diving = false;
+          b.y = -0.9;
+          b.nextDive = this.time + 80 + this.random() * 180;
+        }
+      }
       this.updateGuards(aiDt);
       this.updateBoats(aiDt);
       this.updateSharks(aiDt);
     }
     this.updateProjectiles(dt);
+    this.updateThroats();
     this.updateWhale(dt);
     this.updateHealing();
     this.events = this.events.filter((e) => e.until > this.time);

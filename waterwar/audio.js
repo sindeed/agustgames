@@ -3,6 +3,7 @@ const hz = (note) => 440 * 2 ** ((note - 69) / 12);
 const MUSIC_URLS = {
   sea: new URL("./music/open-horizon.mp3", import.meta.url).href,
   belly: new URL("./music/circuit-tension.mp3", import.meta.url).href,
+  deep: new URL("./music/circuit-warmth.mp3", import.meta.url).href,
 };
 const MUSIC_VOLUME = 0.18;
 
@@ -64,8 +65,8 @@ export class GameAudio {
       // Audio must never prevent the game from starting.
     }
   }
-  selectMusic(zone) {
-    const track = zone === "belly" ? "belly" : "sea";
+  selectMusic(zone, diving = false) {
+    const track = zone === "belly" || zone === "throat" ? "belly" : diving ? "deep" : "sea";
     if (track === this.musicTrack) return;
     this.musicTrack = track;
     this.musicGeneration++;
@@ -191,7 +192,7 @@ export class GameAudio {
   }
   update(sim) {
     const events = sim.sounds.splice(0);
-    this.selectMusic(sim.player.zone);
+    this.selectMusic(sim.player.zone, sim.player.diving);
     if (!this.context) return;
     const active = this.enabled && sim.mode === "playing" && !document.hidden;
     // Backgrounding can suspend Safari's context before visibilitychange runs.
