@@ -45,29 +45,50 @@ export const FLOOR_PLANS = {
     platforms: [], destinations: [],
   },
   6: {
-    name: 'TVÅ HÖJDNIVÅER', drawnBy: 'Agust',
+    name: 'AGUSTS VÄG TILL EXIT', drawnBy: 'Agust',
     blankIsVoid: true,
-    ground: [rect('W', -8, 29, 22, 22), rect('V1', 10, 14, 14, 12),
-      rect('T5', 10, 28, 14, 16), rect('main-west', -30, 8, 12, 38),
-      rect('main-north', -16, -5, 26, 12), rect('main-join', -22, 21, 12, 12),
-      rect('outer-west', -41, 4, 10, 58), rect('outer-bottom', -6, 37, 80, 10),
-      rect('outer-right', 29, 32, 10, 12),
-      rect('north-shelf', -14, -30, 28, 8), rect('6-U-left', 3, -30, 8, 8),
-      rect('6-U-exit', 29, -41, 10, 10), rect('exit-approach', 19, -47, 8, 12),
-      rect('X', 19, -53, 8, 4)],
-    holes: [rect('6-M', 10, -1, 14, 16)], machines: [],
-    elevators: [], stairs: { down: { x: 10, z: 29 } },
-    playerSpawn: { x: -8, z: 29, yaw: 0 }, monsterSpawn: { x: 10, z: 14 },
-    upper: [rect('upper-row', 29, -3, 8, 34, 3.2)],
-    monsterOnly: [rect('E', 29, 23, 8, 18)],
-    platforms: [
-      { ...rect('6-S-still', -37, -17, 7, 7), kind: 'static', from: { x: -37, y: 0.65, z: -17 } },
-      shuttle('6-S-to-U-left', -2, -5, 3, -30, 8),
-      lift('6-S-up', 19, 14),
-      shuttle('6-S-to-U-exit', 29, -24, 29, -41, 8),
-      lift('6-S-down', 19, -39, true),
+    ground: [
+      rect('W', -8, 29, 16, 16),
+      rect('T5', 10, 28, 14, 16),
+      rect('V1', 10, 14, 14, 12),
+      rect('left-corridor', -26, 29, 22, 8),
+      rect('outer-west', -41, 4, 10, 58),
+      rect('north-corridor', -18, -5, 32, 12),
+      rect('6-U-left', 3, -30, 8, 8),
+      rect('exit-approach', 19, -47, 8, 12),
+      rect('X', 19, -53, 8, 4),
     ],
-    destinations: [rect('6-U-left', 3, -30, 8, 8), rect('6-U-exit', 29, -41, 10, 10)],
+    holes: [], machines: [], elevators: [],
+    stairs: { down: { x: 10, z: 29 } },
+    playerSpawn: { x: -8, z: 29, yaw: 0 },
+    monsterSpawn: { x: 10, z: 14 },
+    upper: [], monsterOnly: [
+      // Snabbis takes a long, fixed switchback route. Players cannot enter E.
+      rect('E-entry', 22, 14, 14, 3),
+      rect('E-east-1', 29, -11, 3, 53),
+      rect('E-turn-1', 34, -37, 13, 3),
+      rect('E-west-1', 40, -7, 3, 63),
+      rect('E-turn-2', 46, 24, 15, 3),
+      rect('E-east-mid', 44, -10, 3, 70),
+      rect('E-east-2', 48, -10, 3, 70),
+      rect('E-east-3', 52, -10, 3, 70),
+      rect('E-final', 38.5, -45, 29, 3),
+    ],
+    monsterRaceRoute: [
+      [10,14], [29,14], [29,-37], [40,-37], [40,24],
+      [44,24], [44,-45], [48,-45], [48,24],
+      [52,24], [52,-45], [24,-45],
+    ],
+    platforms: [
+      shuttle('6-S-to-U-left', -2, -5, 3, -30, 8),
+      {
+        ...rect('6-S-down', 8, -32, 12, 12), kind: 'shuttle',
+        from: { x: 8, y: 0.65, z: -32 },
+        to: { x: 19, y: 0.65, z: -47 },
+        duration: 11, arrow: 'EXIT',
+      },
+    ],
+    destinations: [rect('6-U-left', 3, -30, 8, 8)],
     exit: { x: 19, z: -52 },
   },
 };
@@ -83,7 +104,9 @@ export function platformPose(platform, seconds) {
   const phase = ((seconds % (leg * 2)) + leg * 2) % (leg * 2);
   const travel = Math.max(0, Math.min(1, (phase < leg ? phase - 1 : phase - leg - 1) / platform.duration));
   const t = phase < leg ? travel : 1 - travel;
-  return Object.fromEntries(['x', 'y', 'z'].map(axis => [axis, platform.from[axis] + (platform.to[axis] - platform.from[axis]) * t]));
+  const pose = Object.fromEntries(['x', 'y', 'z'].map(axis => [axis, platform.from[axis] + (platform.to[axis] - platform.from[axis]) * t]));
+  if (platform.id === '6-S-down') pose.y += 0.7 * Math.sin(Math.PI * t);
+  return pose;
 }
 
 export function floorHasGround(floor, x, z) {

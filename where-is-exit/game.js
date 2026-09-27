@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, isBlankVoid } from "./floor-plans.js?v=20260907-holes-1";
+import { FLOOR_PLANS, insideRect, platformPose, floorHasGround, stairLocation, isBlankVoid } from "./floor-plans.js?v=20260927-floor6-race-1";
 import { findRoute, rectangleConnection, findSurfaceRoute } from "./navigation.js?v=20260907-holes-1";
 import { createFactoryIntro, INTRO_TIMES } from "./intro.js?v=20260907-ending-1";
 import { createFactoryEnding } from "./ending.js?v=20260907-ending-2";
@@ -50,7 +50,7 @@ const GRAVITY = 17.5;
 const JUMP_SPEED = 6.7;
 const INTERACT_RANGE = 3.15;
 const DOOR_OPEN_MS = 2000;
-const VERSION = "20260912-music-2";
+const VERSION = "20260927-floor6-race-1";
 const STAIR_UP_X = -43;
 const STAIR_DOWN_X = -32;
 const STAIR_ENTRY_Z = 39.4;
@@ -232,6 +232,7 @@ function freshState(seed = 333) {
     elevatorOpen: false,
     caughtBy: null,
     won: false,
+    snabbisRace: null,
   };
 }
 
@@ -1060,10 +1061,15 @@ function addDrawnLayout(parent, floor, theme, wallMaterial) {
     }
   }
   for (const bridge of plan.monsterOnly || []) {
-    // E is a sloped route to the upper row, usable only by monsters.
-    const ramp = meshBox(parent, [bridge.w, 0.22, Math.hypot(bridge.d, 3.2)], [bridge.x, 1.6, bridge.z], theme.accentMaterial);
-    ramp.rotation.x = Math.atan2(3.2, bridge.d);
-    addLabel(parent, 'E · BARA MONSTER', [bridge.x, 3, bridge.z + 5], '#e8c6ff', 2.5);
+    if (floor === 6) {
+      meshBox(parent, [bridge.w, 0.2, bridge.d], [bridge.x, -0.1, bridge.z], MATERIALS.mediumMetal);
+      floorMark(parent, 'E', bridge.x, 0.035, bridge.z, '#e8c6ff', 1.8);
+    } else {
+      // E on the original floor drawing is a sloped monster route.
+      const ramp = meshBox(parent, [bridge.w, 0.22, Math.hypot(bridge.d, 3.2)], [bridge.x, 1.6, bridge.z], theme.accentMaterial);
+      ramp.rotation.x = Math.atan2(3.2, bridge.d);
+      addLabel(parent, 'E · BARA MONSTER', [bridge.x, 3, bridge.z + 5], '#e8c6ff', 2.5);
+    }
   }
   if (plan.playerSpawn) floorMark(parent, 'W · START', plan.playerSpawn.x, 0.035, plan.playerSpawn.z, '#95efcb', 8);
   if (plan.monsterSpawn) floorMark(parent, 'V1', plan.monsterSpawn.x, 0.035, plan.monsterSpawn.z, '#ffa96a', 4);
@@ -1359,7 +1365,7 @@ function supportAt(x, z, highestY = Infinity, monster = false) {
     if (box.y <= highestY + 0.02 && insideRect(x, z, box, box.kind ? 0.05 : 0) && (!best || box.y > best.y)) best = { id: box.id, y: box.y };
   }
   if (monster) for (const ramp of FLOOR_PLANS[state.player.floor]?.monsterOnly || []) {
-    const height = 3.2 * clamp((ramp.z + ramp.d / 2 - z) / ramp.d, 0, 1);
+    const height = state.player.floor === 6 ? 0 : 3.2 * clamp((ramp.z + ramp.d / 2 - z) / ramp.d, 0, 1);
     if (insideRect(x, z, ramp) && height <= highestY + 0.35 && (!best || height > best.y)) best = { id: ramp.id, y: height };
   }
   return best;
@@ -1374,7 +1380,7 @@ function floorSupportAt(floor, x, z, highestY = Infinity) {
     if (box.y <= highestY + 0.02 && insideRect(x, z, box, box.kind ? 0.05 : 0) && (!best || box.y > best.y)) best = { id: box.id, y: box.y };
   }
   for (const ramp of plan?.monsterOnly || []) {
-    const y = 3.2 * clamp((ramp.z + ramp.d / 2 - z) / ramp.d, 0, 1);
+    const y = floor === 6 ? 0 : 3.2 * clamp((ramp.z + ramp.d / 2 - z) / ramp.d, 0, 1);
     if (insideRect(x, z, ramp) && y <= highestY + 0.35 && (!best || y > best.y)) best = { id: ramp.id, y };
   }
   return best;
@@ -2347,12 +2353,43 @@ function tryMonsterCatch(monster) {
   return true;
 }
 
+function advanceSnabbisRace(monster, dt) {
+  const race = state.snabbisRace;
+  const route = FLOOR_PLANS[6].monsterRaceRoute;
+  if (!race || monster.floor !== 6 || !route) return false;
+  monster.ai = 'race';
+  monster.seesPlayer = false;
+  monster.path = [];
+  const destination = route[race.waypoint];
+  if (!destination) {
+    // Snabbis has reached the EXIT side before the player got through.
+    caughtByMonster(monster);
+    return true;
+  }
+  const [targetX, targetZ] = destination;
+  const dx = targetX - monster.x, dz = targetZ - monster.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance < 0.12) { race.waypoint += 1; return true; }
+  const step = Math.min(distance, FACELESS_SPEED * dt);
+  monster.heading = Math.atan2(dx, dz);
+  if (race.waypoint === 0) {
+    // Return through ordinary navigable floor before entering the exclusive path.
+    moveMonsterToward(monster, targetX, targetZ, FACELESS_SPEED, dt);
+  } else {
+    moveWithCollisions(monster, dx / distance * step, dz / distance * step, 0.76);
+    const support = floorSupportAt(6, monster.x, monster.z, 0.1);
+    if (support) { monster.baseY = support.y; monster.supportId = support.id; }
+  }
+  return true;
+}
+
 function updateMonsters(dt) {
     state.monsters.forEach((monster) => {
     if (monster.frozen) {
       monster.seesPlayer = false;
       return;
     }
+    if (monster.kind === 'faceless' && advanceSnabbisRace(monster, dt)) return;
 
     monster.stairCooldown = Math.max(0, monster.stairCooldown - dt);
     monster.floorRoamTimer -= dt;
@@ -2539,6 +2576,16 @@ function updatePlayer(dt) {
     state.player.grounded = true;
     state.player.supportId = landing.id;
     state.player.autoJump = null;
+  }
+  if (state.player.floor === 6 && state.player.supportId === '6-S-to-U-left' && !state.snabbisRace) {
+    const snabbis = state.monsters.find(monster => monster.kind === 'faceless');
+    if (snabbis?.floor === 6) {
+      state.snabbisRace = { waypoint: 0, startedAt: state.elapsedMs };
+      snabbis.frozen = false;
+      snabbis.stairRoute = null;
+      snabbis.path = [];
+      showMessage('SNABBIS TAR SIN EGEN VÄG · SKYNDA TILL EXIT!', 3.4);
+    }
   }
   if (state.player.y < -3.5) { returnToMenu(); return; }
 
@@ -3182,6 +3229,7 @@ function renderGameToText() {
     upperAreas: FLOOR_PLANS[state.player.floor]?.upper || [],
     elevatorSafeAreas: elevatorSafeAreas(state.player.floor),
     monsterOnlyAreas: FLOOR_PLANS[state.player.floor]?.monsterOnly || [],
+    snabbisRace: state.snabbisRace,
     doors: doorways.map(({ id, floor, name, x, z, rotationY, open }) => ({
       id, floor, name, x, z, rotationY, open,
       closesInSeconds: open ? Number((Math.max(0, (state.doorOpenUntil[id] || 0) - state.elapsedMs) / 1000).toFixed(3)) : 0,
