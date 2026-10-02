@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#172a31"><meta name="apple-mobile-web-app-capable" content="yes"><title>Where Is Exit 2 – Agust Games</title><link rel="stylesheet" href="style.css"><script type="module" src="game.js"></script></head><body>
+<main id="shell"><canvas id="game" aria-label="Where Is Exit 2" tabindex="0"></canvas>
+<div id="menu" class="overlay"><div class="menu-panel"><h1>WHERE IS EXIT <span>2</span></h1><p>Skogen leder till kraftverket.</p><button id="start">STARTA SPELET</button><button id="intro">INTRO</button></div></div>
+<div id="introScreen" class="overlay" hidden><iframe id="introFrame" title="Introfilm till Where Is Exit 2" allow="autoplay"></iframe><button id="skipIntro" class="corner">HOPPA ÖVER</button></div>
+<div id="endingScreen" class="overlay" hidden><div id="endingCaption"></div><button id="endMenu" class="corner" hidden>TILL MENYN</button></div>
+<div id="hud" hidden><div id="missionNumber">UPPDRAG 1 AV 5</div><div id="missionText"></div><div id="prompt"></div><div id="notice"></div></div>
+<div id="touch" hidden><div id="stick" aria-label="Styr spelaren"><span id="knob"></span></div><div class="actions"><button data-action="sprint">SPRING</button><button data-action="interact">TA SAK</button><button data-action="jump">HOPPA</button><button data-action="crouch" id="duck" hidden>DUCKA</button></div></div>
+<button id="fullscreen" aria-label="Helskärm" hidden>⛶</button>
+</main></body></html>
