@@ -1,5 +1,5 @@
-import {SpaceView} from './view.js?v=20261003-max';
-import {PLANET,wrapBody,planetDelta,shipRooms,shipCovers,shipObstacles,shipWalkable,shipPath,shipLineClear,segmentHit,SHIP_ENTRY,SPACE_DOCK} from './world.js?v=20261003-max';
+import {SpaceView} from './view.js?v=20261003-smooth';
+import {PLANET,wrapBody,planetDelta,shipRooms,shipCovers,shipObstacles,shipWalkable,shipPath,shipLineClear,segmentHit,SHIP_ENTRY,SPACE_DOCK} from './world.js?v=20261003-smooth';
 'use strict';
 const canvas=document.querySelector('canvas'),view=new SpaceView(canvas);
 const $=s=>document.querySelector(s), keys=new Set();
