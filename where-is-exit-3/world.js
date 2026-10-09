@@ -1,6 +1,6 @@
-import {THREE,M,mat,box,cyl,sphere,tree,label,enogatModel,snabbisModel,eightLegs,mouthModel,playerModel} from './models.js?v=20261009-gym10-2';
-import {GYM,inGymHall} from './gym-layout.js?v=20261009-gym10-2';
-import {SUBJECTS} from './curriculum.js?v=20261009-gym10-2';
+import {THREE,M,mat,box,cyl,sphere,tree,label,enogatModel,snabbisModel,eightLegs,mouthModel,playerModel} from './models.js?v=20261009-geography-3';
+import {GYM,inGymHall} from './gym-layout.js?v=20261009-geography-3';
+import {SUBJECTS} from './curriculum.js?v=20261009-geography-3';
 
 const P={wall:mat(0x829796),plaster:mat(0xb4b9a5),floor:mat(0x536b69),wood:mat(0xa07b4d),chalk:mat(0x16483b),grass:mat(0x587954),line:mat(0xe8deac),red:mat(0xb65043),blue:mat(0x5c90ac),yellow:mat(0xdcb650),foam:mat(0x3c8eaa),pink:mat(0xbe7283),leaves:mat(0xb56c36),road:mat(0x4b5556)};
 export const ROOM_SIZE=20;
@@ -16,7 +16,7 @@ export function createWorld(scene){
   for(const [a,b] of [[lo,door-opening/2],[door+opening/2,hi]])if(b>a)solid(axis==='x'?(a+b)/2:x,3.7,axis==='z'?(a+b)/2:z,axis==='x'?b-a:.45,7.4,axis==='z'?b-a:.45);
   solid(axis==='x'?door:x,6.3,axis==='z'?door:z,axis==='x'?opening:.45,2.2,axis==='z'?opening:.45);
  }
- function boardText(subject){const c=document.createElement('canvas');c.width=1024;c.height=512;const t=c.getContext('2d');t.fillStyle='#153e34';t.fillRect(0,0,1024,512);t.textAlign='center';t.fillStyle='#ede9c6';t.font='bold 61px system-ui';t.fillText(subject.name.toUpperCase(),512,98);t.font='34px system-ui';const lines=subject.id==='math'?['7 × 6 =','8 × 4 =','9 × 7 =']:subject.id==='swedish'?['Sagan om fabriken','Ta boken. Skriv av berättelsen.']:subject.id==='english'?['monster · skola · bok','nyckel · skugga']:subject.id==='social'?['Stenåldern · Birka · Runor']:['Skogen · Rovdjur · Fjärilar'];lines.forEach((l,i)=>t.fillText(l,512,195+i*75));t.font='24px system-ui';t.fillStyle='#b4c2a3';t.fillText('PENNA OCH SUDD PÅ HYLLAN',512,467);const tx=new THREE.CanvasTexture(c);tx.colorSpace=THREE.SRGBColorSpace;return new THREE.MeshBasicMaterial({map:tx})}
+ function boardText(subject){const c=document.createElement('canvas');c.width=1024;c.height=512;const t=c.getContext('2d');t.fillStyle='#153e34';t.fillRect(0,0,1024,512);t.textAlign='center';t.fillStyle='#ede9c6';t.font='bold 61px system-ui';t.fillText(subject.name.toUpperCase(),512,98);t.font='34px system-ui';const lines=subject.id==='math'?['7 × 6 =','8 × 4 =','9 × 7 =']:subject.id==='swedish'?['Sagan om fabriken','Ta boken. Skriv av berättelsen.']:subject.id==='english'?['monster · skola · bok','nyckel · skugga']:subject.id==='social'?['Stenåldern · Birka · Runor']:subject.id==='geography'?['Hitta I och E · Sveriges grannar','Var är monstren just nu?']:['Skogen · Rovdjur · Fjärilar'];lines.forEach((l,i)=>t.fillText(l,512,195+i*75));t.font='24px system-ui';t.fillStyle='#b4c2a3';t.fillText('PENNA OCH SUDD PÅ HYLLAN',512,467);const tx=new THREE.CanvasTexture(c);tx.colorSpace=THREE.SRGBColorSpace;return new THREE.MeshBasicMaterial({map:tx})}
  function desk(x,z,angle=0){const group=new THREE.Group();group.position.set(x,0,z);group.rotation.y=angle;root.add(group);box(group,2.6,.18,1.6,0,1.35,0,P.wood);for(const dx of [-1.05,1.05])for(const dz of [-.55,.55])box(group,.12,1.3,.12,dx,.65,dz,M.dark);box(group,1.1,.18,1,0,.75,1.55,P.wood);box(group,1.1,1,.15,0,1.3,2,P.wood);for(const dx of [-.42,.42])for(const dz of [1.2,1.9])box(group,.1,.7,.1,dx,.35,dz,M.dark);w.walls.push({x,z,w:2.5,d:1.5,minY:0,maxY:1.45,enabled:true});return group}
  function classroom(s){
   const {x,z}=s;floor(x,z,20,20,P.floor);solid(x,3.7,z-10,20,7.4,.45);solid(x,3.7,z+10,20,7.4,.45);solid(x+(x<0?-10:10),3.7,z,.45,7.4,20);wallWithDoor(x+(x<0?10:-10),z,20,'z',z,4);
@@ -49,7 +49,7 @@ export function createWorld(scene){
  box(root,g.w,.25,g.d,g.x,g.height,g.z,P.plaster);
  floor(g.passage.x,g.passage.z,g.passage.w,g.passage.d,P.wood);
  for(const z of [-25,-17])solid(g.passage.x,3.7,z,g.passage.w,7.4,.45);
- wallWithDoor(5,-30,40,'z',-21,4);
+ wallWithDoor(5,-20,20,'z',-21,4);
  box(root,20,.25,8,15,7.5,-21,P.plaster);
  label(root,'IDROTT →',8,5.5,-21).scale.set(5.2,1.2,1);
  // Repeated lights and court lines make the large distances visible without scaling props.
@@ -139,9 +139,9 @@ export function createWorld(scene){
  w.actor=playerModel(root);w.actor.scale.setScalar(.58);w.actor.visible=false;
  return w;
 }
-export function addPiece(w,type,x,z,bottom=0,rotated=false){const width=type==='cube'?2.4:4.8,depth=2.4,height=type==='cube'?1.8:.3;const mesh=box(w.root,rotated?depth:width,height,rotated?width:depth,x,bottom+height/2,z,type==='cube'?P.foam:P.pink);const p={id:'piece-'+(w.nextPieceId=(w.nextPieceId||0)+1),type,x,z,w:rotated?depth:width,d:rotated?width:depth,h:height,bottom,mesh,rotated};w.pieces.push(p);return p}
+export function addPiece(w,type,x,z,bottom=0,rotated=false){w.navRevision=(w.navRevision||0)+1;const width=type==='cube'?2.4:4.8,depth=2.4,height=type==='cube'?1.8:.3;const mesh=box(w.root,rotated?depth:width,height,rotated?width:depth,x,bottom+height/2,z,type==='cube'?P.foam:P.pink);const p={id:'piece-'+(w.nextPieceId=(w.nextPieceId||0)+1),type,x,z,w:rotated?depth:width,d:rotated?width:depth,h:height,bottom,mesh,rotated};w.pieces.push(p);return p}
 export function inRect(x,z,r){return Math.abs(x-r.x)<=r.w/2&&Math.abs(z-r.z)<=r.d/2}
-export function zoneAt(x,z){if(inGymHall(x,z)||inRect(x,z,GYM.passage))return 'gym';for(const s of SUBJECTS.filter(s=>s.id!=='gym')){if(Math.abs(x-s.x)<9.95&&Math.abs(z-s.z)<9.95)return s.id}if(x>=-5&&x<=5&&z>=-54&&z<=50)return 'corridor';if(z>=50&&z<=135&&Math.abs(x)<=65)return 'yard';if(z<-54&&z>=-85&&Math.abs(x)<=22)return 'dining';if(z<-85&&z>=-111&&Math.abs(x)<=22)return 'kitchen';if(z<-111&&z>=-136&&Math.abs(x)<22)return 'loading';if(z<-136)return 'forest';return 'outside'}
+export function zoneAt(x,z){if(inGymHall(x,z)||inRect(x,z,GYM.passage))return 'gym';for(const s of SUBJECTS.filter(s=>s.id!=='gym')){if(Math.abs(x-s.x)<=10&&Math.abs(z-s.z)<=10)return s.id}if(x>=-5&&x<=5&&z>=-54&&z<=50)return 'corridor';if(z>=50&&z<=135&&Math.abs(x)<=65)return 'yard';if(z<-54&&z>=-85&&Math.abs(x)<=22)return 'dining';if(z<-85&&z>=-111&&Math.abs(x)<=22)return 'kitchen';if(z<-111&&z>=-136&&Math.abs(x)<22)return 'loading';if(z<-136)return 'forest';return 'outside'}
 
 export function seedGymPieces(w){
  for(const [x,z] of [[44,-19],[94,-100],[165,-32],[163,-101]]){

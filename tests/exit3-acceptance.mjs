@@ -1,3 +1,4 @@
+import {geographyFlow} from './exit3-geography-flow.mjs';
 import {gymFlow} from './exit3-gym-flow.mjs';
 import { homedir } from 'node:os';
 const {chromium,webkit}=await import(process.env.PLAYWRIGHT_MODULE||`${homedir()}/.codex/skills/develop-web-game/node_modules/playwright/index.mjs`);
@@ -36,11 +37,13 @@ for(const [id,x,z] of [['spin-1',-11,100],['spin-2',7,114]]){await place(x,z);aw
 await place(-18,122);await use();check('Förrådet ger fotbollar',(await state()).inventory.ball==='yard');await place(-18,98);await page.evaluate(()=>Object.assign(window.__exit3.state.monsters.snabbis,{x:-18,z:90,lostUntil:999}));await press('KeyQ');await step(400);check('Kastad fotboll bromsar Snabbis',(await state()).monsters.snabbis.slowRemaining>0);check('Bollen förbrukas inte',(await state()).inventory.ball==='yard');
 // Enlarged gym: earned progression through the same three lessons.
 await gymFlow({page,state,place,step,press,check,shot});
+check('Sex tidigare ämnen öppnar inte flykten',!(await state()).gateOpen);
+await geographyFlow({page,state,place,step,press,check,shot});
 // Football shots use actual ball velocity and goal detection.
 await place(25,119);await page.evaluate(()=>window.__exit3.state.ball='yard');await use();check('Frivillig fotboll startar vid varsitt mål',(await state()).football.active&&(await state()).player.z===127&&(await state()).monsters.snabbis.z===107);await shot('football');
 for(let i=0;i<3;i++){await step(1400);await place(25,108,0,0);await page.evaluate(()=>{const g=window.__exit3.state;g.football.ball.x=25;g.football.ball.z=106;g.monsters.snabbis.x=37;g.monsters.snabbis.z=120});await press('KeyQ');await step(700)}check('Först till tre ger en kort fartökning',!(await state()).football.active&&(await state()).football.player===3&&(await state()).boostRemaining>0);await step(15500);check('Fartökningen är tillfällig',(await state()).boostRemaining===0);
 // Full escape after earned subject progress. Report any prerequisite failure before setting isolated setup.
-check('Alla sex ämnen öppnar matsalsdörren',Object.values((await state()).done).filter(Boolean).length===6&&(await state()).gateOpen);
+check('Alla sju ämnen öppnar matsalsdörren',Object.values((await state()).done).filter(Boolean).length===7&&(await state()).gateOpen);
 if(!(await state()).done.gym){await page.evaluate(()=>{window.__exit3.state.done.gym=true;window.__exit3.checkProgress()})}
 await page.evaluate(()=>window.__exit3.state.immuneUntil=0);await place(0,-51);await press('KeyW',1500);check('Matsalen nås genom den öppna korridordörren',(await state()).zone==='dining');await shot('dining');await place(-17,-78);await use();check('Oändligt vatten kan hämtas',(await state()).inventory.water==='infinite');
 await place(0,-72);await page.evaluate(()=>Object.assign(window.__exit3.state.monsters.mouth,{x:0,z:-80}));await press('KeyQ');await step(400);const stopState=await state(),stop=stopState.monsters.mouth;check('Vatten träffar den lysande munnen',stop.slowRemaining>4.7&&stop.slowRemaining<=5);const pos=[stop.x,stop.z];await step((stop.slowRemaining-.05)*1000);check('Munvrålet står still hela stoppet',(await state()).monsters.mouth.x===pos[0]&&(await state()).monsters.mouth.z===pos[1]);await step(100);check('Munvrålet rör sig igen efter exakt fem sekunder',(await state()).monsters.mouth.slowRemaining===0&&(await state()).monsters.mouth.z!==pos[1]);await press('KeyQ');await step(400);check('Vatten kan stoppa honom igen',(await state()).monsters.mouth.slowRemaining>4.5);
