@@ -17,3 +17,25 @@ Krav som ska bevaras:
 Åtgärdade testfynd: Snurrornas längre söktid skrevs över av generellt skydd; använder nu längst giltig tid. Kurragömma har riktig siktlinje och upptäckt även när spelaren står högt. Testets byggväg måste gå runt fasta skärmar och landa på sina byggdelar; verifierat fram till målytan. Sista puts: synlig kastbåge för Snabbis och hopp upp på lastbilstaket samt bakåtvänd sikt under körningen.
 
 Slutlig lokal verifiering: Chromium 71/71 inklusive riktiga pekhändelser. WebKit 68/68 för spelkedjan och 27/27 extra kontroller för dörrar, väggar, fångst, förlust, paus, omstart, stående skärmformat, tangentbordsyta och portallänkar. Inga JavaScript- eller konsolfel. Alla 14 befintliga portallänkar är oförändrade; en ny länk till trean tillagd. Syntaxkontroller och git diff --check passerade. Återstår: publicering och liveverifiering.
+
+
+Publicerad och liveverifierad 2026-10-09 18:29 Europe/Stockholm.
+- GitHub-commit: dfd4b81284cc27a363c856077bde274b600c18d1. Pages-körning 37959249672 avslutad med success.
+- Live: https://sindeed.github.io/agustgames/where-is-exit-3/?v=20261009-1 . Portalens första spelkort leder till trean.
+- Alla sju laddade portal-/spelfiler returnerade HTTP 200 och SHA-256 matchade publiceringskopian.
+- Live Chromium: 71/71 kontroller, inklusive pekhändelser, skrivning, byggväg och full slutsekvens.
+- Live WebKit: 27/27 extra kontroller, inklusive dörrar, förlust, omstart, stående format, tangentbordsyta och portallänk. WebKits hela spelkedja hade även 68/68 lokalt.
+- Inga JavaScript- eller konsolfel. Skärmbilder öppnade och granskade.
+- Ingen fysisk iPad verifierad. Testerna använder placeringshjälp mellan avsnitt; ingen obruten spelomgång utan testhjälp har påståtts. Svar sparas bara under aktuell omgång, inte efter omladdning.
+- Start 17:58; verifierad leverans cirka 18:32, ungefär 34 minuter. Tidig grov uppskattning var 1–2 timmar.
+- Inga kvarstående blockerare. Nästa möjliga arbete: justeringar efter Agusts egen iPad-provspelning.
+
+Skärmrotation i WebKit kontrollerad efter avslutad layout: canvas, CSS, shell och viewport matchade 1180×820 respektive 820×1180. Den första smala bilden var fångad mitt i storleksbytet, ingen kvarstående proportioneringsbugg.
+
+Ny beställning 2026-10-09: Gör idrottssalens golvyta tio gånger större än nuvarande sal. Implementerar 160 × 100, samma höjd, med sammanhängande passage från befintlig dörr, utökade bygg-/monstergränser, flyttat mål, viloplatser och spridda gömställen. Tio bollträffar och 30 + 30 sekunder behålls. Version 20261009-gym10-2. Tester och publicering återstår.
+
+Genomförande: Gemensam gym-layout styr verklig golvgeometri, zoner, väggar, bygggränser, Åttabens förflyttning och nya mål-/sökplatser. Salen ligger öster om skolan så andra klassrum och matsal/kök inte överlappas. Tio bollträffar, normal monsterfart och tre sekunders broms är oförändrade. Ett test behövde rättas för 3D-objekt utan geometri-parametrar; byggprovets sista överlappande kub ersattes med ett faktiskt hopp till målplattformen.
+
+Åtgärdat ett verkligt testfynd: en 0,05 bred logisk springa mellan passagen och salens golv kunde stoppa återvägen beroende på steglängd. Zonerna möts nu utan glapp; väggarnas kollisioner behåller avgränsningen.
+
+Verifierat före publicering: 36/36 riktade Chromium-kontroller, 72/72 kontroller av hela spelet i WebKit och 27/27 WebKit-kontroller av dörrar, omstart, iPad-format och portal. Skills Playwright-klient körd efter sista speländringen; skärmbilder granskade och inga konsol-/JavaScriptfel. Syntaxkontroller och git diff --check godkända. Fysiskt iPad-test är inte utfört.

@@ -1,8 +1,9 @@
-import {THREE,M,mat,box,cyl,sphere,tree,label,enogatModel,snabbisModel,eightLegs,mouthModel,playerModel} from './models.js?v=20261009-1';
-import {SUBJECTS} from './curriculum.js?v=20261009-1';
+import {THREE,M,mat,box,cyl,sphere,tree,label,enogatModel,snabbisModel,eightLegs,mouthModel,playerModel} from './models.js?v=20261009-gym10-2';
+import {GYM,inGymHall} from './gym-layout.js?v=20261009-gym10-2';
+import {SUBJECTS} from './curriculum.js?v=20261009-gym10-2';
 
 const P={wall:mat(0x829796),plaster:mat(0xb4b9a5),floor:mat(0x536b69),wood:mat(0xa07b4d),chalk:mat(0x16483b),grass:mat(0x587954),line:mat(0xe8deac),red:mat(0xb65043),blue:mat(0x5c90ac),yellow:mat(0xdcb650),foam:mat(0x3c8eaa),pink:mat(0xbe7283),leaves:mat(0xb56c36),road:mat(0x4b5556)};
-export const ROOM_SIZE=20, GYM_SIZE=40;
+export const ROOM_SIZE=20;
 export function createWorld(scene){
  const root=new THREE.Group();scene.add(root);
  const w={root,walls:[],surfaces:[],interacts:[],pieces:[],swings:[],spinners:[],slides:[],roomBoards:{},monsters:{},decor:[],ghost:null};
@@ -37,23 +38,43 @@ export function createWorld(scene){
  for(let z=-46;z<48;z+=14){box(root,2,.12,.75,0,7.12,z,M.glow);for(const x of [-4.7,4.7]){box(root,.15,1.4,5,x,1.2,z,P.wood);for(let i=0;i<3;i++)box(root,.25,2,1.2,x,4,z-1.5+i*1.5,i%2?P.blue:P.yellow)}}
  label(root,'SKOLGÅRD',0,5.8,49);label(root,'MATSAL',0,5.8,-53);
  const gate=solid(0,3.5,-54,9.7,7,.4,P.wood,{id:'diningGate'});w.gate=gate;interact('dining','TILL MATSALEN',0,-51,0,{radius:4});
- // Idrott: 40 × 40 compared with every 20 × 20 classroom.
- floor(25,-30,40,40,P.wood);solid(25,4.6,-50,40,9.2,.45);solid(25,4.6,-10,40,9.2,.45);solid(45,4.6,-30,.45,9.2,40);wallWithDoor(5,-30,40,'z',-21,4);box(root,40,.25,40,25,9.4,-30,P.plaster);
- for(const z of [-46,-14])box(root,34,.02,.16,25,.03,z,P.line);for(const x of [9,41])box(root,.16,.02,32,x,.03,-30,P.line);
- for(const x of [12,25,38])box(root,5,.1,1,x,9.1,-30,M.glow);
- label(root,'IDROTT',7,6,-21);label(root,'BOLLAR · OÄNDLIGT',11,4,-13).scale.set(6,1.5,1);
- box(root,4,1,2,11,.5,-12.2,P.blue);for(let i=0;i<6;i++)sphere(root,.4,9.5+(i%3)*1.1,1.3,-12.3-Math.floor(i/3)*.7,P.red);
- interact('gymBalls','TA BOLL',11,-14,0,{radius:4});
- label(root,'MJUKA KUBER & MATTOR',21,4,-12).scale.set(8,1.5,1);interact('buildSupply','BYGG MED KUBER OCH MATTOR',21,-14,0,{radius:4});
- const startPad=box(root,5,1.8,5,12,.9,-21,P.blue);surface(12,-21,5,5,1.8,'gymStart');w.walls.push({x:12,z:-21,w:5,d:5,minY:0,maxY:1.8,enabled:true,id:'gymStart'});
- label(root,'BYGGSTART',12,4.4,-21).scale.set(5,1.2,1);
- const goal=box(root,5,1.8,5,38,.9,-44,P.yellow);surface(38,-44,5,5,1.8,'gymGoal');w.walls.push({x:38,z:-44,w:5,d:5,minY:0,maxY:1.8,enabled:true,id:'gymGoal'});w.gymGoal=goal;
- label(root,'MÅL · KURRAGÖMMA',38,4.4,-44).scale.set(7,1.5,1);
- // Hideouts block vision geometrically, so player-built walls can work too.
- for(const [x,z] of [[35,-16],[40,-32],[23,-45]]){solid(x,1.75,z,5,3.5,1.1,P.pink);solid(x+2,1.2,z+2,1,2.4,4,P.foam)}
- solid(32.5,1.75,-13,.6,3.5,6,P.pink);
-for(let i=0;i<7;i++)addPiece(w,'cube',20+i%4*2.6,-17-Math.floor(i/4)*3,0,i%2===0);
- for(let i=0;i<3;i++)addPiece(w,'mat',29+i*4,-36,0,i===1);
+ // The hall itself is 160 × 100 = 16,000, exactly ten old 40 × 40 halls.
+ // Extend east of the other school rooms; an entrance passage preserves the old door.
+ const g=GYM;
+ floor(g.x,g.z,g.w,g.d,P.wood);
+ solid(g.x,4.6,g.minZ,g.w,9.2,.45);solid(g.x,4.6,g.maxZ,g.w,9.2,.45);
+ solid(g.maxX,4.6,g.z,.45,9.2,g.d);
+ wallWithDoor(g.minX,g.z,g.d,'z',g.passage.z,8);
+ box(root,.45,1.8,g.d,g.minX,8.3,g.z,P.wall);
+ box(root,g.w,.25,g.d,g.x,g.height,g.z,P.plaster);
+ floor(g.passage.x,g.passage.z,g.passage.w,g.passage.d,P.wood);
+ for(const z of [-25,-17])solid(g.passage.x,3.7,z,g.passage.w,7.4,.45);
+ wallWithDoor(5,-30,40,'z',-21,4);
+ box(root,20,.25,8,15,7.5,-21,P.plaster);
+ label(root,'IDROTT →',8,5.5,-21).scale.set(5.2,1.2,1);
+ // Repeated lights and court lines make the large distances visible without scaling props.
+ for(const x of [45,75,105,135,165])for(const z of [-28,-60,-92])box(root,6,.1,1.2,x,9.1,z,M.glow);
+ for(const z of [-104,-60,-16])box(root,148,.02,.16,105,.03,z,P.line);
+ for(const x of [31,79,131,179])box(root,.16,.02,88,x,.03,-60,P.line);
+ for(const x of [55,105,155]){const ring=new THREE.Mesh(new THREE.RingGeometry(8.9,9,48),P.line);ring.rotation.x=-Math.PI/2;ring.position.set(x,.035,-60);root.add(ring)}
+ for(const z of [-24,-48,-72,-96])box(root,.12,2,12,g.maxX-.3,6.7,z,M.sky);
+ label(root,'IDROTT',32,6,-22).scale.set(6,1.3,1);
+ label(root,'BOLLAR · OÄNDLIGT',g.balls.x,4,-12.7).scale.set(6,1.5,1);
+ box(root,4,1,2,g.balls.x,.5,-12.2,P.blue);for(let i=0;i<6;i++)sphere(root,.4,g.balls.x-1.5+(i%3)*1.1,1.3,-12.3-Math.floor(i/3)*.7,P.red);
+ interact('gymBalls','TA BOLL',g.balls.x,g.balls.z,0,{radius:4});
+ label(root,'MJUKA KUBER & MATTOR',g.supply.x,4,-12).scale.set(8,1.5,1);
+ interact('buildSupply','BYGG MED KUBER OCH MATTOR',g.supply.x,g.supply.z,0,{radius:4});
+ function gymPad(q,id,material,text){const mesh=box(root,q.w,1.8,q.d,q.x,.9,q.z,material);surface(q.x,q.z,q.w,q.d,1.8,id);w.walls.push({x:q.x,z:q.z,w:q.w,d:q.d,minY:0,maxY:1.8,enabled:true,id});label(root,text,q.x,4.4,q.z).scale.set(id==='gymGoal'?10:7,1.5,1);return mesh}
+ gymPad(g.start,'gymStart',P.blue,'BYGGSTART');
+ g.rests.forEach((q,i)=>gymPad(q,'gymRest-'+i,P.foam,'BYGG VIDARE'));
+ w.gymGoal=gymPad(g.goal,'gymGoal',P.yellow,'MÅL · KURRAGÖMMA');
+ // High beacons show the destination from the entrance and across the building course.
+ box(root,.25,5,.25,g.goal.x,4.3,g.goal.z,M.glow);
+ label(root,'← TILL KORRIDOREN',29,6,-21).scale.set(8,1.4,1);
+ // Screens with return walls provide usable hiding nooks throughout the whole hall.
+ // Their opening is on the north side; all walls are real vision/collision blockers.
+ for(const {x,z} of g.hideouts){solid(x,1.75,z,6,3.5,.6,P.pink);for(const dx of [-3,3])solid(x+dx,1.75,z-2,.6,3.5,4,P.foam)}
+ seedGymPieces(w);
  // Cafeteria and three kitchen aisles.
  floor(0,-69.5,44,31,P.floor);solid(-22,4,-69.5,.5,8,31);solid(22,4,-69.5,.5,8,31);
  wallWithDoor(0,-54,44,'x',0,10);wallWithDoor(0,-85,44,'x',0,5);box(root,44,.2,57,0,8.1,-82.5,P.plaster);
@@ -113,11 +134,18 @@ for(let i=0;i<7;i++)addPiece(w,'cube',20+i%4*2.6,-17-Math.floor(i/4)*3,0,i%2===0
  label(root,'SKOGEN',-30,5,-190).scale.set(6,1.4,1);
  w.monsters.enogat=enogatModel(root);w.monsters.enogat.position.set(0,0,-28);
  w.monsters.snabbis=snabbisModel(root);w.monsters.snabbis.position.set(32,0,62);
- w.monsters.spider=eightLegs(root);w.monsters.spider.position.set(34,0,-27);
+ w.monsters.spider=eightLegs(root);w.monsters.spider.position.set(GYM.spiderSpawn.x,0,GYM.spiderSpawn.z);
  w.monsters.mouth=mouthModel(root);w.monsters.mouth.position.set(8,0,-75);
  w.actor=playerModel(root);w.actor.scale.setScalar(.58);w.actor.visible=false;
  return w;
 }
 export function addPiece(w,type,x,z,bottom=0,rotated=false){const width=type==='cube'?2.4:4.8,depth=2.4,height=type==='cube'?1.8:.3;const mesh=box(w.root,rotated?depth:width,height,rotated?width:depth,x,bottom+height/2,z,type==='cube'?P.foam:P.pink);const p={id:'piece-'+(w.nextPieceId=(w.nextPieceId||0)+1),type,x,z,w:rotated?depth:width,d:rotated?width:depth,h:height,bottom,mesh,rotated};w.pieces.push(p);return p}
 export function inRect(x,z,r){return Math.abs(x-r.x)<=r.w/2&&Math.abs(z-r.z)<=r.d/2}
-export function zoneAt(x,z){for(const s of SUBJECTS){const size=s.id==='gym'?40:20;if(Math.abs(x-s.x)<size/2-.05&&Math.abs(z-s.z)<size/2-.05)return s.id}if(x>=-5&&x<=5&&z>=-54&&z<=50)return 'corridor';if(z>=50&&z<=135&&Math.abs(x)<=65)return 'yard';if(z<-54&&z>=-85&&Math.abs(x)<=22)return 'dining';if(z<-85&&z>=-111&&Math.abs(x)<=22)return 'kitchen';if(z<-111&&z>=-136&&Math.abs(x)<22)return 'loading';if(z<-136)return 'forest';return 'outside'}
+export function zoneAt(x,z){if(inGymHall(x,z)||inRect(x,z,GYM.passage))return 'gym';for(const s of SUBJECTS.filter(s=>s.id!=='gym')){if(Math.abs(x-s.x)<9.95&&Math.abs(z-s.z)<9.95)return s.id}if(x>=-5&&x<=5&&z>=-54&&z<=50)return 'corridor';if(z>=50&&z<=135&&Math.abs(x)<=65)return 'yard';if(z<-54&&z>=-85&&Math.abs(x)<=22)return 'dining';if(z<-85&&z>=-111&&Math.abs(x)<=22)return 'kitchen';if(z<-111&&z>=-136&&Math.abs(x)<22)return 'loading';if(z<-136)return 'forest';return 'outside'}
+
+export function seedGymPieces(w){
+ for(const [x,z] of [[44,-19],[94,-100],[165,-32],[163,-101]]){
+  for(let i=0;i<5;i++)addPiece(w,'cube',x+(i%3)*2.6,z-Math.floor(i/3)*2.8,0,false);
+  for(let i=0;i<2;i++)addPiece(w,'mat',x+9+i*5,z,0,i===1);
+ }
+}
