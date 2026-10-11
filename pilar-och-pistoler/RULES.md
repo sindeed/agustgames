@@ -36,3 +36,6 @@ Testa fysik, verkliga projektilträffar, alla specialeffekter inklusive bottar, 
 
 ## Helardrycker (tillägg 2026-10-11)
 En synlig grön flaska med vitt kors finns inne i varje hus och hotell i Solo, även under förmatchen. Gå nära och tryck **Ta & drick** på iPad eller **E** på datorn. Flaskan plockas upp och dricks direkt, återställer exakt fyra hjärtan även från fjärdedelar och förbrukas. Den tar ingen vapenplats. Vid fullt liv lämnas flaskan kvar med ett meddelande. Nya flaskor återställs vid ny match. Inga flaskor i Team; bottar dricker inte. Drycken ändrar inga vapeneffekter: eld och frysning behåller sina timers.
+
+## Utspridd solostart (senaste tillägg)
+Förmatchen i centrum är oförändrad. När röda knappen startar matchen placeras alla tolv på separata säkra platser över kartan: x = −102, −34, 34, 102 och z = −100, 0, 100 spelmeter. Minsta avstånd mellan två deltagare är 68 meter, ingen start ligger i centrumgården eller i en vägg. Spelaren behåller Pipår och bottarna får fortfarande var sitt av de elva andra vapnen.

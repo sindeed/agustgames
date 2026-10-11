@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.js';
-import {Game,WEAPONS} from './sim.js?v=20261011-2';
-import {floorAt} from './world.js?v=20261011-2';
+import {Game,WEAPONS} from './sim.js?v=20261011-3';
+import {floorAt} from './world.js?v=20261011-3';
 const $=id=>document.getElementById(id),game=new Game(),canvas=$('game');
 const renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.outputColorSpace=T.SRGBColorSpace;renderer.setClearColor(0xa7d8e5);
 const scene=new T.Scene();scene.background=new T.Color(0xa7d8e5);scene.fog=new T.Fog(0xa7d8e5,75,215);
