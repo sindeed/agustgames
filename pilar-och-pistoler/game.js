@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.js';
-import {Game,WEAPONS} from './sim.js';
-import {floorAt} from './world.js';
+import {Game,WEAPONS} from './sim.js?v=20261011-2';
+import {floorAt} from './world.js?v=20261011-2';
 const $=id=>document.getElementById(id),game=new Game(),canvas=$('game');
 const renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.outputColorSpace=T.SRGBColorSpace;renderer.setClearColor(0xa7d8e5);
 const scene=new T.Scene();scene.background=new T.Color(0xa7d8e5);scene.fog=new T.Fog(0xa7d8e5,75,215);
@@ -12,7 +12,7 @@ const cube=new T.BoxGeometry(1,1,1),sphere=new T.SphereGeometry(1,10,7),cone=new
 function mesh(parent,geo,c,x,y,z,sx,sy=sx,sz=sx){const m=new T.Mesh(geo,mat(c));m.position.set(x,y,z);m.scale.set(sx,sy,sz);parent.add(m);return m;}
 function box(p,c,x,y,z,sx,sy,sz){return mesh(p,cube,c,x,y,z,sx,sy,sz);}
 function label(text,x,y,z,color='#fff0c6',size=2.5){const c=document.createElement('canvas');c.width=512;c.height=96;const ctx=c.getContext('2d');ctx.fillStyle='#1d364be6';ctx.fillRect(0,0,512,96);ctx.fillStyle=color;ctx.font='bold '+Math.min(42,Math.floor(780/text.length))+'px system-ui';ctx.textAlign='center';ctx.fillText(text,256,62);const tex=new T.CanvasTexture(c);const s=new T.Sprite(new T.SpriteMaterial({map:tex}));s.position.set(x,y,z);s.scale.set(size*5,size,1);worldGroup.add(s);return s;}
-const actorMeshes=new Map(),shotMeshes=new Map(),lootMeshes=new Map(),gateMeshes=new Map();let modelId=null,held=new T.Group();camera.add(held);
+const actorMeshes=new Map(),shotMeshes=new Map(),lootMeshes=new Map(),gateMeshes=new Map(),potionMeshes=new Map();let modelId=null,held=new T.Group();camera.add(held);
 function weaponModel(id,first=false){const g=new T.Group(),w=WEAPONS[id];if(!w)return g;const wood=id===4?0x704c35:0x8f7560,steel=id===4?0x656c74:w.tier===0?0xa9bcc0:w.color;
  box(g,wood,0,-.08,.12,.16,.18,.42);const grip=box(g,wood,0,-.23,.22,.14,.3,.13);grip.rotation.x=-.3;
  const barrel=mesh(g,cyl,steel,0,.01,-.22,id===11?.19:.055,id===11?.72:.64,id===11?.19:.055);barrel.rotation.x=Math.PI/2;
@@ -21,7 +21,7 @@ function weaponModel(id,first=false){const g=new T.Group(),w=WEAPONS[id];if(!w)r
  if(w.tier>0)mesh(g,sphere,w.color,0,.12,.04,.085);
  if(first){g.position.set(.35,-.34,-.63);g.rotation.y=.03;g.scale.setScalar(.92);}return g;}
 function clearGroup(g){while(g.children.length)g.remove(g.children[0]);}
-function buildWorld(){clearGroup(worldGroup);clearGroup(actorsGroup);clearGroup(lootGroup);clearGroup(shotsGroup);clearGroup(realmGroup);actorMeshes.clear();shotMeshes.clear();lootMeshes.clear();gateMeshes.clear();const w=game.world;
+function buildWorld(){clearGroup(worldGroup);clearGroup(actorsGroup);clearGroup(lootGroup);clearGroup(shotsGroup);clearGroup(realmGroup);actorMeshes.clear();shotMeshes.clear();lootMeshes.clear();potionMeshes.clear();gateMeshes.clear();const w=game.world;
  scene.background.set(w.kind==='ships'?0xa4d8e7:0xb0dce7);scene.fog.color.copy(scene.background);
  if(w.kind==='ships'){box(worldGroup,0x3d9db2,0,-2,0,380,.2,380);for(let i=0;i<50;i++)box(worldGroup,0x76c2cb,Math.sin(i*4.13)*95,-1.87,Math.cos(i*8.33)*95,4,.04,.2);}
  for(const f of w.floors)box(worldGroup,f.color,f.x,f.y-.07,f.z,f.sx,.14,f.sz);
@@ -65,6 +65,8 @@ function render(){if(!game.world)return;const p=game.player;let view=p;if(p.hp<=
  for(const [uid,m]of shotMeshes)if(!game.projectiles.some(p=>p.uid===uid)){shotsGroup.remove(m);shotMeshes.delete(uid);}
  for(const q of game.projectiles){let m=shotMeshes.get(q.uid);if(!m){m=new T.Group();if(q.weapon===11){mesh(m,sphere,0x4b515b,0,0,0,.5);mesh(m,sphere,0xf9b850,0,.42,0,.12);}else{box(m,0xbe975f,0,0,0,.045,.045,.7);const tip=mesh(m,cone,WEAPONS[q.weapon].color,0,0,-.43,.1,.22,.1);tip.rotation.x=-Math.PI/2;box(m,WEAPONS[q.weapon].color,0,0,.24,.22,.025,.2);}shotMeshes.set(q.uid,m);shotsGroup.add(m);}m.position.set(q.x,q.y,q.z);m.lookAt(q.x+q.vx,q.y+q.vy,q.z+q.vz);m.rotateY(Math.PI);m.visible=q.realm===view.realm;}
  for(const[uid,m]of lootMeshes)if(!game.loot.some(l=>l.uid===uid)){lootGroup.remove(m);lootMeshes.delete(uid);}for(const l of game.loot){let m=lootMeshes.get(l.uid);if(!m){m=weaponModel(l.id);m.scale.setScalar(2.5);const ring=mesh(m,cyl,WEAPONS[l.id].color,0,-.15,0,.38,.035,.38);lootGroup.add(m);lootMeshes.set(l.uid,m);}m.position.set(l.x,l.y+.35+Math.sin(game.time*2+l.uid)*.1,l.z);m.rotation.y=game.time*.7;}
+ for(const [uid,m] of potionMeshes)if(!game.potions.some(p=>p.uid===uid)){lootGroup.remove(m);potionMeshes.delete(uid);}
+ for(const p of game.potions){let m=potionMeshes.get(p.uid);if(!m){m=new T.Group();mesh(m,sphere,0x42dca3,0,0,0,.36,.43,.36);mesh(m,cyl,0xb8f8df,0,.43,0,.13,.28,.13);mesh(m,cyl,0x997046,0,.61,0,.15,.1,.15);for(const z of [-.345,.345]){box(m,0xffffff,0,0,z,.1,.36,.035);box(m,0xffffff,0,0,z,.28,.1,.035);}mesh(m,cyl,0x87f5b9,0,-.5,0,.48,.035,.48);lootGroup.add(m);potionMeshes.set(p.uid,m);}m.position.set(p.x,p.y+Math.sin(game.time*2+p.uid)*.055,p.z);m.rotation.y=game.time*.35;}
  const id=game.weapon(p);if(id!==modelId){held.clear();if(id!==null)held.add(weaponModel(id,true));modelId=id;}held.visible=game.mode!=='menu'&&p.hp>0;held.position.y=Math.sin(game.time*8)*Math.hypot(p.dx,p.dz)*.018;held.position.z=p.cool>0&&id!==null?Math.max(0,.09-(WEAPONS[id].cool-p.cool)*.45):0;
  // Short magical effects, including frozen and burning actors.
  if(!scene.userData.fx){scene.userData.fx=new T.Group();scene.add(scene.userData.fx);}const fx=scene.userData.fx;clearGroup(fx);
@@ -78,8 +80,9 @@ let slotKey='';function hud(){const p=game.player,id=game.weapon(p),w=WEAPONS[id
  $('notice').textContent=game.events.filter(e=>game.time-e.t<4).slice(-1)[0]?.text||'';$('damageFlash').style.opacity=flash;
  const inv=p.realm?[3]:p.inventory,key=inv.join(',')+':'+p.slot+':'+!!p.realm;if(slotKey!==key){slotKey=key;$('slots').innerHTML=Array.from({length:3},(_,i)=>{const id=inv[i],w=WEAPONS[id];return `<button data-slot="${i}" class="${(p.realm?i===0:i===p.slot)?'selected':''}" style="--tier:${w?['#c9c8aa','#71c7f5','#e0a0ff'][w.tier]:'#687985'}">${i+1} · ${w?w.name:'Tom'}</button>`}).join('');$('slots').querySelectorAll('button').forEach(b=>b.onclick=()=>game.select(+b.dataset.slot));}
  $('weaponTip').textContent=w?w.tip:'Tomma händer · hitta ett vapen';$('load').firstElementChild.style.width=(w?(1-p.cool/w.cool)*100:0)+'%';
+ const potion=game.nearPotion(p);$('use').textContent=potion?'Ta & drick':'Använd / ta';
  const nearby=game.loot.find(l=>Math.hypot(l.x-p.x,l.z-p.z)<2.8&&Math.abs(l.y-p.y-.5)<2),gate=game.world.gates.find(g=>Math.hypot(g.x-p.x,g.z-p.z)<7);
- $('context').textContent=p.realm?'Endast Skooker här':game.mode==='lobby'&&Math.hypot(p.x,p.z)<3?'Tryck Använd för att starta matchen':gate?`Använd: ${gate.open?'stäng':'öppna'} porten`:nearby?`Ta ${WEAPONS[nearby.id].name}${p.inventory.length>=3?' · släpp ett vapen först':''}`:game.nearHotel(p)&&id===10?'Håll Hopp / klättra längs hotellväggen':p.hp<=0&&game.mode==='lobby'?'Du återkommer strax…':'';
+ $('context').textContent=p.realm?'Endast Skooker här':game.mode==='lobby'&&Math.hypot(p.x,p.z)<3?'Tryck Använd för att starta matchen':gate?`Använd: ${gate.open?'stäng':'öppna'} porten`:potion?(p.hp<4?'Helardryck · Ta & drick / E → fyra hjärtan':'Helardryck · du har redan fullt liv'):nearby?`Ta ${WEAPONS[nearby.id].name}${p.inventory.length>=3?' · släpp ett vapen först':''}`:game.nearHotel(p)&&id===10?'Håll Hopp / klättra längs hotellväggen':p.hp<=0&&game.mode==='lobby'?'Du återkommer strax…':'';
 }
 let last=performance.now();function frame(now){const dt=Math.min(.045,(now-last)/1000);last=now;if(!manual)update(dt);render();requestAnimationFrame(frame);}game.start('solo');buildWorld();game.mode='menu';requestAnimationFrame(frame);
 window.render_game_to_text=()=>JSON.stringify(game.text());window.advanceTime=ms=>{manual=true;for(let t=0;t<ms;t+=1000/60)update(Math.min(1000/60,ms-t)/1000);render();};

@@ -2,9 +2,9 @@
 
 Agusts fantasifulla förstapersonsspel. Solo med förmatch i centrum, 11 bottar och en stor värld; Team 6 mot 6 på tre arenor. Inga externa runtime-anrop: Three.js och licensen medföljer.
 
-Spela: https://sindeed.github.io/agustgames/pilar-och-pistoler/?v=20261011-1
+Spela: https://sindeed.github.io/agustgames/pilar-och-pistoler/?v=20261011-2
 
-Regler: [RULES.md](RULES.md). Version: `20261011-1`.
+Regler: [RULES.md](RULES.md). Version: `20261011-2`.
 
 ## Filer
 - `sim.js`: gemensamma vapen, projektiler, fysik och botlogik.

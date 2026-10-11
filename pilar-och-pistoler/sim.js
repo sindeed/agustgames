@@ -1,4 +1,4 @@
-import {makeWorld,inRect,floorAt,collides} from './world.js';
+import {makeWorld,inRect,floorAt,collides} from './world.js?v=20261011-2';
 export const WEAPONS=[
  {name:'Blickdår',tier:0,damage:.5,cool:.5,speed:48,color:0xd8c895,tip:'Snabba enskilda pilar · ½ hjärta'},
  {name:'Pipår',tier:0,damage:1,cool:1.55,speed:30,color:0xd8c895,tip:'En enkel pil · 1 hjärta'},
@@ -17,7 +17,7 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));const dist=(a,b)=>Math.hypot(a.x-
 export class Game {
  constructor(){this.mode='menu';this.time=0;this.events=[];this.paused=false;this.serial=0;this.seed=1921;}
  random(){this.seed=(1664525*this.seed+1013904223)>>>0;return this.seed/4294967296;}
- start(kind='solo',match=false){this.kind=kind;this.mode=kind==='solo'&&!match?'lobby':'match';this.world=makeWorld(kind);this.time=0;this.projectiles=[];this.effects=[];this.realms=[];this.events=[];this.result='';this.paused=false;this.actors=[];this.loot=this.mode==='lobby'?[]:this.world.loot.map(l=>({...l,uid:++this.serial}));
+ start(kind='solo',match=false){this.kind=kind;this.mode=kind==='solo'&&!match?'lobby':'match';this.world=makeWorld(kind);this.time=0;this.projectiles=[];this.effects=[];this.realms=[];this.events=[];this.result='';this.potions=this.world.potions.map(p=>({...p,uid:++this.serial}));this.paused=false;this.actors=[];this.loot=this.mode==='lobby'?[]:this.world.loot.map(l=>({...l,uid:++this.serial}));
   const ids=[1,0,2,3,4,5,6,7,8,9,10,11];
   for(let i=0;i<12;i++){let s=this.world.spawns[i];if(kind==='solo'&&match){const angle=i/12*Math.PI*2;s={x:Math.sin(angle)*46,z:Math.cos(angle)*46,y:0};}
    this.actors.push({id:i,name:i===0?'Du':['Blick','Gegge','Skook','Kapten War','Edda','Dunder','Lajker','Biggi','Vind','Bim','Bom'][i-1],...s,vx:0,vz:0,vy:0,dx:0,dz:0,yaw:kind==='solo'?Math.atan2(s.x,s.z):i<6?Math.PI:0,pitch:0,hp:4,inventory:[this.mode==='lobby'?1:ids[i]],slot:0,cool:0,freeze:0,burn:null,float:0,realm:0,returnAt:0,spawn:{...s},respawn:0,team:kind==='solo'?i:i<6?0:1,windNext:true,climb:false,aiAt:0,path:[],age:0});}
@@ -52,8 +52,11 @@ export class Game {
  interact(a=this.player){if(!a||a.hp<=0||a.realm)return false;
   if(this.mode==='lobby'&&a.id===0&&Math.hypot(a.x,a.z)<3){this.start('solo',true);this.event('Matchen är igång! Hitta vapen i hus och hotell.');return true;}
   const gate=this.world.gates.find(g=>dist(a,g)<7);if(gate){if(gate.open&&this.actors.some(b=>b.hp>0&&inRect(b.x,b.z,gate,.7)))return false;gate.open=!gate.open;this.event(gate.open?'Porten öppnades':'Porten stängdes');return true;}
+  if(this.nearPotion(a))return this.drink(a);
   return this.pickup(a);
  }
+ nearPotion(a=this.player){if(!a||a.id!==0||a.hp<=0||a.realm||this.kind!=='solo'||this.paused||!['lobby','match'].includes(this.mode))return null;return this.potions.find(p=>dist(a,p)<1.9&&Math.abs(a.y+.65-p.y)<1&&this.visible(a,{...p,y:p.y-.65}));}
+ drink(a=this.player){const potion=this.nearPotion(a);if(!potion)return false;if(a.hp>=4){this.event('Du har redan alla fyra hjärtan! Drycken finns kvar.');return false;}a.hp=4;this.potions.splice(this.potions.indexOf(potion),1);this.event('Du drack en helardryck! ♥ Alla fyra hjärtan tillbaka.');return true;}
  pickup(a=this.player){if(a.id!==0||a.realm||a.hp<=0||this.mode!=='match')return false;const item=this.loot.find(l=>dist(a,l)<2.8&&Math.abs(a.y+.5-l.y)<2);if(!item)return false;if(a.inventory.length>=3){this.event('Tre vapen! Släpp ett först.');return false;}a.inventory.push(item.id);a.slot=a.inventory.length-1;this.loot.splice(this.loot.indexOf(item),1);return true;}
  drop(a=this.player){if(a.id!==0||a.realm||a.hp<=0||this.mode!=='match'||!a.inventory.length)return false;const id=a.inventory.splice(a.slot,1)[0];this.loot.push({uid:++this.serial,id,x:a.x,y:a.y+.5,z:a.z});a.slot=Math.min(a.slot,Math.max(0,a.inventory.length-1));return true;}
  select(slot){if(this.player&&!this.player.realm&&slot<this.player.inventory.length)this.player.slot=slot;}
@@ -106,5 +109,5 @@ export class Game {
   this.effects=this.effects.filter(e=>(e.t-=dt)>0);
   if(this.mode==='match'){const alive=this.actors.filter(a=>a.hp>0);if(this.kind==='solo'){if(p.hp<=0){this.result='Du blev utslagen. Försök igen!';this.mode='result';}else if(alive.length===1){this.result='Du vann! Sist kvar i världen.';this.mode='result';}}else {const teams=new Set(alive.map(a=>a.team));if(teams.size<2){this.result=teams.has(0)?'Ditt lag vann!':'Det andra laget vann. Försök igen!';this.mode='result';}}}
  }
- text(){return {revision:'20261011-1',mode:this.mode,kind:this.kind,time:+this.time.toFixed(2),paused:this.paused,result:this.result,axes:'x east, z south; y feet height; yaw 0 north (-z)',player:this.player,actors:this.actors,projectiles:this.projectiles,loot:this.loot,realms:this.realms,gates:this.world?.gates,button:this.world?.button};}
+ text(){return {revision:'20261011-2',mode:this.mode,kind:this.kind,time:+this.time.toFixed(2),paused:this.paused,result:this.result,axes:'x east, z south; y feet height; yaw 0 north (-z)',player:this.player,actors:this.actors,projectiles:this.projectiles,loot:this.loot,potions:this.potions,realms:this.realms,gates:this.world?.gates,button:this.world?.button};}
 }

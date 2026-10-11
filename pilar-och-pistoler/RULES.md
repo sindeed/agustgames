@@ -33,3 +33,6 @@ Touch: vänsterspak rörelse, dra högra spelytan för sikte, knappar skjut/hopp
 
 ## Verifieringsgräns
 Testa fysik, verkliga projektilträffar, alla specialeffekter inklusive bottar, interiörer, trappor, portar, touch och matchflöde. Lokal browser, publicerad revision, livebrowser och fysisk iPad är separata evidensnivåer. Fysisk iPad kan endast användaren verifiera här.
+
+## Helardrycker (tillägg 2026-10-11)
+En synlig grön flaska med vitt kors finns inne i varje hus och hotell i Solo, även under förmatchen. Gå nära och tryck **Ta & drick** på iPad eller **E** på datorn. Flaskan plockas upp och dricks direkt, återställer exakt fyra hjärtan även från fjärdedelar och förbrukas. Den tar ingen vapenplats. Vid fullt liv lämnas flaskan kvar med ett meddelande. Nya flaskor återställs vid ny match. Inga flaskor i Team; bottar dricker inte. Drycken ändrar inga vapeneffekter: eld och frysning behåller sina timers.

@@ -1,6 +1,6 @@
 // Geometry is shared by rendering, movement, AI and projectiles. Feet use y=0.
 export function makeWorld(kind='solo') {
- const w={kind,size:kind==='solo'?120:kind==='town'?54:68,boxes:[],floors:[],ramps:[],buildings:[],trees:[],gates:[],loot:[],spawns:[],decor:[]};
+ const w={kind,size:kind==='solo'?120:kind==='town'?54:68,boxes:[],floors:[],ramps:[],buildings:[],trees:[],gates:[],potions:[],loot:[],spawns:[],decor:[]};
  const box=(x,y,z,sx,sy,sz,color,type='wall')=>{const b={x,y,z,sx,sy,sz,color,type};w.boxes.push(b);return b};
  const floor=(x,z,sx,sz,y,color)=>{w.floors.push({x,z,sx,sz,y,color});if(y>.1)box(x,y-.1,z,sx,.2,sz,color,'platform');};
  const ramp=(x,z,sx,sz,y0,y1)=>w.ramps.push({x,z,sx,sz,y0,y1});
@@ -64,6 +64,7 @@ export function makeWorld(kind='solo') {
   for(const [x,z] of [[-13,-9],[13,8],[-28,7],[27,-7]]){box(x,1.2,z,7,2.4,1.5,0xa1a6a5);}
   for(const [x,z] of [[-10,9],[10,-9]])box(x,1,z,3,2,5,0x8a6342,'wagon');
  }
+ if(kind==='solo')for(const b of w.buildings)w.potions.push({x:b.x-2,z:b.z+1.5,y:.65});
  // Distribute all eleven non-Pipår weapons; duplicates make exploration worthwhile.
  const ids=[0,2,3,4,5,6,7,8,9,10,11];
  if(kind==='solo')for(let i=0;i<26;i++){const b=w.buildings[i%w.buildings.length];w.loot.push({id:ids[i%11],x:b.x+(i%2?3:-3),z:b.z-2,y:.5});}
