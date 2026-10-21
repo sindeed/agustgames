@@ -28,3 +28,15 @@ Original prompt: Bygg, testa och publicera en första komplett spelbar version a
 - GitHub Pages verifierad som main, rotkatalog. Remote main fortfarande cd4257f före release; inga samtidiga remote-ändringar att integrera.
 - Inga kvarvarande kända funktionsblockerare. Fysisk iPad måste fortfarande testas av användaren. Spelet har inga ljud och behöver ingen nätanslutning efter att filerna laddats, men ingen offlinecache installeras.
 - Nästa: commit/push, invänta Pages för rätt SHA, jämför publika filer och kör hela browserflödet mot liveadressen.
+
+## Publicerad och verifierad 2026-10-21
+- Spelcommit: e63a5b487017343ad5f3d23dfd571caa9001fcba, fast-forward från cd4257f till main.
+- Första terminal-pushen nekades med 403 eftersom aktivt konto var antonekv. Anslutna GitHub-kontot var sindeed med push/admin. Befintlig lokal sindeed-inloggning användes sedan endast för push-processen, utan global kontoväxling eller sparad token. Pushen lyckades.
+- GitHub Pages svarade built för exakt spel-SHA, utan fel.
+- Publik full browserkörning: 86 godkända kontroller i Chromium/WebKit, inklusive arcade → The Camp, direktlänk, båda monster, resurskedjan, touch, scener, natt, omstart och fullskärm. 0 konsol-/sidfel.
+- SHA-256 för publik portal, spel-HTML, CSS, game.js och model.mjs matchar den lokalt testade versionen; samtliga HTTP 200. Modulens content-type är text/javascript.
+- Arcade: https://sindeed.github.io/agustgames/?v=20261021-camp-1
+- Direkt: https://sindeed.github.io/agustgames/the-camp/?v=20261021-camp-1
+- Lokala bevis: output/the-camp/model-final.log, browser-final.log, live-browser.log, live-files.json samt browser/ och live/ screenshots. De är QA-material, inte spelresurser.
+- Kvarvarande handoff: fysisk iPad/Safari har inte testats här. Öppna versionslänken och använd Safari Ladda om om en äldre sida visas.
+- Inga kända blockerande TODOs. Nästa förändringar bör utgå från Agusts speltest och behålla den fastställda kanonen.
