@@ -95,6 +95,15 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-08-30: Riktad lokal Chromium-QA godkände 40/40 kontroller utan konsol-, sid- eller resursfel. Den verifierade helt stängd trappa före val, gruppkravet efter PENGAR, exakt max 500, borttagen skatt efter DRAKEN, öppnad trappa, grön drake med 1 500 liv och exakt engångsbelöning på 1 500. Kungens svärd gjorde 34 skada på nära håll; den riktiga iPad-knappen `BYT` växlade till pilbågen, som gjorde 25 skada på längre avstånd. En separat drak-/kungakrigsregression passerade 43/43. Dialogen, den låsta järngrinden, den öppna trappan, distanselden och den gröna draken granskades visuellt i 1180×820; den obligatoriska spelklienten passerade också. Cacheversionen är `20260830-treasure-choice`.
 - 2026-08-30: Version `def5f9b` publicerades via GitHub Pages-körning `33317362150`. Menyn och spelsidan laddar cacheversion `20260830-treasure-choice`, och livefilens SHA-256 `e1a9951d510661c14c329f90e0455db28fa5b90c09576da50882b7c38f761998` matchar den lokalt testade filen exakt. Hela 40/40-sviten kördes direkt mot liveadressen; järngrinden, valrutan och den öppna trappan granskades där på nytt. Även den obligatoriska live-klienten passerade utan webbläsar-, konsol- eller resursfel.
 
+## Havsuppdatering 2026-10-24
+
+- 2026-10-24: Havsvärlden byggd som en ny spelbar del. De sju rikena och det övergivna jätteslottet ligger på separata öar med hav emellan. Kartan inne i borgen är nu en tittkarta; uppdrag väljs vid spelarens långskeppshamn till höger om byn.
+- 2026-10-24: Långskeppsresan tar exakt tre speldygn, 1 080 sekunder eller 18 minuter. Attack tillåter högst 20 vakter, smyg- och gruvuppdrag högst fem och jätteslottet högst tio. Vid ankomst startar det redan etablerade uppdraget.
+- 2026-10-24: Resan har en fysisk lågpoly-långbåt, hav och synliga öar som inte kan besökas. Kungen och medföljande vakter kan bada fritt. Skeppet stannar under badet men restiden fortsätter, och bad kan aldrig göra att uppdraget misslyckas.
+- 2026-10-24: I vattnet gör en närbelägen vakt honnör och kan utmanas på simtävling. Vakten kan också föreslå en tävling. Vinnaren får fem sekunders applåder, därefter visas en liten 30-sekunders nedräkning vid skärmens kant. Tävlingar kan upprepas hur många gånger som helst.
+- 2026-10-24: Fiendekungars attack- och gruvresor använder också långskepp och 18 minuters restid. Världskartan visar vilken kung som är på väg; försvarsvalet visas först vid ankomst.
+- 2026-10-24: Lokal Chromium- och WebKit-QA godkände vardera 35/35 kontroller för havsresan, kartlägena, samtliga vaktgränser, fortsatt timer under bad, honnör i vattnet, två tävlingar med olika vinnare, fem sekunders applåder, 30 sekunders paus, ankomst samt båda fienderesorna utan webbläsarfel. Sex iPad-bilder per motor granskades visuellt och den ordinarie spelklienten passerade.
+
 ## Nästa kontroll
 
-- Uppdateringen är publicerad och live-verifierad. Nästa arbete kan börja från skattkammarvalet, den låsta draktrappan och draken som kan skadas med både svärd och pilbåge utan kvarvarande blockerande fel.
+- Havsuppdateringen är lokalt färdig och testad. Återstår: slutlig commit, push, GitHub Pages-kontroll och live-läsning innan iPad-färdigbesked.

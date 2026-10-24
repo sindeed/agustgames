@@ -14,7 +14,7 @@
     <link rel="icon" href="../favicon.ico">
     <link rel="apple-touch-icon" href="../apple-touch-icon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="stylesheet" href="style.css?v=20260830-treasure-choice">
+    <link rel="stylesheet" href="style.css?v=20261024-longship-journeys">
   </head>
   <body>
     <main class="game-shell" id="game-shell">
@@ -109,6 +109,21 @@
         </div>
       </div>
 
+      <section class="journey-hud" id="journey-hud" aria-label="Långskeppsresan" hidden>
+        <span class="journey-ship-mark" aria-hidden="true">⛵</span>
+        <span>
+          <small id="journey-destination">PÅ VÄG ÖVER HAVET</small>
+          <strong id="journey-time">18:00</strong>
+        </span>
+        <span class="journey-state" id="journey-state">SKEPPET SEGLAR</span>
+      </section>
+
+      <section class="race-hud" id="race-hud" aria-label="Simtävling" hidden>
+        <small id="race-label">SIMTÄVLING</small>
+        <strong id="race-status">SIMMA TILL BOJEN!</strong>
+        <span id="race-cooldown"></span>
+      </section>
+
       <div class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 
       <div class="interaction-prompt" id="interaction-prompt" role="status" aria-live="polite" hidden>
@@ -166,7 +181,7 @@
             <div>
               <p class="eyebrow">SJU RIKEN · ÅTTA SLOTT</p>
               <h2 id="map-title">VÄRLDSKARTAN</h2>
-              <p>Välj en fiendeborg för ett uppdrag eller utforska jätteslottets labyrint med högst tio vakter.</p>
+              <p id="map-description">Här ser du hur rikena och haven ligger. Uppdrag startas vid långskeppen i hamnen.</p>
             </div>
             <button class="close-button" id="close-map-btn" type="button" aria-label="Stäng världskartan">×</button>
           </header>
@@ -176,7 +191,7 @@
             <span class="map-mountain mountain-two" aria-hidden="true"></span>
             <div class="map-grid" id="map-grid" aria-label="Världskarta med sju riken och åtta slott"></div>
           </div>
-          <p class="dialog-tip"><span aria-hidden="true">☀</span> DAG: ATTACKERA &nbsp; · &nbsp; <span aria-hidden="true">☾</span> NATT: SMYG- ELLER GRUVUPPDRAG &nbsp; · &nbsp; <span aria-hidden="true">♜</span> JÄTTESLOTTET ÄR ÖVERGIVET</p>
+          <p class="dialog-tip" id="map-tip"><span aria-hidden="true">⚓</span> GÅ TILL HAMNEN OCH KLIV OMBORD FÖR ATT VÄLJA UPPDRAG</p>
         </div>
       </section>
 
@@ -342,6 +357,6 @@
       </noscript>
     </main>
 
-    <script type="module" src="game.js?v=20260830-treasure-choice"></script>
+    <script type="module" src="game.js?v=20261024-longship-journeys"></script>
   </body>
 </html>

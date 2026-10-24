@@ -27,11 +27,21 @@ import * as THREE from "./vendor/three.module.js";
     dragonBossMeter: $("#dragon-boss-meter"),
     upperPhase: $("#upper-phase-hud"),
     upperPhaseLabel: $("#upper-phase-label"),
+    journeyHud: $("#journey-hud"),
+    journeyDestination: $("#journey-destination"),
+    journeyTime: $("#journey-time"),
+    journeyState: $("#journey-state"),
+    raceHud: $("#race-hud"),
+    raceLabel: $("#race-label"),
+    raceStatus: $("#race-status"),
+    raceCooldown: $("#race-cooldown"),
     prompt: $("#interaction-prompt"),
     toast: $("#toast"),
     map: $("#world-map"),
     mapGrid: $("#map-grid"),
     closeMap: $("#close-map-btn"),
+    mapDescription: $("#map-description"),
+    mapTip: $("#map-tip"),
     question: $("#question-dialog"),
     questionTitle: $("#question-title"),
     questionText: $("#question-text"),
@@ -91,6 +101,10 @@ import * as THREE from "./vendor/three.module.js";
   const MINE_PAYOUT_SECONDS = 30;
   const MINE_INCOME = Object.freeze([0, 3, 5, 10, 13, 15, 20, 23, 25, 30]);
   const MINE_DIAMOND_EVERY_PAYOUTS = 4;
+  const SEA_JOURNEY_SECONDS = 18 * 60;
+  const SWIM_RACE_COOLDOWN_SECONDS = 30;
+  const SWIM_RACE_APPLAUSE_SECONDS = 5;
+  const SWIM_RACE_GUARD_SPEED = 3.05;
   const CASTLE_GATE_WIDTH = 6;
   const REAR_DRAWBRIDGE = Object.freeze({ x: 0, z: -20.5, width: 6, length: 14 });
   const ENEMY_MINER_COUNTS = Object.freeze([0, 2, 5, 8, 1, 7, 4]);
@@ -360,6 +374,9 @@ import * as THREE from "./vendor/three.module.js";
     enteredEnemyCastle: false,
     abandonedCastleVisit: null,
     lastAbandonedCastleOutcome: null,
+    mapMode: "view",
+    journey: null,
+    enemyJourney: null,
     deterministicSeed: INITIAL_SEED,
   };
 
@@ -446,6 +463,7 @@ import * as THREE from "./vendor/three.module.js";
   const homeGuardVisuals = [];
   const minerVisuals = [];
   const towerMarkers = [];
+  const journeyScenery = [];
   let abandonedMoneyGroup = null;
   let abandonedWallSegmentsBuilt = 0;
   let lastAbandonedTreasureRoomId = null;
@@ -987,6 +1005,85 @@ import * as THREE from "./vendor/three.module.js";
     }
   }
 
+  function buildLongship(x, z, rotation = 0, parent = worldRoot) {
+    const ship = new THREE.Group();
+    ship.position.set(x, 0, z);
+    ship.rotation.y = rotation;
+    parent.add(ship);
+    const hull = new THREE.Group();
+    hull.position.y = 0.32;
+    ship.add(hull);
+    for (let index = -5; index <= 5; index++) {
+      const width = 2.1 + (1 - Math.abs(index) / 6) * 1.9;
+      const plank = box(0, 0.25 + Math.abs(index) * 0.035, index * 1.12, width, 0.62, 1.28, index % 2 ? materials.wood : materials.woodDark, hull);
+      plank.rotation.z = index < 0 ? -0.06 : 0.06;
+    }
+    box(0, 0.9, 0, 3.35, 0.24, 10.7, materials.wood, hull);
+    box(-2.05, 1.12, 0, 0.23, 1.3, 11.8, materials.woodDark, hull);
+    box(2.05, 1.12, 0, 0.23, 1.3, 11.8, materials.woodDark, hull);
+    const prow = addMesh(new THREE.ConeGeometry(1.0, 3.6, 8), materials.woodDark, hull);
+    prow.position.set(0, 1.7, -7.1);
+    prow.rotation.x = -0.28;
+    const stern = prow.clone();
+    stern.position.z = 7.1;
+    stern.rotation.x = 0.28;
+    hull.add(stern);
+    const mast = cylinder(0, 4.9, 0, 0.2, 8.2, materials.woodDark, hull, 10);
+    mast.castShadow = true;
+    box(0, 5.15, 0.05, 0.18, 5.6, 7.4, materials.red, hull);
+    box(0, 5.15, 0, 0.24, 5.9, 0.24, materials.gold, hull);
+    for (const side of [-1, 1]) {
+      for (let row = -4; row <= 4; row += 2) {
+        const oar = cylinder(side * 3.2, 0.48, row * 1.08, 0.08, 4.3, materials.wood, hull, 8);
+        oar.rotation.z = Math.PI / 2 + side * 0.18;
+        oar.rotation.x = row * 0.014;
+      }
+    }
+    return ship;
+  }
+
+  function buildHarbor(interactive = true) {
+    box(69, -0.54, 49, 42, 0.72, 58, materials.water, worldRoot, false, true);
+    box(43.5, 0.15, 49, 19, 0.32, 5.4, materials.wood, worldRoot, true, true);
+    for (let x = 35; x <= 52; x += 2.1) {
+      box(x, -0.34, 46.9, 0.42, 1.15, 0.42, materials.woodDark);
+      box(x, -0.34, 51.1, 0.42, 1.15, 0.42, materials.woodDark);
+    }
+    buildLongship(55.5, 49, Math.PI / 2);
+    buildLongship(72, 36, Math.PI / 2);
+    buildLongship(77, 61, Math.PI / 2);
+    box(38, 2.1, 49, 0.35, 4.2, 0.35, materials.woodDark);
+    box(38, 3.35, 49, 3.4, 1.5, 0.12, materials.blue);
+    if (interactive) interactables.push({ kind: "longship", x: 51.5, z: 49, radius: 5.4, label: "GÅ OMBORD PÅ LÅNGSKEPPET" });
+  }
+
+  function buildSeaIsland(x, z, scale, color = 0x5f9f55) {
+    const islandMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.96 });
+    const rock = addMesh(new THREE.CylinderGeometry(7 * scale, 10 * scale, 3.2 * scale, 14), islandMaterial);
+    rock.position.set(x, 0.15, z);
+    for (let index = 0; index < 5; index++) {
+      const angle = index / 5 * TAU;
+      buildTree(x + Math.cos(angle) * 4.2 * scale, z + Math.sin(angle) * 4.2 * scale, 0.7 * scale);
+    }
+  }
+
+  function buildSeaJourneyWorld() {
+    box(0, -1.28, 0, 260, 0.5, 260, materials.water, worldRoot, false, true);
+    for (let line = -100; line <= 100; line += 12) {
+      const wake = box(0, -0.94, line, 1.2, 0.04, 6, new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.36 }), worldRoot, false, false);
+      journeyScenery.push(wake);
+    }
+    buildLongship(0, 0, 0);
+    cylinder(0, -0.22, -18, 0.62, 1.45, materials.gold, worldRoot, 12);
+    const buoyFlag = box(0, 1.05, -18, 2.1, 0.92, 0.08, materials.gold);
+    buoyFlag.rotation.y = 0.05;
+    buildSeaIsland(-58, -66, 1.2, 0x5b9a50);
+    buildSeaIsland(67, -25, 0.9, 0x739f4c);
+    buildSeaIsland(-72, 49, 0.75, 0x4f8f57);
+    buildSeaIsland(61, 76, 1.15, 0x668e49);
+    interactables.push({ kind: "swim", x: 0, z: 0, radius: 8.4, label: state.journey?.swimming ? "KLÄTTRA UPP I LÅNGSKEPPET" : "HOPPA I VATTNET" });
+  }
+
   function buildSkyDecor() {
     const cloudMat = new THREE.MeshStandardMaterial({ color: 0xf3fbff, roughness: 0.96 });
     [[-35, 25, -50], [15, 29, -65], [42, 24, -30], [-18, 32, 18], [48, 30, 42]].forEach(([x, y, z], index) => {
@@ -1005,6 +1102,7 @@ import * as THREE from "./vendor/three.module.js";
     box(0, -0.65, 12, 110, 1.2, 125, materials.grass, worldRoot, false, true);
     buildCastle({ enemy });
     buildVillage();
+    buildHarbor(!enemy && state.scene === "home");
     buildSkyDecor();
     buildMine({ enemy, showWorkers: state.scene !== "mineRaid" });
     if (!enemy) buildHomeGuards();
@@ -1407,9 +1505,11 @@ import * as THREE from "./vendor/three.module.js";
     homeGuardVisuals.length = 0;
     minerVisuals.length = 0;
     towerMarkers.length = 0;
+    journeyScenery.length = 0;
     abandonedMoneyGroup = null;
     actorModels.clear();
     if (state.scene === "battle") buildArena();
+    else if (state.scene === "journey") buildSeaJourneyWorld();
     else if (state.scene === "abandonedCastle") buildAbandonedCastleWorld();
     else buildHomeWorld(state.scene === "stealth" || state.scene === "mineRaid");
     const visibleAbandonedFloor = state.abandonedCastleVisit?.playerFloor || "ground";
@@ -1793,9 +1893,18 @@ import * as THREE from "./vendor/three.module.js";
     question?.back?.();
   }
 
-  function openWorldMap() {
+  function openWorldMap(mode = "view") {
     if (state.scene !== "home") return;
+    state.mapMode = mode === "travel" ? "travel" : "view";
     populateMap();
+    const mapDialog = ui.map?.querySelector(".map-dialog");
+    if (mapDialog) mapDialog.dataset.mapMode = state.mapMode;
+    if (ui.mapDescription) ui.mapDescription.textContent = state.mapMode === "travel"
+      ? "Vart vill du resa? Välj ett rike eller det övergivna jätteslottet."
+      : "Här ser du hur rikena och haven ligger. Uppdrag startas vid långskeppen i hamnen.";
+    if (ui.mapTip) ui.mapTip.innerHTML = state.mapMode === "travel"
+      ? '<span aria-hidden="true">⛵</span> RESAN TAR TRE SPELDYGN · 18 MINUTER'
+      : '<span aria-hidden="true">⚓</span> GÅ TILL HAMNEN OCH KLIV OMBORD FÖR ATT VÄLJA UPPDRAG';
     setModal("map", true);
     sfx("click");
   }
@@ -1818,6 +1927,42 @@ import * as THREE from "./vendor/three.module.js";
     if (state.modal === "map") populateMap();
     showToast(`FIENDEKUNG ${attacker} OCH FIENDEKUNG ${defender} HAR STARTAT KRIG!`, 2800);
     return true;
+  }
+
+  function startIncomingEnemyJourney(kind, attacker) {
+    if (state.enemyJourney || !state.kingdoms[attacker] || state.kingdoms[attacker].player) return false;
+    state.enemyJourney = {
+      kind,
+      attacker,
+      totalSeconds: SEA_JOURNEY_SECONDS,
+      remainingSeconds: SEA_JOURNEY_SECONDS,
+      arrived: false,
+    };
+    showToast(`FIENDEKUNG ${attacker} SEGLAR MOT DITT RIKE · ANKOMMER OM 18 MINUTER`, 3600);
+    if (state.modal === "map") populateMap();
+    return true;
+  }
+
+  function updateIncomingEnemyJourney(dt) {
+    const voyage = state.enemyJourney;
+    if (!voyage) return;
+    voyage.remainingSeconds = Math.max(0, voyage.remainingSeconds - dt);
+    voyage.arrived = voyage.remainingSeconds <= 1e-9;
+    if (!voyage.arrived || state.scene !== "home" || state.modal || state.sleeping > 0) return;
+    state.enemyJourney = null;
+    if (voyage.kind === "attack") {
+      showToast(`FIENDEKUNG ${voyage.attacker} HAR KOMMIT MED SITT LÅNGSKEPP!`, 2600);
+      openSelection("attack", voyage.attacker, 20, true);
+    } else if (state.miners > 0) {
+      showToast(`FIENDEKUNG ${voyage.attacker} HAR KOMMIT FÖR ATT STJÄLA MINERS!`, 2600);
+      const arrivalPhase = state.phase;
+      state.phase = "night";
+      state.nightMineRaidTriggered = false;
+      triggerIncomingMineRaid(voyage.attacker);
+      state.phase = arrivalPhase;
+    } else {
+      showToast(`FIENDEKUNG ${voyage.attacker} HITTADE INGA MINERS OCH SEGLADE HEM`, 2600);
+    }
   }
 
   function finishEnemyWar(announce = true) {
@@ -1846,12 +1991,13 @@ import * as THREE from "./vendor/three.module.js";
       const button = document.createElement("button");
       button.type = "button";
       const atWar = kingdomAtEnemyWar(kingdom.index);
+      const sailingToPlayer = state.enemyJourney?.attacker === kingdom.index;
       const warOpponent = atWar
         ? state.enemyWar.attacker === kingdom.index ? state.enemyWar.defender : state.enemyWar.attacker
         : null;
-      button.className = `kingdom-node${kingdom.player ? " player-kingdom" : " enemy-kingdom"}${atWar ? " kingdom-at-war" : ""}`;
+      button.className = `kingdom-node${kingdom.player ? " player-kingdom" : " enemy-kingdom"}${atWar ? " kingdom-at-war" : ""}${sailingToPlayer ? " kingdom-sailing" : ""}`;
       button.dataset.kingdom = String(kingdom.index);
-      if (atWar) button.setAttribute("aria-disabled", "true");
+      if (atWar || state.mapMode === "view" || kingdom.player) button.setAttribute("aria-disabled", "true");
       const miners = kingdom.player ? state.miners : kingdom.miners;
       const minerLabel = miners === 1 ? "MINER" : "MINERS";
       const archerLabel = kingdom.towerArchers === 1 ? "TORNSKYTT" : "TORNSKYTTAR";
@@ -1862,8 +2008,14 @@ import * as THREE from "./vendor/three.module.js";
           : `Fiendeborg ${kingdom.index}, ${miners} ${minerLabel.toLowerCase()}, ${kingdom.towerArchers} ${archerLabel.toLowerCase()}`);
       button.innerHTML = kingdom.player
         ? `<span class="castle-symbol" aria-hidden="true">♜</span><strong>DIN BORG</strong><small>DU ÄR HÄR · ${miners} ${minerLabel}</small>`
-        : `<span class="castle-symbol" aria-hidden="true">♜</span><strong>FIENDEBORG ${kingdom.index}</strong>${atWar ? `<span class="war-badge">⚔ KRIG MOT RIKE ${warOpponent}</span>` : ""}<small class="kingdom-stats"><span class="kingdom-stat">⛏ ${miners} ${minerLabel}</span><span class="kingdom-stat">➶ ${kingdom.towerArchers} ${archerLabel}</span></small>`;
-      button.addEventListener("click", () => chooseKingdom(kingdom.index));
+        : `<span class="castle-symbol" aria-hidden="true">♜</span><strong>FIENDEBORG ${kingdom.index}</strong>${atWar ? `<span class="war-badge">⚔ KRIG MOT RIKE ${warOpponent}</span>` : sailingToPlayer ? `<span class="war-badge">⛵ PÅ VÄG MOT DIG · ${Math.ceil(state.enemyJourney.remainingSeconds / 60)} MIN</span>` : ""}<small class="kingdom-stats"><span class="kingdom-stat">⛏ ${miners} ${minerLabel}</span><span class="kingdom-stat">➶ ${kingdom.towerArchers} ${archerLabel}</span></small>`;
+      button.addEventListener("click", () => {
+        if (state.mapMode === "view") {
+          showToast(kingdom.player ? "DET HÄR ÄR DITT RIKE" : `FIENDERIKE ${kingdom.index} · RES DIT FRÅN HAMNEN`);
+          return;
+        }
+        chooseKingdom(kingdom.index, true);
+      });
       ui.mapGrid.append(button);
     });
     const abandoned = document.createElement("button");
@@ -1878,23 +2030,29 @@ import * as THREE from "./vendor/three.module.js";
         <span>LIKA STORT SOM 7 SLOTT</span>
         <span>UTFORSKA 35 RUM · MAX 10 VAKTER</span>
       </small>`;
-    abandoned.addEventListener("click", () => openSelection("abandonedCastle", null, ABANDONED_MAX_GUARDS, false));
+    abandoned.addEventListener("click", () => {
+      if (state.mapMode === "view") {
+        showToast("DET ÖVERGIVNA JÄTTESLOTTET · RES DIT FRÅN HAMNEN");
+        return;
+      }
+      openSelection("abandonedCastle", null, ABANDONED_MAX_GUARDS, false, true);
+    });
     ui.mapGrid.append(abandoned);
   }
 
-  function showNightMissionChoice(index) {
+  function showNightMissionChoice(index, travel = false) {
     showQuestion(
       "VÄLJ NATTLIGT UPPDRAG",
       `Fienderike ${index} har ${state.kingdoms[index].miners} miners. Smyg till borgen efter skatter eller gör en räd mot gruvan.`,
-      () => openSelection("stealth", index, 5, false),
-      () => openSelection("mineRaid", index, 5, false),
+      () => openSelection("stealth", index, 5, false, travel),
+      () => openSelection("mineRaid", index, 5, false, travel),
       "SMYGUPPDRAG",
       "GRUVUPPDRAG",
-      { mode: "mission", back: openWorldMap, backLabel: "TILLBAKA TILL KARTAN" },
+      { mode: "mission", back: () => openWorldMap(travel ? "travel" : "view"), backLabel: "TILLBAKA TILL KARTAN" },
     );
   }
 
-  function chooseKingdom(index) {
+  function chooseKingdom(index, travel = false) {
     if (index === 0) {
       showToast("DET HÄR ÄR DIN EGEN BORG");
       return;
@@ -1909,15 +2067,15 @@ import * as THREE from "./vendor/three.module.js";
       showQuestion(
         "VILL DU ATTACKERA?",
         `Fiendeborg ${index} försvaras av en kung och 20 vakter.`,
-        () => openSelection("attack", index, 20, false),
-        () => openWorldMap(),
+        () => openSelection("attack", index, 20, false, travel),
+        () => openWorldMap(travel ? "travel" : "view"),
       );
     } else {
-      showNightMissionChoice(index);
+      showNightMissionChoice(index, travel);
     }
   }
 
-  function openSelection(kind, target, max, incoming = false) {
+  function openSelection(kind, target, max, incoming = false, travel = false) {
     const counts = { sword: 0, archer: 0, cavalry: 0 };
     const minimums = { sword: 0, archer: 0, cavalry: 0 };
     if (kind === "attack" && incoming) {
@@ -1932,7 +2090,7 @@ import * as THREE from "./vendor/three.module.js";
         counts[type]--;
       }
     }
-    state.selection = { kind, target, max, counts, minimums, incoming };
+    state.selection = { kind, target, max, counts, minimums, incoming, travel };
     if (ui.selectionTitle) {
       ui.selectionTitle.textContent = kind === "attack"
         ? "VÄLJ DIN ARMÉ"
@@ -1956,7 +2114,9 @@ import * as THREE from "./vendor/three.module.js";
             : "Högst fem vakter. Du får också gå helt ensam.";
     }
     if (ui.selectionConfirm) {
-      ui.selectionConfirm.textContent = kind === "attack"
+      ui.selectionConfirm.textContent = travel
+        ? "BÖRJA RESAN"
+        : kind === "attack"
         ? "STARTA KRIGET"
         : kind === "abandonedCastle"
           ? "UTFORSKA JÄTTESLOTTET"
@@ -2009,11 +2169,209 @@ import * as THREE from "./vendor/three.module.js";
     if (!selection) return;
     state.selection = null;
     setModal(null, false);
+    if (selection.travel) {
+      startSeaJourney(selection.kind, selection.target, selection.counts);
+      return;
+    }
     if (selection.kind === "attack") startBattle(selection.target, selection.counts, selection.incoming);
     else if (selection.kind === "abandonedCastle") startAbandonedCastle(selection.counts);
     else if (selection.kind === "stealth") startStealth(selection.target, selection.counts);
     else if (selection.kind === "mineRaid") startMineRaid(selection.target, selection.counts);
     else if (selection.kind === "mineDefense") startMineDefense(selection.target, selection.counts);
+  }
+
+  function journeyDestinationLabel(kind, target) {
+    return kind === "abandonedCastle" ? "ÖVERGIVNA JÄTTESLOTTET" : `FIENDERIKE ${target}`;
+  }
+
+  function startSeaJourney(kind, target, counts) {
+    const max = kind === "attack" ? 20 : kind === "abandonedCastle" ? ABANDONED_MAX_GUARDS : 5;
+    const safeCounts = guardCountsLimitedTo(counts, max);
+    state.scene = "journey";
+    state.modal = null;
+    state.units = [];
+    state.loot = [];
+    state.battle = null;
+    state.stealth = null;
+    state.mineRaid = null;
+    state.abandonedCastleVisit = null;
+    state.journey = {
+      kind,
+      target,
+      counts: { ...safeCounts },
+      totalSeconds: SEA_JOURNEY_SECONDS,
+      elapsedSeconds: 0,
+      remainingSeconds: SEA_JOURNEY_SECONDS,
+      swimming: false,
+      shipStopped: false,
+      completed: false,
+      race: null,
+      raceCooldown: 0,
+      proposalCountdown: 8,
+      proposalActive: false,
+      applauseRemaining: 0,
+      applauseWinner: null,
+      racesCompleted: 0,
+      playerWins: 0,
+      guardWins: 0,
+    };
+    let index = 0;
+    UNIT_TYPES.forEach((type) => {
+      for (let count = 0; count < safeCounts[type]; count++, index++) {
+        const unit = makeUnit(0, type, -1.3 + (index % 3) * 1.3, -3.6 + Math.floor(index / 3) * 1.35, { journeyGuard: true, sourceType: type });
+        unit.y = 1.18;
+        unit.facing = 0;
+        unit.salute = 0;
+        state.units.push(unit);
+      }
+    });
+    Object.assign(state.player, { x: 0, y: 1.2, z: 4.5, yaw: 0, pitch: 0, hp: 100, alive: true });
+    rebuildWorld();
+    updateCamera();
+    updateNearestInteraction();
+    updateHud();
+    showToast(`RESAN TILL ${journeyDestinationLabel(kind, target)} HAR BÖRJAT · 18 MINUTER`, 3400);
+  }
+
+  function setJourneySwimming(swimming) {
+    const journey = state.journey;
+    if (!journey || state.scene !== "journey") return;
+    if (!swimming && journey.race?.status === "racing") {
+      showToast("SIMTÄVLINGEN MÅSTE BLI KLAR FÖRST");
+      return;
+    }
+    journey.swimming = Boolean(swimming);
+    journey.shipStopped = Boolean(swimming);
+    journey.proposalCountdown = swimming ? Math.min(journey.proposalCountdown, 8) : 8;
+    journey.proposalActive = false;
+    if (swimming) {
+      Object.assign(state.player, { x: 9.2, y: -0.86, z: 3.6, yaw: -Math.PI / 2, pitch: 0 });
+      state.units.forEach((unit, index) => {
+        unit.journeySwimming = true;
+        unit.x = index % 2 ? 8.2 + (index % 3) * 1.3 : -8.2 - (index % 3) * 1.3;
+        unit.z = 2.4 + Math.floor(index / 2) * 2.1;
+        unit.y = -0.82;
+      });
+      showToast("SKEPPET STANNAR · RESTIDEN FORTSÄTTER ATT RÄKNAS");
+    } else {
+      Object.assign(state.player, { x: 0, y: 1.2, z: 4.5, yaw: 0, pitch: 0 });
+      state.units.forEach((unit, index) => {
+        unit.journeySwimming = false;
+        unit.x = -1.3 + (index % 3) * 1.3;
+        unit.z = -3.6 + Math.floor(index / 3) * 1.35;
+        unit.y = 1.18;
+      });
+      showToast("ALLA ÄR OMBORD · LÅNGSKEPPET SEGLAR IGEN");
+    }
+  }
+
+  function startSwimRace(guardId = null) {
+    const journey = state.journey;
+    if (!journey?.swimming || journey.raceCooldown > 0 || journey.race?.status === "racing") return false;
+    const guard = state.units.find((unit) => unit.id === guardId && unit.alive) || state.units.find((unit) => unit.alive && unit.journeyGuard);
+    if (!guard) {
+      showToast("DU BEHÖVER HA MED EN VAKT FÖR ATT TÄVLA");
+      return false;
+    }
+    Object.assign(state.player, { x: 2.5, y: -0.86, z: 12, yaw: 0, pitch: 0 });
+    Object.assign(guard, { x: -2.5, y: -0.82, z: 12, journeySwimming: true, facing: Math.PI });
+    journey.race = { status: "racing", guardId: guard.id, finishZ: -18, startedAt: state.time, winner: null };
+    journey.proposalActive = false;
+    journey.applauseRemaining = 0;
+    showToast("SIMTÄVLING! SIMMA FRAMÅT TILL DEN GULA BOJEN!", 2500);
+    return true;
+  }
+
+  function finishSwimRace(winner) {
+    const journey = state.journey;
+    if (!journey?.race || journey.race.status !== "racing") return;
+    journey.race.status = "finished";
+    journey.race.winner = winner;
+    journey.racesCompleted++;
+    if (winner === "king") journey.playerWins++;
+    else journey.guardWins++;
+    journey.raceCooldown = SWIM_RACE_COOLDOWN_SECONDS;
+    journey.applauseRemaining = SWIM_RACE_APPLAUSE_SECONDS;
+    journey.applauseWinner = winner;
+    journey.proposalActive = false;
+    journey.proposalCountdown = SWIM_RACE_COOLDOWN_SECONDS + 6;
+    showToast(winner === "king" ? "KUNGEN VANN · ALLA VAKTER APPLÅDERAR!" : "VAKTEN VANN · ALLA VAKTER APPLÅDERAR!", 5000);
+  }
+
+  function advanceJourneyClock(dt) {
+    state.phaseElapsed += dt;
+    const duration = state.phase === "day" ? DAY_SECONDS : NIGHT_SECONDS;
+    if (state.phaseElapsed + 1e-9 < duration) return;
+    state.phaseElapsed = Math.max(0, state.phaseElapsed - duration);
+    if (state.phase === "day") state.phase = "night";
+    else {
+      state.phase = "day";
+      state.day++;
+    }
+    updateLighting(true);
+  }
+
+  function completeSeaJourney() {
+    const journey = state.journey;
+    if (!journey || journey.completed) return;
+    journey.completed = true;
+    const { kind, target, counts } = journey;
+    state.journey = null;
+    if (kind === "attack") startBattle(target, counts, false);
+    else if (kind === "stealth") startStealth(target, counts);
+    else if (kind === "mineRaid") startMineRaid(target, counts);
+    else startAbandonedCastle(counts);
+  }
+
+  function updateSeaJourney(dt) {
+    const journey = state.journey;
+    if (state.scene !== "journey" || !journey) return;
+    journey.elapsedSeconds = Math.min(journey.totalSeconds, journey.elapsedSeconds + dt);
+    journey.remainingSeconds = Math.max(0, journey.totalSeconds - journey.elapsedSeconds);
+    advanceJourneyClock(dt);
+    journey.raceCooldown = Math.max(0, journey.raceCooldown - dt);
+    journey.applauseRemaining = Math.max(0, journey.applauseRemaining - dt);
+    if (journey.applauseRemaining <= 0 && journey.race?.status === "finished") journey.race = null;
+    if (journey.swimming && !journey.race && journey.raceCooldown <= 0 && state.units.some((unit) => unit.alive)) {
+      journey.proposalCountdown -= dt;
+      if (journey.proposalCountdown <= 0 && !journey.proposalActive) {
+        journey.proposalActive = true;
+        showToast("EN VAKT FÖRESLÅR EN NY SIMTÄVLING!", 2300);
+      }
+    }
+    const race = journey.race;
+    if (race?.status === "racing") {
+      const guard = state.units.find((unit) => unit.id === race.guardId);
+      if (guard?.alive) {
+        guard.z -= SWIM_RACE_GUARD_SPEED * dt;
+        guard.walk += dt * 7;
+        guard.facing = Math.PI;
+        if (guard.z <= race.finishZ) finishSwimRace("guard");
+      }
+      if (state.player.z <= race.finishZ) finishSwimRace("king");
+    }
+    state.units.filter((unit) => unit.alive).forEach((unit) => {
+      const distance = Math.hypot(unit.x - state.player.x, unit.z - state.player.z);
+      unit.salute = distance < 3.2 ? 1 : Math.max(0, (unit.salute || 0) - dt * 1.8);
+      const model = actorModels.get(unit.id);
+      if (!model) return;
+      model.position.set(unit.x, unit.y || 0, unit.z);
+      model.rotation.y = unit.facing + Math.PI;
+      const body = model.userData.body;
+      if (body?.userData.rightArm) body.userData.rightArm.rotation.z = -unit.salute * 1.9;
+      if (journey.applauseRemaining > 0) {
+        const clap = Math.sin(state.time * 15) * 0.85;
+        if (body?.userData.rightArm) body.userData.rightArm.rotation.z = -1.1 + clap;
+        if (body?.userData.leftArm) body.userData.leftArm.rotation.z = 1.1 - clap;
+      }
+    });
+    if (!journey.shipStopped) {
+      journeyScenery.forEach((object) => {
+        object.position.z += dt * 2.4;
+        if (object.position.z > 115) object.position.z -= 230;
+      });
+    }
+    if (journey.remainingSeconds <= 1e-9) completeSeaJourney();
   }
 
   function openShop() {
@@ -2178,6 +2536,8 @@ import * as THREE from "./vendor/three.module.js";
       abandonedFloor: extra.abandonedFloor || (state.scene === "abandonedCastle" ? "ground" : null),
       dragon: Boolean(extra.dragon),
       upperTowerStatue: Boolean(extra.upperTowerStatue),
+      journeyGuard: Boolean(extra.journeyGuard),
+      journeySwimming: Boolean(extra.journeySwimming),
       invulnerable: Boolean(extra.invulnerable),
       lockedTargetId: extra.lockedTargetId || null,
       infiniteArrows: Boolean(extra.infiniteArrows),
@@ -2871,6 +3231,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function floorHeight(x, z, previousY = 0) {
+    if (state.scene === "journey") return state.journey?.swimming ? -0.86 : 1.2;
     if (state.scene === "abandonedCastle") return 0;
     if (state.scene === "battle") {
       const edge = Math.max(0, Math.abs(x) - 17.5);
@@ -2905,7 +3266,12 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function collides(x, z, y) {
+    if (state.scene === "journey") {
+      if (state.journey?.swimming) return Math.abs(x) > 34 || Math.abs(z) > 31;
+      return Math.abs(x) > 1.78 || Math.abs(z) > 5.45;
+    }
     if (state.scene === "battle") return Math.abs(x) > 24 || Math.abs(z) > 33;
+    if (state.scene === "home" && x > 53.2 && z > 20 && z < 78) return true;
     if (isMoat(x, z)) return true;
     return colliders.some((wall) => y >= wall.minY && y <= wall.maxY && x + PLAYER_RADIUS > wall.minX && x - PLAYER_RADIUS < wall.maxX && z + PLAYER_RADIUS > wall.minZ && z - PLAYER_RADIUS < wall.maxZ);
   }
@@ -2923,7 +3289,8 @@ import * as THREE from "./vendor/three.module.js";
     const magnitude = Math.hypot(forwardInput, sideInput);
     if (magnitude > 1) { forwardInput /= magnitude; sideInput /= magnitude; }
     const sprint = keys.ShiftLeft || keys.ShiftRight;
-    const speed = sprint ? 6.7 : 4.4;
+    const baseSpeed = state.scene === "journey" && state.journey?.swimming ? 3.8 : 4.4;
+    const speed = sprint ? baseSpeed * 1.35 : baseSpeed;
     const sin = Math.sin(state.player.yaw);
     const cos = Math.cos(state.player.yaw);
     const vx = (-sin * forwardInput + cos * sideInput) * speed;
@@ -4597,6 +4964,24 @@ import * as THREE from "./vendor/three.module.js";
         });
       }
       if (state.nearest?.kind === "tower" && (state.towerSlots[state.nearest.slot] || availableGuards("archer") <= 0)) state.nearest = null;
+    } else if (state.scene === "journey") {
+      const journey = state.journey;
+      if (journey?.swimming) {
+        const guard = state.units.filter((unit) => unit.alive).sort((a, b) => dist(a, state.player) - dist(b, state.player))[0];
+        const guardDistance = guard ? dist(guard, state.player) : Infinity;
+        if (guard && guardDistance < 3.35 && journey.raceCooldown <= 0 && journey.race?.status !== "racing") {
+          state.nearest = {
+            kind: "swimRace",
+            guardId: guard.id,
+            distance: guardDistance,
+            label: journey.proposalActive ? "VAKTEN FÖRESLÅR SIMTÄVLING" : "UTMANA VAKTEN PÅ SIMTÄVLING",
+          };
+        } else if (Math.hypot(state.player.x, state.player.z) < 9 && journey.race?.status !== "racing") {
+          state.nearest = { kind: "swim", x: 0, z: 0, distance: Math.hypot(state.player.x, state.player.z), label: "KLÄTTRA UPP I LÅNGSKEPPET" };
+        }
+      } else {
+        state.nearest = { kind: "swim", x: 0, z: 0, distance: 0, label: "HOPPA I VATTNET" };
+      }
     } else if (state.scene === "stealth") {
       state.loot.filter((loot) => !loot.taken).forEach((loot) => {
         const distance = dist(loot, state.player);
@@ -4637,7 +5022,10 @@ import * as THREE from "./vendor/three.module.js";
     if (state.modal || !state.nearest) return;
     const item = state.nearest;
     enableSound();
-    if (item.kind === "map") openWorldMap();
+    if (item.kind === "map") openWorldMap("view");
+    else if (item.kind === "longship") openWorldMap("travel");
+    else if (item.kind === "swim") setJourneySwimming(!state.journey?.swimming);
+    else if (item.kind === "swimRace") startSwimRace(item.guardId);
     else if (item.kind === "bed") {
       if (state.phase === "night") showQuestion("VILL DU SOVA?", "Efter en sekund blir det morgon.", () => sleepOneSecond(), () => {});
       else showToast("DET ÄR DAG. DU BEHÖVER INTE SOVA ÄN.");
@@ -4710,7 +5098,7 @@ import * as THREE from "./vendor/three.module.js";
   }
 
   function updateCycle(dt) {
-    if (["battle", "stealth", "mineRaid", "mineDefense", "abandonedCastle"].includes(state.scene)) return;
+    if (["battle", "stealth", "mineRaid", "mineDefense", "abandonedCastle", "journey"].includes(state.scene)) return;
     if (state.sleeping > 0) {
       state.sleeping -= dt;
       if (state.sleeping <= 0) {
@@ -4772,13 +5160,15 @@ import * as THREE from "./vendor/three.module.js";
       const availableAttackers = state.kingdoms.slice(1).filter((kingdom) => !kingdomAtEnemyWar(kingdom.index));
       if (!availableAttackers.length) return;
       const attacker = availableAttackers[Math.floor(seeded() * availableAttackers.length)].index;
-      showToast(`FIENDEKUNG ${attacker} KOMMER MOT DIN BORG!`, 2100);
-      openSelection("attack", attacker, 20, true);
+      startIncomingEnemyJourney("attack", attacker);
     }
     if (state.phase === "night" && !state.nightMineRaidTriggered && state.phaseElapsed >= state.nightMineRaidAt && !state.modal) {
       if (state.miners > 0) {
         const attacker = chooseMineRaider();
-        if (attacker) triggerIncomingMineRaid(attacker);
+        if (attacker) {
+          state.nightMineRaidTriggered = true;
+          startIncomingEnemyJourney("mineRaid", attacker);
+        }
         else state.nightMineRaidTriggered = true;
       } else state.nightMineRaidTriggered = true;
     }
@@ -4792,6 +5182,7 @@ import * as THREE from "./vendor/three.module.js";
       state.player.swing += dt * 3.1;
       if (state.player.swing >= 1) state.player.swing = 0;
     }
+    updateIncomingEnemyJourney(dt);
     if (!state.modal || state.sleeping > 0) {
       updateCycle(dt);
       updateMine(dt);
@@ -4801,6 +5192,7 @@ import * as THREE from "./vendor/three.module.js";
       updateStatues(dt);
       updateAbandonedUpperCombat(dt);
       updateUnits(dt);
+      updateSeaJourney(dt);
       updateAbandonedArrowTraps();
       updateAbandonedCombatantHealing();
       updateAbandonedSearchDiscoveries();
@@ -4828,10 +5220,33 @@ import * as THREE from "./vendor/three.module.js";
     if (ui.clock) ui.clock.textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
     if (ui.weapon) ui.weapon.textContent = state.weapon === "sword" ? "SVÄRD" : "PILBÅGE";
     if (ui.followers) {
-      const followers = ["battle", "stealth", "mineRaid", "mineDefense", "abandonedCastle"].includes(state.scene)
+      const followers = ["battle", "stealth", "mineRaid", "mineDefense", "abandonedCastle", "journey"].includes(state.scene)
         ? state.units.filter((unit) => unit.team === 0 && unit.alive).length
         : Object.values(state.quickStealth).reduce((sum, value) => sum + value, 0);
       ui.followers.textContent = String(followers);
+    }
+    const journey = state.scene === "journey" ? state.journey : null;
+    setVisible(ui.journeyHud, Boolean(journey));
+    if (journey) {
+      if (ui.journeyDestination) ui.journeyDestination.textContent = `TILL ${journeyDestinationLabel(journey.kind, journey.target)}`;
+      const journeySeconds = Math.max(0, Math.ceil(journey.remainingSeconds));
+      if (ui.journeyTime) ui.journeyTime.textContent = `${Math.floor(journeySeconds / 60)}:${String(journeySeconds % 60).padStart(2, "0")}`;
+      if (ui.journeyState) ui.journeyState.textContent = journey.shipStopped ? "SKEPPET STÅR STILLA · RESTIDEN GÅR" : "LÅNGSKEPPET SEGLAR";
+    }
+    const showRaceHud = Boolean(journey && (journey.race || journey.raceCooldown > 0));
+    setVisible(ui.raceHud, showRaceHud);
+    if (showRaceHud) {
+      if (ui.raceLabel) ui.raceLabel.textContent = journey.race?.status === "racing" ? "SIMTÄVLING" : "NÄSTA SIMTÄVLING";
+      if (ui.raceStatus) ui.raceStatus.textContent = journey.race?.status === "racing"
+        ? "SIMMA TILL DEN GULA BOJEN!"
+        : journey.applauseRemaining > 0
+          ? journey.applauseWinner === "king" ? "KUNGEN FÅR APPLÅDER" : "VAKTEN FÅR APPLÅDER"
+          : "VÄNTA LITE";
+      if (ui.raceCooldown) ui.raceCooldown.textContent = journey.race?.status === "racing"
+        ? ""
+        : journey.applauseRemaining > 0
+          ? `APPLÅDER · ${Math.ceil(journey.applauseRemaining)} S`
+          : `${Math.ceil(journey.raceCooldown)} S`;
     }
     const visit = state.scene === "abandonedCastle" ? state.abandonedCastleVisit : null;
     const upstairs = Boolean(visit && visit.playerFloor === "upper");
@@ -4916,7 +5331,7 @@ import * as THREE from "./vendor/three.module.js";
       kingdoms: makeKingdoms(),
       quickStealth: { sword: 0, archer: 0, cavalry: 0 }, quickStealthIds: [], weapon: "sword", units: [], loot: [], battle: null, stealth: null, mineRaid: null, mineDefense: null, abandonedCastleVisit: null, lastAbandonedCastleOutcome: null, pendingMineDefense: null, loadNotice: "",
       nightMineRaidTriggered: false, nightMineRaidAt: 52, sleepRaidMessage: "", mineTransferId: 0, lastMineTransfer: null,
-      selection: null, question: null, nearest: null, enteredEnemyCastle: false, deterministicSeed: INITIAL_SEED,
+      selection: null, question: null, nearest: null, enteredEnemyCastle: false, mapMode: "view", journey: null, enemyJourney: null, deterministicSeed: INITIAL_SEED,
     });
     manualRemainderMs = 0;
     lastAbandonedTreasureRoomId = null;
@@ -5076,7 +5491,7 @@ import * as THREE from "./vendor/three.module.js";
         requiredGuardianRoomId: unit.requiredGuardianRoomId || null, requiredArrowTrapId: unit.requiredArrowTrapId || null,
         abandonedHealSecondsRemaining: rounded(unit.abandonedHealSecondsRemaining || 0),
         roomId: abandonedActorFloor(unit) === "ground" ? abandonedRoomAt(unit.x, unit.z)?.id || null : null,
-        x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, maxHp: unit.maxHp,
+        x: rounded(unit.x), y: rounded(unit.y || 0), z: rounded(unit.z), hp: unit.hp, maxHp: unit.maxHp, salute: rounded(unit.salute || 0),
         distance: rounded(dist(unit, state.player)),
       }));
     const duration = state.phase === "day" ? DAY_SECONDS : NIGHT_SECONDS;
@@ -5354,13 +5769,42 @@ import * as THREE from "./vendor/three.module.js";
       worldMap: {
         kingdoms: 7,
         castles: 8,
+        layout: "seven-separate-sea-kingdoms-plus-abandoned-castle-island",
+        castleMapPurpose: "view-only",
+        missionSelectionPlace: "longship-at-player-harbor",
+        openMode: state.modal === "map" ? state.mapMode : null,
         playerCastles: 1,
         enemyCastles: 6,
         abandonedCastles: 1,
         abandonedCastle: { ...ABANDONED_CASTLE },
         enemyWar: state.enemyWar ? { ...state.enemyWar, remaining: rounded(state.enemyWar.remaining), blockedKingdoms: [state.enemyWar.attacker, state.enemyWar.defender] } : null,
+        incomingEnemyLongship: state.enemyJourney ? { ...state.enemyJourney, remainingSeconds: rounded(state.enemyJourney.remainingSeconds) } : null,
       },
       abandonedCastleVisit: abandonedCastleState,
+      seaJourney: state.journey ? {
+        destination: journeyDestinationLabel(state.journey.kind, state.journey.target),
+        mission: state.journey.kind,
+        target: state.journey.target,
+        selectedGuards: { ...state.journey.counts },
+        totalSeconds: state.journey.totalSeconds,
+        elapsedSeconds: rounded(state.journey.elapsedSeconds),
+        remainingSeconds: rounded(state.journey.remainingSeconds),
+        gameDays: 3,
+        longship: true,
+        shipStopped: state.journey.shipStopped,
+        swimming: state.journey.swimming,
+        travelTimerContinuesWhileSwimming: true,
+        swimmingCannotFailJourney: true,
+        guardsCanSwim: true,
+        race: state.journey.race ? { ...state.journey.race } : null,
+        raceCooldownSeconds: rounded(state.journey.raceCooldown),
+        raceProposalActive: state.journey.proposalActive,
+        applauseRemainingSeconds: rounded(state.journey.applauseRemaining),
+        applauseWinner: state.journey.applauseWinner,
+        racesCompleted: state.journey.racesCompleted,
+        playerWins: state.journey.playerWins,
+        guardWins: state.journey.guardWins,
+      } : null,
       nearestInteraction: state.nearest ? { kind: state.nearest.kind, label: state.nearest.label, distance: rounded(state.nearest.distance) } : null,
       battle: state.battle ? {
         target: state.battle.target,
@@ -5410,7 +5854,7 @@ import * as THREE from "./vendor/three.module.js";
       pendingMineDefense: state.pendingMineDefense ? { ...state.pendingMineDefense } : null,
       lastAbandonedCastleOutcome: state.lastAbandonedCastleOutcome ? { ...state.lastAbandonedCastleOutcome } : null,
       lastMineTransfer: state.lastMineTransfer ? { ...state.lastMineTransfer } : null,
-      selection: state.selection ? { kind: state.selection.kind, target: state.selection.target, max: state.selection.max, counts: { ...state.selection.counts }, minimums: { ...state.selection.minimums }, incoming: state.selection.incoming } : null,
+      selection: state.selection ? { kind: state.selection.kind, target: state.selection.target, max: state.selection.max, counts: { ...state.selection.counts }, minimums: { ...state.selection.minimums }, incoming: state.selection.incoming, travel: state.selection.travel } : null,
       loot: state.loot.filter((loot) => !loot.taken).map((loot) => ({ kind: loot.kind, amount: loot.amount, x: loot.x, z: loot.z })),
       fallenUnits: state.units.filter((unit) => !unit.alive && !unit.respawned).map((unit) => ({ team: unit.team, type: unit.type, x: rounded(unit.x), z: rounded(unit.z) })),
       nearbyUnits,
@@ -5513,8 +5957,8 @@ import * as THREE from "./vendor/three.module.js";
       setModal(null, false);
       if (selection?.kind === "mineDefense" && selection.incoming) startMineDefense(selection.target, { sword: 0, archer: 0, cavalry: 0 });
       else if (selection?.incoming) startBattle(selection.target, { ...selection.minimums }, true);
-      else if (selection?.kind === "abandonedCastle") openWorldMap();
-      else if (selection && ["stealth", "mineRaid"].includes(selection.kind)) showNightMissionChoice(selection.target);
+      else if (selection?.kind === "abandonedCastle") openWorldMap(selection.travel ? "travel" : "view");
+      else if (selection && ["stealth", "mineRaid"].includes(selection.kind)) showNightMissionChoice(selection.target, selection.travel);
     });
     $$('[data-unit][data-delta]').forEach((button) => button.addEventListener("click", () => adjustSelection(button.dataset.unit, Number(button.dataset.delta))));
     $$('[data-buy]').forEach((button) => button.addEventListener("click", () => {
@@ -5582,6 +6026,10 @@ import * as THREE from "./vendor/three.module.js";
     startStealth: (target = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startStealth(target, counts),
     startMineRaid: (target = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startMineRaid(target, counts),
     startMineDefense: (attacker = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startMineDefense(attacker, counts),
+    startSeaJourney: (kind = "attack", target = 1, counts = { sword: 0, archer: 0, cavalry: 0 }) => startSeaJourney(kind, target, counts),
+    setJourneySwimming,
+    startSwimRace,
+    completeSeaJourney,
     startAbandonedCastle: (counts = { sword: 0, archer: 0, cavalry: 0 }) => startAbandonedCastle(counts),
     finishAbandonedCastle,
     enterAbandonedUpper,
@@ -5589,6 +6037,7 @@ import * as THREE from "./vendor/three.module.js";
     abandonedStairGuardianDefeated,
     chooseAbandonedReward,
     startEnemyWar,
+    startIncomingEnemyJourney,
     finishEnemyWar,
     getAbandonedCastleLayout,
     getAbandonedNavigationTarget: (from, target) => abandonedNavigationTarget(from, target),

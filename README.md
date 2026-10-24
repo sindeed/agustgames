@@ -14,7 +14,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
-| War of Kingdoms | [`war-of-kingdoms/`](war-of-kingdoms/) | Förstapersons-3D där du är kung. Bygg armén, försvara borg och gruva, kriga mot sex kungar och sök en skatt i det övergivna jätteslottets labyrint. |
+| War of Kingdoms | [`war-of-kingdoms/`](war-of-kingdoms/) | Förstapersons-3D där du är kung. Bygg armén, segla med långskepp mellan sju havsriken, tävla i simning och sök skatten i det övergivna jätteslottets labyrint. |
 | Party Game | [`party-game/`](party-game/) | Färgglatt fysik-partyspel med spelaren och nio bottar. Utforska fredligt i Fred eller kör alla mot alla med kanoner, bilar och borgvapen i Fri. |
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |
 | Survivor of Days | [`survivor-blockshop/`](survivor-blockshop/) | Bygg en bas, handla block i Blockshop och skydda hjärtat i fem dygn. |
