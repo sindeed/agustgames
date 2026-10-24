@@ -103,7 +103,8 @@ Original prompt: Bygg War of Kingdoms som ett iPad-anpassat 3D-spel i första pe
 - 2026-10-24: I vattnet gör en närbelägen vakt honnör och kan utmanas på simtävling. Vakten kan också föreslå en tävling. Vinnaren får fem sekunders applåder, därefter visas en liten 30-sekunders nedräkning vid skärmens kant. Tävlingar kan upprepas hur många gånger som helst.
 - 2026-10-24: Fiendekungars attack- och gruvresor använder också långskepp och 18 minuters restid. Världskartan visar vilken kung som är på väg; försvarsvalet visas först vid ankomst.
 - 2026-10-24: Lokal Chromium- och WebKit-QA godkände vardera 35/35 kontroller för havsresan, kartlägena, samtliga vaktgränser, fortsatt timer under bad, honnör i vattnet, två tävlingar med olika vinnare, fem sekunders applåder, 30 sekunders paus, ankomst samt båda fienderesorna utan webbläsarfel. Sex iPad-bilder per motor granskades visuellt och den ordinarie spelklienten passerade.
+- 2026-10-24: Version `317bc3c` publicerades via GitHub Pages-körning `40124033461`. August Games-menyn visar cacheversion `20261024-longship-journeys`, och livefilens SHA-256 `314fdda07e94fd9bb9dc11bcd817088759453301e9d685eb56391bb8530449bb` matchar den lokalt testade filen exakt. Hela havssviten kördes därefter direkt mot liveadressen och godkände 35/35 i Chromium samt 35/35 i WebKit.
 
 ## Nästa kontroll
 
-- Havsuppdateringen är lokalt färdig och testad. Återstår: slutlig commit, push, GitHub Pages-kontroll och live-läsning innan iPad-färdigbesked.
+- Havsuppdateringen är publicerad och verifierad live. Fysisk iPad Safari återstår endast som användarens egen enhetskontroll efter uppdatering.
