@@ -5,3 +5,15 @@
 /* Keep event captions clear of faces and climbing animations. */
 #notice{top:auto;bottom:190px}
 @media(max-height:560px){#notice{top:auto;bottom:150px}}
+
+/* Förstapersonsvy i samma tydliga 3D-stil som Pilar och pistoler. */
+#world{cursor:grab}
+#world:active{cursor:grabbing}
+#crosshair{position:absolute;left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%);pointer-events:none;filter:drop-shadow(0 1px 2px #10251d)}
+#crosshair i,#crosshair b{position:absolute;display:block;background:#fff1c9;border-radius:2px}
+#crosshair i{width:18px;height:3px;left:2px;top:9px}
+#crosshair b{width:3px;height:18px;left:9px;top:2px}
+#look-hint{position:absolute;left:50%;bottom:122px;transform:translateX(-50%);font-size:10px;letter-spacing:.04em;color:#fff2ce;text-shadow:0 2px 4px #10261f;pointer-events:none;opacity:.82;white-space:nowrap}
+body.touch #look-btn{display:none}
+@media(max-width:720px){#look-hint{bottom:148px;font-size:9px}.topbar nav button{padding:8px 9px}}
+@media(max-height:560px){#look-hint{display:none}}

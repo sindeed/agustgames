@@ -1,4 +1,4 @@
-export const VERSION = '20261021-camp-1';
+export const VERSION = '20261024-camp-fps-1';
 export const WORLD = { w:2400, h:2200 };
 export const CABIN = { x:680, y:1390, w:260, h:210 };
 export const SAFE = { x:670, y:1620, w:290, h:160 };
