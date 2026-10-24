@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {createGame,step,act,tease,actionInfo,SAFE,CABIN,TABLES,WOOD,FIRE,isSafe,startScene,snapshot,distance} from './model.mjs';
+let count=0;function check(name,ok){assert.ok(ok,name);console.log('PASS '+name);count++;}
+function game(role='human'){const s=createGame(role);s.nextScene=9999;return s;}
+function at(s,id,p){Object.assign(s.actors[id],{x:p.x,y:p.y});}
+function safe(s){at(s,'human',{x:SAFE.x+100,y:SAFE.y+90});}
+let s=game();check('new game is day and human owns knife and axe',s.phase==='day'&&s.time===0&&s.tools.join(',')==='knife,axe');
+for(const mode of ['menu','paused','choose','caught']){s.mode=mode;step(s,12000);check(mode+' freezes clock',s.time===0);}s.mode='playing';
+safe(s);step(s,180000);check('day lasts exactly 180 seconds',s.phase==='night'&&s.phaseTime<.01);step(s,120000);check('night lasts exactly 120 seconds and records morning',s.phase==='day'&&s.day===2&&s.nights===1);
+for(const role of ['human','ghost','tall']){s=game(role);const x=s.actors[role].x;step(s,500,{x:1,y:0});check(role+' can move right',s.actors[role].x>x+20);check(role+' new game starts day',s.phase==='day');}
+s=game();at(s,'human',{x:CABIN.x+CABIN.w+20,y:CABIN.y+120});step(s,1500,{x:-1,y:0});check('closed cabin blocks entry',s.actors.human.x>=CABIN.x+CABIN.w+16);
+s=game();at(s,'human',FIRE);check('fire requires both resources',!act(s)&&s.fire===0);s.logs=1;check('wood alone cannot light',!act(s)&&s.fire===0);s.logs=0;s.tinder=1;check('tinder alone cannot light',!act(s)&&s.fire===0);
+for(const table of TABLES){s=game();at(s,'human',{x:table.x,y:table.y+50});check('table offers carving',actionInfo(s).kind==='carve');act(s);check('carving intermediate task',s.tasks[s.role]?.kind==='carve'&&s.tinder===0);step(s,1400);check('carving makes tinder',s.tinder===1&&s.stats.carved===1);}
+s=game();at(s,'human',WOOD);act(s);check('wood chopping begins',s.tasks[s.role]?.kind==='chop');step(s,1500);check('wood chopping gives log',s.logs===1);at(s,'human',TABLES[1]);act(s);step(s,1400);at(s,'human',FIRE);act(s);check('wood plus tinder light fire and consume both',s.fire>130&&s.logs===0&&s.tinder===0);s.logs=1;step(s,400);act(s);check('refueling extends fire',s.fire>200&&s.logs===0);
+s=game('ghost');const t=s.trees[0];at(s,'ghost',{x:t.x-65,y:t.y+45});act(s);check('ghost can start felling',s.tasks[s.role]?.kind==='fell');step(s,1600);check('felled tree provides wood',t.fallen&&t.wood===3);s.role='human';delete s.tasks.human;at(s,'human',{x:t.x+60,y:t.y+30});s.actionCooldown=0;act(s,'human');step(s,1500);check('human harvests ghost felled wood',s.logs>=1&&t.wood===2);check('plus eyes remain plus',snapshot(s).actors.find(a=>a.id==='ghost').eyes==='plus');
+s=game('tall');at(s,'tall',{x:s.trees[0].x+60,y:s.trees[0].y+40});at(s,'ghost',{x:200,y:1900});act(s);check('tall climbs tree',s.actors.tall.z===85&&s.actors.tall.treeId);step(s,400);act(s);check('tall can climb down',s.actors.tall.z===0);
+for(const actor of ['ghost','tall']){s=game(actor);at(s,'ghost',{x:1200,y:1450});at(s,'tall',{x:1290,y:1450});check(actor+' can tease other monster',tease(s));check('teasing interrupts chase',s.brawl?.kind==='tease');step(s,3100);const victim=s.actors[actor==='ghost'?'tall':'ghost'];check('victim gets sad and starts leaving',victim.sad>0&&victim.goal&&s.stats.teases===1);}
+for(const kind of ['fell','throw']){s=game();safe(s);const t=s.trees[0];at(s,'ghost',{x:t.x-64,y:t.y+55});at(s,'tall',{x:t.x+40,y:t.y+55});startScene(s,kind,t);const x=s.actors.human.x;step(s,250,{x:1,y:0});check(kind+' lets human escape while monsters fight',s.actors.human.x>x);step(s,4000);check(kind+' has visible intermediate special state',kind==='fell'?t.fallen:s.actors.ghost.z>0);step(s,5000);check(kind+' finishes with sad victim',!s.scene&&(kind==='fell'?s.actors.tall.sad>0:s.actors.ghost.sad>0));check(kind+' recorded result',kind==='fell'?s.stats.treeFalls===1:s.stats.throws===1);}
+s=game();s.phase='night';s.brawlCooldown=0;at(s,'ghost',{x:1200,y:1350});at(s,'tall',{x:1400,y:1350});step(s,17);check('night mutual sight interrupts human chase',!!s.brawl);
+s=game();s.phase='night';at(s,'ghost',{x:1200,y:1500});at(s,'tall',{x:1700,y:1100});at(s,'human',{x:1200,y:1515});step(s,17);check('caught triggers mild restart state',s.mode==='caught');
+s=game();s.phase='night';safe(s);at(s,'ghost',s.actors.human);at(s,'tall',{x:2000,y:1100});step(s,2000);check('shelter always protects even against touching monster',s.mode==='playing'&&isSafe(s.actors.human));
+s=game();s.fire=100;at(s,'ghost',{x:FIRE.x,y:FIRE.y+50});at(s,'tall',{x:2100,y:500});s.role='ghost';const x=s.actors.ghost.x;step(s,500,{x:1,y:0});check('fire slows monsters but does not block them',s.actors.ghost.x>x+15&&s.actors.ghost.x<x+30);
+s=createGame();safe(s);step(s,110000);check('both special scenes occur naturally',s.stats.treeFalls>0&&s.stats.throws>0);
+for(const role of ['ghost','tall']){s=game(role);step(s,60000);check(role+' mode has a working human bot gathering resources',s.stats.carved>0&&s.stats.chopped>0&&s.stats.fires>0);}
+console.log(`${count} model checks passed`);

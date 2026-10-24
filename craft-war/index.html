@@ -1,0 +1,14 @@
+<!DOCTYPE html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#172f2c"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 80 80%27%3E%3Crect width=%2780%27 height=%2780%27 rx=%2718%27 fill=%27%232b5a40%27/%3E%3Ctext x=%2710%27 y=%2760%27 font-size=%2758%27%3E⚔%3C/text%3E%3C/svg%3E"><title>Craft War · Agust Games</title><link rel="stylesheet" href="style.css"></head><body>
+<canvas id="world" aria-label="Craft Wars spelplan"></canvas>
+<header><a href="../" aria-label="Till Agust Games">‹ Arkaden</a><div class="brand">CRAFT <b>WAR</b></div><span id="money">◈ 50</span><button id="help" aria-label="Så spelar du">?</button><button id="fullscreen" aria-label="Helskärm">⛶</button></header>
+<div id="status"><span id="mode">DIN BY</span><span id="message"></span></div>
+<button id="exit-control" aria-label="Sluta styra vakten" hidden>✕</button>
+<nav id="actions"><button id="attack">Vill du attackera?</button><button id="start-war" hidden>Starta kriget ⚑</button><button id="home" hidden>Hem till byn</button></nav>
+<div id="zoom"><button id="zoom-in" aria-label="Zooma in">＋</button><button id="zoom-out" aria-label="Zooma ut">−</button><button id="center" aria-label="Visa min by">⌖</button></div>
+<div id="gallery"><button id="shop">Butik</button><div id="quick-build" aria-label="Byggalleri"></div><span id="selection">Välj i butiken → tryck på marken</span><button id="cancel-build" hidden>Avbryt</button></div>
+<div id="control-info" hidden></div>
+<div id="move-stick" class="stick" hidden><div class="nub"></div><span>GÅ</span></div>
+<div id="fire-stick" class="stick" hidden><div class="nub"></div><span>SIKTA / SLÅ</span></div>
+<div id="order-stick" class="stick order" hidden><div class="nub"></div><span>ORDERRING</span></div>
+<dialog id="panel"><button class="close" aria-label="Stäng">✕</button><div id="panel-content"></div></dialog>
+<script type="module" src="game.js"></script></body></html>

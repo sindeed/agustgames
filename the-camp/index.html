@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#203f38"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>The Camp · Agust Games</title><link rel="icon" href="../favicon.ico"><link rel="stylesheet" href="style.css?v=20261024-camp-fps-1">
+</head>
+<body>
+<canvas id="world" aria-label="The Camp spelvärld"></canvas>
+<main id="menu" class="screen">
+  <a class="back" href="../">← Agust Games</a>
+  <div class="intro">
+    <p class="eyebrow">ETT LÄGER. TVÅ OVÄNNER. OCH DU.</p>
+    <h1><span>The</span> Camp</h1>
+    <p class="pitch">En skog att upptäcka.<br>Två monster som inte kommer överens.</p>
+    <div class="menu-actions"><button id="start-btn" class="primary">Starta spelet <span>↗</span></button><button id="choose-btn">Välj monster <span>＋</span></button><button id="resume-btn" hidden>Fortsätt <span>→</span></button></div>
+    <p class="quiet">Lite kusligt. Lite tokigt. Helt utan ljud.</p>
+  </div>
+  <p class="menu-foot">Tälj · hugg ved · tänd eld · hitta en gömma</p>
+</main>
+<section id="choose" class="screen veil" hidden>
+  <div class="panel choose-panel"><p class="eyebrow">VEMS TUR ÄR DET ATT RETAS?</p><h2>Välj monster</h2><p>Du styr ett monster. Bottar styr de andra två.</p>
+  <div class="choices">
+    <button class="monster-choice" data-role="ghost"><svg viewBox="0 0 220 210" aria-label="Spöket med två plusögon och en hackhand" role="img"><ellipse cx="110" cy="190" rx="54" ry="10" fill="#102e2b" opacity=".2"/><path d="M59 165Q65 135 64 98C60 35 146 25 156 89L166 167L144 155L123 172L101 158L79 173Z" fill="#f1edcf" stroke="#203a36" stroke-width="4"/><path d="M155 110Q170 120 184 104" fill="none" stroke="#e1dabe" stroke-width="13" stroke-linecap="round"/><path d="M173 80Q194 86 203 109L187 98L170 102L180 91Z" fill="#8aa7a1" stroke="#203a36" stroke-width="3"/><path d="M84 80h22m-11-11v22m27-11h22m-11-11v22" stroke="#243c38" stroke-width="6" stroke-linecap="round"/><path d="M101 115Q114 127 127 114" fill="none" stroke="#243c38" stroke-width="4" stroke-linecap="round"/></svg><strong>Spöket</strong><span>Hackhand och plusögon.<br>Fäller träd. Ogillar att sitta i dem.</span></button>
+    <button class="monster-choice" data-role="tall"><svg viewBox="0 0 220 210" aria-label="Långa svarta monstret med en människoskalle" role="img"><ellipse cx="110" cy="195" rx="58" ry="9" fill="#102e2b" opacity=".2"/><path d="M102 73L99 128L86 189L70 191M118 73L122 127L139 189L153 191M101 77L82 116L68 150M118 77L141 114L151 150" fill="none" stroke="#171d23" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><path d="M98 70Q109 60 123 72L126 128L94 128Z" fill="#171d23"/><path d="M90 25Q109 10 129 25Q145 43 128 56L124 68L98 68L95 56Q77 43 90 25Z" fill="#ece4cb" stroke="#172523" stroke-width="3"/><ellipse cx="98" cy="41" rx="8" ry="10" fill="#10151b"/><ellipse cx="123" cy="41" rx="8" ry="10" fill="#10151b"/><path d="M110 46l-4 8h8Z" fill="#10151b"/><path d="M102 59Q110 54 121 59L120 65H102Z" fill="#10151b"/></svg><strong>Långa monstret</strong><span>Långa armar och en skalle.<br>Klättrar och kastar upp spöket.</span></button>
+  </div><button id="choose-back" class="small">← Tillbaka</button></div>
+</section>
+<div id="hud" hidden>
+  <header class="topbar"><div class="day-card"><span id="phase-symbol">☀</span><div><strong id="clock">Dag 1 · 3:00</strong><small id="role-label">Du är människan</small></div></div><nav><button id="look-btn" aria-label="Lås musen för att se dig omkring">Mus</button><button id="map-btn" aria-label="Visa karta">Karta</button><button id="full-btn" aria-label="Fullskärm">⛶</button><button id="pause-btn">Paus</button></nav></header>
+  <div id="inventory" class="inventory"><span>Kniv + yxa</span><b id="materials">Flisor 0 · Ved 0</b></div>
+  <div id="notice" role="status"></div>
+  <div id="location"></div>
+  <div id="crosshair" aria-hidden="true"><i></i><b></b></div>
+  <div id="look-hint">Dra på skärmen för att se dig omkring</div>
+  <div id="controls"><div id="stick" aria-label="Styrspak: dra för att gå"><div class="stick-ring"></div><span id="knob"></span><span class="stick-label">GÅ</span></div><div class="action-controls"><button id="tease-btn" hidden>Retas</button><button id="action-btn" class="primary">Gå till bord, ved eller eld</button><small id="keyhint">WASD / pilar · E / mellanslag · R retas</small></div></div>
+</div>
+<section id="pause" class="screen veil" hidden><div class="panel pause-panel"><p class="eyebrow">TA EN LITEN PAUS</p><h2>Skogen väntar.</h2><p id="help-text"></p><div class="help-grid"><p><b>Gå</b><br>Dra spaken eller använd WASD / pilar.</p><p><b>Gör något</b><br>Tryck på knappen, E eller mellanslag.</p><p><b>Karta & helskärm</b><br>M visar kartan. F växlar fullskärm.</p><p><b>Trygg plats</b><br>Bakom stugan kan människan alltid gömma sig.</p></div><button id="continue-btn" class="primary">Fortsätt spela →</button><button id="menu-btn">Till startmenyn</button><a class="text-link" href="../">Till Agust Games</a></div></section>
+<section id="caught" class="screen veil" hidden><div class="panel caught-panel"><div class="caught-icon">☀</div><p class="eyebrow">ETT NYTT FÖRSÖK</p><h2 id="caught-title">Hittad!</h2><p>Ingen fara. Vi börjar om på grusplanen<br>med en helt ny dag.</p><button id="restart-btn" class="primary">Börja om →</button><button id="caught-menu">Till startmenyn</button></div></section>
+<section id="map" class="screen veil" hidden><div class="panel map-panel"><div class="map-heading"><div><p class="eyebrow">LÄGRET OCH SKOGEN</p><h2>Hitta din väg.</h2></div><button id="map-close" aria-label="Stäng kartan">✕</button></div><svg id="map-svg" viewBox="0 0 480 440" aria-label="Karta över skog, stuga, eld och gömma"></svg><p>● Du &nbsp; ● Människan &nbsp; <span style="color:#a7d7ba">▰ Trygg gömma</span><br>Tiden stannar medan kartan är öppen.</p></div></section>
+<script type="module" src="game.js?v=20261024-camp-fps-1"></script>
+</body></html>

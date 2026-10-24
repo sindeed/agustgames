@@ -116,21 +116,21 @@
       position: relative;
       overflow: hidden;
       background:
-        radial-gradient(circle at 18% 18%, rgba(72, 230, 255, 0.2), transparent 28%),
-        linear-gradient(150deg, rgba(12, 45, 70, 0.98), rgba(12, 17, 39, 0.99));
-      border-color: #53dff6;
+        radial-gradient(circle at 18% 18%, rgba(255, 211, 79, 0.3), transparent 27%),
+        linear-gradient(150deg, rgba(47, 119, 118, 0.98), rgba(16, 60, 67, 0.99));
+      border-color: #f1a13d;
     }
     .card.where-exit-card::after {
-      content: "EXIT?";
       position: absolute;
       top: 15px;
       right: 16px;
-      color: rgba(255, 74, 126, 0.82);
-      font: 900 12px/1 monospace;
-      letter-spacing: 0.08em;
-      text-shadow: 0 0 10px rgba(255, 74, 126, 0.55);
+      content: "6 VÅNINGAR";
+      color: #fff1b5;
+      font: 900 11px/1 monospace;
+      letter-spacing: 0.06em;
+      transform: rotate(4deg);
     }
-    .card.where-exit-card:hover { border-color: #c4ff72; }
+    .card.where-exit-card:hover { border-color: #ffd34f; }
     .card.paint-war-card {
       position: relative;
       overflow: hidden;
@@ -279,6 +279,11 @@
       letter-spacing: 0.32em;
       text-shadow: none;
     }
+    .card.waterwar-card {position:relative;overflow:hidden;background:radial-gradient(ellipse at 90% 0%,#50bbbf66,transparent 60%),repeating-linear-gradient(175deg,transparent 0 26px,#71dae214 27px 28px),linear-gradient(145deg,#155366,#0b2f4a);border-color:#d9bf7c;}
+    .card.waterwar-card h2 {font-family:Georgia,serif;font-size:36px;color:#ffe2a0;letter-spacing:-.05em;text-shadow:0 2px 0 #735124;}
+    .card.waterwar-card p {color:#d2e4e8;}
+    .card.waterwar-card .play {background:linear-gradient(#ffe4a2,#e5b45b);color:#332b1d;}
+    .card.waterwar-card::after {content:"NYTT ÄVENTYR";position:absolute;top:15px;right:15px;font-size:9px;font-weight:900;letter-spacing:.1em;color:#ffe6a2;}
     footer { margin-top: 44px; color: #6b7384; font-size: 14px; }
   </style>
 </head>
@@ -287,6 +292,58 @@
   <p class="tagline">Spel gjorda av Agust 🎮</p>
 
   <div class="games">
+    <a class="card" href="the-camp/?v=20261024-camp-fps-1" style="background:linear-gradient(145deg,#3e6048,#1c3832);border-color:#b8c693">
+      <div class="icon">🌲</div>
+      <h2>The Camp</h2>
+      <p>Tälj, hugg ved och tänd lägerelden. Utforska skogen som människa eller som ett av två lite osams monster. Helt utan ljud.</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
+    <a class="card" href="craft-war/?v=20261014-1" style="background:linear-gradient(145deg,#315b40,#1b3940);border-color:#91cb8c">
+      <div class="icon">⚔️</div>
+      <h2>Craft War</h2>
+      <p>Bygg din by, styr en laservakt och ta din armé till botbyar. Fem byar möts i allekrig!</p>
+      <span class="play">Spela</span>
+    </a>
+    <a class="card" href="pilar-och-pistoler/?v=20261011-3" style="background:linear-gradient(145deg,#365c68,#192d3b);border-color:#edc873">
+      <div class="icon">🏹</div>
+      <h2>Pilar och pistoler</h2>
+      <p>Tolv magiska vapen! Utforska i Solo eller spela sex mot sex i staden, på piratskeppen och vid slotten.</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
+    <a class="card" href="where-is-exit-multi/?v=20261009-multi-2" style="background:linear-gradient(145deg,#245b62,#142b3d);border-color:#f6d779">
+      <div class="icon">🚪</div>
+      <h2>Where’s Exit Multi</h2>
+      <p>Du och botarna i fem banor. Välj platta, göm dig, fly monstret och hitta EXIT. Sist kvar vinner!</p>
+      <span class="play">Spela · eller välj Practice ▶</span>
+    </a>
+
+    <a class="card" href="where-is-exit-3/?v=20261009-geography-3" style="background:linear-gradient(145deg,#255758,#132c32);border-color:#e4bd67">
+      <div class="icon">🏫</div>
+      <h2>Where Is Exit 3</h2>
+      <p>Klara sju ämnen i den övergivna skolan. Bygg i idrottssalen, lek på gården och hitta vägen ut förbi Munvrålet.</p>
+      <span class="play">Spela ▶</span>
+    </a>
+    <a class="card" href="the-space/">
+      <div class="icon">🚀</div>
+      <h2>The Space</h2>
+      <p>Var astronautkapten, utforska stationen och res med kompisarna till fem främmande planeter i förstapersons-3D.</p>
+      <span class="play">Spela</span>
+    </a>
+    <a class="card" href="stjarnklattraren/?v=20260923-1" style="background:linear-gradient(145deg,#285d60,#193342);border-color:#e8c783">
+      <div class="icon">✦</div>
+      <h2>Stjärnklättraren</h2>
+      <p>Utforska Det höga tornet med oändliga kaststjärnor. Hitta klätterförmågan och bygg vid din grotta!</p>
+      <span class="play">Spela</span>
+    </a>
+    <a class="card waterwar-card" href="waterwar/?v=20260920-2">
+      <div class="icon">🐋</div>
+      <h2>WaterWar</h2>
+      <p>Bygg din flotte, utforska öarna och styr över havet. Håll utkik efter hajar och den jättestora valen!</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
     <a class="card kingdoms-card" href="war-of-kingdoms/?v=20261024-longship-journeys">
       <div class="icon">🏰</div>
       <h2 class="kingdoms-title">WAR OF KINGDOMS</h2>
@@ -346,10 +403,18 @@
       <span class="play">Spela ▶</span>
     </a>
 
-    <a class="card where-exit-card" href="where-is-exit/">
-      <div class="icon">🚪</div>
-      <h2>Where is Exit?</h2>
-      <p>Fyra dörrar ser rätt ut. Använd sökpulsen, lura skuggorna och hitta den enda riktiga utgången!</p>
+
+    <a class="card where-exit-card" href="where-is-exit/?v=20260927-floor6-race-1">
+      <div class="icon">🏭</div>
+      <h2>WHERE'S EXIT</h2>
+      <p>Utforska en enorm 3D-fabrik, klara fem uppdrag och ta dig förbi tre lekfulla monster.</p>
+      <span class="play">Spela ▶</span>
+    </a>
+
+    <a class="card where-exit-card" href="where-is-exit-2/?v=20261009-connected-1">
+      <div class="icon">⚡</div>
+      <h2>WHERE IS EXIT 2</h2>
+      <p>Utforska kraftverket, återvänd till fabriken och smit från Snabbis genom fem nya uppdrag.</p>
       <span class="play">Spela ▶</span>
     </a>
 

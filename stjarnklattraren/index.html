@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#183a44"><link rel="icon" href="../favicon.ico"><title>Stjärnklättraren • Agust Games</title><link rel="stylesheet" href="style.css?v=20260923-1"></head>
+<body><canvas id="game" aria-label="Stjärnklättraren, spelvärld i 3D"></canvas>
+<div id="hud"><div class="badge"><strong id="place">Grottan</strong><span id="objective">Ditt äventyr börjar här</span></div><div class="vitals"><span id="clock">☀ Dag</span><strong id="health">♥ 50 / 50</strong><span id="ability">✦ ∞</span></div></div>
+<div id="crosshair">+</div><div id="toast" role="status"></div><div id="bossbar" hidden><span>TORNETS VÄKTARE</span><progress max="100" value="100"></progress></div>
+<button id="pause" aria-label="Pausa">Ⅱ</button><button id="interact" hidden>Öppna</button>
+<div id="joystick"><div id="stick"></div></div><div id="lookhint">Dra här för att titta</div><button id="attack">✦<small>KASTA</small></button><button id="jump">↑<small>HOPPA</small></button>
+<div id="overlay"><section id="panel"></section></div><div id="damage"></div>
+<script type="module" src="game.js?v=20260923-1"></script></body></html>

@@ -14,6 +14,8 @@ Spelen körs direkt i webbläsaren – inget att installera.
 
 | Spel | Mapp | Beskrivning |
 |------|------|-------------|
+| Where Is Exit 3 | [`where-is-exit-3/`](where-is-exit-3/) | Övergiven skola i 3D: sex ämnen, bygglek, skolgård och flykt från Munvrålet via köket och lastbilen. |
+| WaterWar | [`waterwar/`](waterwar/) | Förstapersonsäventyr till havs: bygg en flotte, utforska öar, utrusta vakter och fly genom den jättestora valens blåshål. |
 | War of Kingdoms | [`war-of-kingdoms/`](war-of-kingdoms/) | Förstapersons-3D där du är kung. Bygg armén, segla med långskepp mellan sju havsriken, tävla i simning och sök skatten i det övergivna jätteslottets labyrint. |
 | Party Game | [`party-game/`](party-game/) | Färgglatt fysik-partyspel med spelaren och nio bottar. Utforska fredligt i Fred eller kör alla mot alla med kanoner, bilar och borgvapen i Fri. |
 | Pixelgubben | [`puzzle-game/`](puzzle-game/) | Ovanifrån-pussel: gå, hoppa över hål, knuffa stenar och akta fiender. Sju banor: grottan, riddarborgen, drakhålan, den rullande stenen, Kodtemplet, Bossarenan och Trädgården. |
@@ -21,7 +23,7 @@ Spelen körs direkt i webbläsaren – inget att installera.
 | Wilder: The Big City | [`wilder-big-city/`](wilder-big-city/) | Utforska den stora staden Wilder i förstapersons-3D. Välj en av 19 personer (4 poliser, 5 tjuvar och 10 vanliga människor), kör fordon och besök stadens 13 byggnader. |
 | Wildbound: The Stormwake Trail | [`wildbound/`](wildbound/) | Ett stort originellt förstapersonsäventyr med vildmark, floder, vägar, bybor, häststall, strid och kreativ byggmagi. |
 | IKEA 3:33 | [`ikea-333/`](ikea-333/) | Ett stort förstapersonsäventyr i 23 kapitel. Överlev IKEA 03:33 och fortsätt genom drakgrottor, hajö, spöktåg, vulkan och nio nya skräckvärldar från den gamla skolan till den föränderliga källaren. |
-| Where is Exit? | [`where-is-exit/`](where-is-exit/) | Neonlabyrint i tre våningar. Avslöja den riktiga EXIT-dörren med sökpulsen och undvik skuggorna. |
+| Where's Exit | [`where-is-exit/`](where-is-exit/) | Förstapersons-3D i en enorm fabrik med sju våningar, tre lekfulla monster och fem uppdrag fram till EXIT. |
 | Paint War 2 Deluxe | [`paint-war/`](paint-war/) | Tredjepersonsstrid med färgvapen, sju Waves, kartval, bottar och flyttbara bord att gömma sig under. |
 
 ## Struktur
@@ -36,7 +38,7 @@ agustgames/
 ├── wilder-big-city/  ← Förstapersons-3D i staden Wilder
 ├── wildbound/        ← Stort förstapersonsäventyr i en levande vildmark
 ├── ikea-333/         ← Förstapersons-3D i 23 kapitel med möbelbygge, drakar, katastrofer och skräckvärldar
-├── where-is-exit/    ← Neonlabyrint med sökpuls, falska utgångar och skuggor
+├── where-is-exit/    ← Förstapersons-3D i en sju våningar stor monsterfabrik med fem uppdrag
 ├── paint-war/        ← Paint War 2 Deluxe i tredje person med Waves och kartval
 └── ...               ← nya spel läggs i egna mappar
 ```

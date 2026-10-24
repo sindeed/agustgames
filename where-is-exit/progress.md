@@ -1,189 +1,61 @@
-Original prompt: Jag vill ha ett spel som heter Where is Exit.
+Original prompt: Bygg om Where's Exit från grunden till ett icke-läskigt monsterspel i en jättestor fabrik med sju våningar, hissar, trappor, dörrar, tre mörkbruna monster, fem uppdrag och iPad-kontroller. Publicera den nya versionen i Agust Games först när den är färdigtestad.
 
-- Påbörjat: nytt fristående webbspel i `where-is-exit/`.
-- Beslut: tre fasta neonlabyrinter där alla dörrar ser ut som EXIT, men bara en är rätt.
-- Planerade kontroller: WASD/piltangenter, Space för sökpuls, F för helskärm och touchknappar för iPad.
-- Implementerat: start/pause/game-over/vinstskärmar, tre 19x11-labyrinter, sökpuls,
-  fyra EXIT-dörrar per bana, skuggor, tre liv, tidsmätning, felräknare,
-  syntetiska ljudeffekter, touchstyrkors och helskärm.
-- Teststöd finns via `render_game_to_text` och deterministiska `advanceTime(ms)`.
-- Kartorna är validerade till exakt 19 tecken per rad och JavaScript klarar `node --check`.
-- Playwright verifierar start med Enter, aktiv/utgången sökpuls och en falsk dörr:
-  dörren tar ett hjärta, ökar felräknaren och återställer spelaren utan konsolfel.
-- Visuellt kontrollerat: cyan sonarvåg, grön YES-dörr, rosa NO-dörrar, tydlig HUD
-  och korrekt återgång till fyra likadana EXIT-skyltar.
-- Rättat efter provspelning: våningsbannern visas kortare och skuggornas AI hålls
-  stilla tills bannern är borta, så spelaren aldrig angrips bakom en skymd karta.
-- Komplett riktat Chromium-test godkänt: väggkollision, tre felutgångar → Game Over,
-  Enter-återstart, riktig utgång till bana 2, aktiv sonar fryser skuggan, skuggträff,
-  riktiga utgångar genom bana 2 och 3, segerläge samt touch-SÖK och touch-rörelse.
-- Fullsidiga skärmbilder av Game Over, seger och iPad-landskap är visuellt granskade.
-- Polerat: spelaren blinkar inte längre bort vid banstart; osårbarhetsblinkning används
-  bara efter en faktisk träff.
-- Arkadmenyn och README länkar nu till `where-is-exit/`.
-- Slutlig regressionskörning efter poleringen är helt grön för Game Over/återstart,
-  skugga/full vinst och touchkontroller. Senaste touchbilden visar spelaren korrekt.
-- Helskärm är verifierad i synligt Chromium: F går in i helskärm och Escape går ur.
-- Inga kända fel eller lösa TODO:er återstår för första versionen.
+# Where's Exit – ny version
 
-## Start-rum med spellägesdörrar
+## Låst spelspecifikation
 
-- Ny önskan: när spelet startar ska spelaren börja i ett ganska litet rum med
-  tre dörrar märkta Solo, Duo och Team.
-- Implementerat ett separat 11x7 start-rum före banorna. Spelaren startar längst
-  ned i mitten och går fram till en dörr med samma tangentbords- eller touchstyrning.
-- Solo öppnar den befintliga labyrinten. Duo och Team finns som tydliga dörrar
-  och svarar "kommer snart" tills deras spelregler är bestämda.
-- HUD och touch anpassas i rummet: ingen timer, inga hjärtan och ingen SÖK-knapp.
-- render_game_to_text visar nu scene, playMode och alla tre lobbydörrar.
-- Verifierat med officiella Playwright-klienten: start → rum, stillastående timer,
-  blockerad sökpuls, rummets väggar, Solo → bana 1, Duo-meddelande och
-  Team-meddelande. Alla tre dörrtexter är synliga och inga konsolfel hittades.
-- Visuellt granskat på desktop och iPad-landskap: rummet är kompakt, skyltarna
-  är läsbara, spelaren syns, styrkorset skymmer inte rummet och SÖK är dold.
-- Komplett regressionstest godkänt: Solo kan vinna alla tre banor och Game Over
-  följt av Enter återvänder till start-rummet med nollställd timer och inget valt läge.
-- Inga kända fel eller lösa TODO:er återstår för start-rummet.
+- Startmenyn visar bara namnet `WHERE'S EXIT` och knappen `STARTA SPELET`.
+- Fabriken är mycket stor, har sju våningar, hissar, trappor, dörrar och vanlig belysning.
+- Spelet är ett lekfullt monsterspel, inte skräck. Inga jumpscares, inget blod och inga otäcka ljud.
+- Tre helt svarta monster:
+  1. Mycket långt, ett lysande gult öga och ett svart öga som smälter in, två armar/händer, två ben/fötter, ingen mun.
+  2. Åtta ben, ett huvud, två lysande gula ögon, ingen mun; är det enda monstret som kan hoppa och gå på golv, väggar och tak.
+  3. Inte långt, inga ögon eller mun, två armar/händer och två ben/fötter.
+- Monstren vandrar; de jagar när de ser spelaren. Fångad spelare skickas till startmenyn och nästa start börjar om.
+- Alla tre monster använder fabrikens trappor för att patrullera och jaga mellan våningar. Våning 3 är spärrad för dem tills de fem nycklarna är hittade.
+- Det åttabenta och det korta ansiktslösa monstret rör sig exakt lika fort som spelaren springer (8,1 m/s). Det långa rör sig exakt lika fort som spelaren går (5,0 m/s).
+- Uppdrag 1: hitta tio gula lampor och sätt en i vart och ett av tio eluttag.
+- Uppdrag 2: dra i fem spakar; därefter fungerar hissen och spelaren kan välja våning.
+- Uppdrag 3: hitta fem nycklar; därefter låses våning 3 upp för hiss och trappa.
+- Uppdrag 4: våning 3 är dämpad men synlig; hitta knappen som tänder lamporna.
+- Uppdrag 5: hitta hammaren, åk till våning 6, slå sönder EXIT-plankorna med ett tryck och gå ut för att vinna.
+- Kontroller: spring, ta sak/använd och hoppa. Ta sak/använd slår sönder plankorna när hammaren finns.
+- HUD visar alltid tydligt `UPPDRAG N AV 5` och namnet på det aktuella uppdraget.
+- iPad/iPhone och dator ska fungera.
 
-## Tredjepersonsperspektiv
+## Arbetslogg
 
-- Ny önskan: spelaren ska se spelet ur tredje persons perspektiv.
-- Den tidigare ovanifrån-kartan är ersatt av en pseudo-3D-kamera bakom figuren i både
-  start-rummet och alla tre labyrinter. Rutlogik, kollisioner och befintliga testvägar
-  är oförändrade under den nya renderingen.
-- Kameran använder 88 graders synfält, mjuk riktningsändring, perspektivgolv,
-  djupskuggade väggar och en fast figur sedd bakifrån med jacka, ryggsäck och ljuskägla.
-- Dörrytor hittas med raycasting och skyltar ritas bara på faktiskt synliga ytor.
-  Från startpunkten syns Solo, Duo och Team samtidigt med egna neonfärger och status.
-- Labyrintens EXIT-skyltar fungerar i perspektiv. Sökpulsen visar cyan ringar, fryser
-  skuggor, färgar den riktiga dörren grön med YES och visar en riktning mot den.
-- `render_game_to_text` rapporterar nu `camera.mode: "thirdPerson"`, synfält och
-  aktuell kameravinkel för automatiska tester.
-- Verifierat med den officiella Playwright-klienten: lobbyspawn, kameravändning,
-  Solo-scenbyte, labyrintvy, aktiv sökpuls och en synlig grön YES-dörr utan konsolfel.
-- Separata Chromium-kontroller godkänner Duo- och Team-meddelandena samt flera
-  sammanhängande renderbilder under banbyte och sökpuls.
-- Full regression är fortfarande grön för Game Over/återgång till start-rummet,
-  full Solo-vinst genom tre banor och iPad-touch. Touchbilden visar att styrkors och
-  SÖK-knapp lämnar dörrskyltar, korridor och tredjepersonsfigur fria.
-- Inga kända fel eller lösa TODO:er återstår för tredjepersonsvyn.
+- 2026-08-30: Gamla spelet raderades från projektet och GitHub Pages innan den nya specifikationen började byggas.
+- 2026-08-30: Ny implementation startad från tom mapp.
+- 2026-08-30: Första persons 3D låst efter användarens förtydligande. Samma lokala Three.js r185-renderingsmönster som War of Kingdoms används: ACES, sRGB, lågpolyformer, procedurtexturer, första persons handrigg, FOV 73 och iPad-DPR 1,25.
+- 2026-08-30: Första lokala Chromium-testet startar, går och hoppar utan konsolfel. Fabriksljuset höjdes efter visuell kontroll för att undvika skräckkänsla.
+- 2026-08-30: Full Chromium-E2E klar: 214 kontroller godkända, 0 funktionsfel, 0 konsolfel, 0 sidfel och 0 misslyckade nätverksanrop. Hela uppdragskedjan, hiss/trapp-lås, våning 3, vinst och monsterfångst verifierades.
+- 2026-08-30: iPad 1024×1366 och iPhone 393×852 verifierade utan scroll, kontrollöverlapp eller flimmer. Pekmålen är 64–145 px och våning 3 är mörk men tydligt synlig.
+- 2026-08-30: Version `20260830-2` publicerad i Agust Games. GitHub Pages-deploy lyckades och live-versionen startades, gick och hoppade utan konsolfel.
+- 2026-08-30: Användaren ändrade monsterfärgen från mörkbrun till helt svart. Det långa monstret fick ett gult och ett osynligt svart öga. Fabrikens exponering sänktes lite från 1,08 till 1,02.
+- 2026-08-30: HUD uppdaterad till `UPPDRAG N AV 5`. Version `20260830-3` klarade 214/214 regressionstester, 5/5 uppdragsrubriker och visuell iPad-kontroll av samtliga svarta monster utan konsol- eller sidfel.
+- 2026-08-30: Version `20260830-3` publicerad. GitHub Pages-deploy lyckades och live-versionen verifierades med start, gång och hopp utan konsolfel.
+- 2026-08-31: Monster-AI uppdaterad för trappor, patrull och jakt mellan våningar. Trapphöjden matchar modellen, nedåtresor hoppar inte i bild, åttabensmonstret startar utanför väggen och fastnade rutter har en säker återhämtning.
+- 2026-08-31: Automatisk nav-självtest klar: 31/31 kontroller godkända för rätt version, exakta hastigheter 5,0/5,0/8,1, upp- och nedresor för alla tre monster, våning-3-lås, våningsgränser, verklig trappinflygning och noll konsol-/sidfel.
+- 2026-08-31: Full spelregression klar efter AI-ändringen: 214/214 kontroller godkända, 0 funktionsfel, 0 konsolfel, 0 sidfel och 0 misslyckade nätverksanrop genom rörelse, samtliga fem uppdrag, hiss/trapp-lås, vinst, fångst och omstart.
+- 2026-08-31: Slutlig iPad-kontroll 1180×820 klar. Monstrets fötter följer de diskreta trappstegen exakt (1,70 m på mittsteget), HUD-överlapp är 0, touchknapparna fungerar och inga konsol- eller sidfel uppstod.
+- 2026-08-31: Version `20260831-4` publicerad i Agust Games. GitHub Pages-deploy lyckades, live-filerna matchar de testade blobbarna exakt och den publicerade versionen startade, gick och hoppade utan konsol- eller sidfel.
+- 2026-08-31: ÅTTABEN fick sprintfart 8,1 m/s och blev spelets enda hoppande monster. Hopp använder samma tydliga fysik som spelaren, pausar vägg-/takbyten i luften, samverkar inte med trapphöjd och kan inte fånga spelaren från för stor höjd.
+- 2026-08-31: ÅTTABEN-verifieringen är grön: 61/61 riktade kontroller godkända för exklusivt hopp, vägg/tak, 8,1 m/s, 1,227 m hopptopp, 0,75 s landning, trappblockering och noll webbläsarfel.
+- 2026-08-31: Hela spelets regression är fortsatt grön med 214/214 kontroller. iPad 1180×820 är visuellt granskad vid hoppets topp, på väggen och i taket utan HUD-/touchöverlappning; alla touchmål är minst 44 px.
+- 2026-08-31: Slutgranskningen rättade trappfångst och väggorientering. 17/17 höjdkänsliga trappkontroller, 61/61 ÅTTABEN-kontroller och en ny full 214/214-regression passerar; nord-, syd-, öst- och västvägg verifierades utan webbläsarfel.
+- 2026-08-31: Version `20260831-5` publicerad i Agust Games. GitHub Pages-deploy lyckades, live-filerna matchar de testade filerna exakt och den publicerade versionen startade, gick och hoppade utan konsol- eller sidfel.
 
-## Dragbar kamera och mobil
+## TODO
 
-- Ny önskan: dra spelbilden fritt, se figurens huvud, framsida, sidor och hela kropp,
-  samt kunna spela med touch på både iPad och iPhone.
-- Klart: kamerans yaw är frikopplad från rutrörelsen och canvasen hanterar
-  pointer-drag med capture. Horisontellt drag roterar runt figuren och vertikalt drag
-  styr en begränsad pitch utan att kameran går under golvet.
-- Klart: avataren blandar rygg-, profil- och framvy utifrån kameravinkeln; framsidan
-  har ansikte och bröstpanel medan ryggvyn behåller ryggsäcken.
-- Klart: stående mobil använder spelbilden upptill och stora touchkontroller undertill;
-  liggande mobil behåller den breda spelbilden. Alla touchmål är minst 44 CSS-pixlar.
-- Verifierat i Chromium på iPhone stående/liggande och iPad stående samt i WebKit på
-  iPhone stående: touchdrag till framvy, Solo-val, SÖK, paus/fortsätt, 19:12-spelbild,
-  ingen scroll och inga konsol- eller sidfel.
-- Full regression passerar: Game Over tillbaka till start-rummet, full Solo-vinst över
-  tre banor och iPad-touch från start-rum till Solo.
-- Inga kända fel eller lösa TODO:er återstår för dragkameran eller mobilstödet.
-
-## Tre bottar i start-rummet
-
-- Ny önskan: spelaren ska börja tillsammans med tre bottar; en går till Duo och två
-  går till Team.
-- Klart: DUBI, TEO och TOTO skapas bredvid spelaren med separata, fördröjda
-  gångvägar och stannar vid rätt dörr utan att blockera spelarens rörelse.
-- Klart: bottarna ritas som färgkodade små robotar i tredjepersonsvyn och redovisas
-  i `render_game_to_text` för automatiska tester.
-- Den officiella Playwright-klienten verifierar en spelare plus tre bottar, fördelningen
-  en Duo/två Team, gångstatus och tre unika slutpositioner. Mellan- och slutbilder är
-  visuellt granskade och båda Team-bottarna syns samtidigt.
-- Full regression passerar fortfarande: Game Over tillbaka till start-rummet, full
-  Solo-vinst genom tre banor och iPad-touch från start-rum till Solo.
-- Inga kända fel eller lösa TODO:er återstår för start-rumsbottarna.
-
-## Kamerarelativ styrning
-
-- Ny önskan: framåt, bakåt, vänster och höger ska alltid räknas från det håll
-  kameran tittar åt, på både tangentbord och touch.
-- Implementerat: WASD, piltangenter och styrkorset använder kamerans närmaste
-  rutriktning. Styrningen uppdateras även medan kameran vrids.
-- `render_game_to_text` redovisar nu kamerans aktuella framåt- och högerriktning
-  så att alla fyra riktningarna kan verifieras automatiskt.
-- Verifierat i Chromium vid alla fyra kardinala kameravinklar: framåt, bakåt,
-  vänster och höger flyttar exakt i kamerans riktningar utan att kameran centreras om.
-- iPhone-test med touchdrag och styrkors är godkänt utan konsol- eller sidfel.
-- Full regression passerar: Game Over/återstart, full Solo-vinst genom tre banor
-  och touch från start-rummet till Solo fungerar med kamerarelativa rutter.
-- Inga kända fel eller lösa TODO:er återstår för den kamerarelativa styrningen.
-
-## Båtresan, hotellet och hjälpbottar
-
-- Ny önskan: Duo ska ta med botten vid Duo, Team ska ta med de två Team-bottarna,
-  alla lägen ska börja på en styrbar båt och därefter fortsätta till ett hotell med
-  en enda nyckel och flera dörrar.
-- Namnändring: Team-botten heter TEO; Team består av TEO och TOTO.
-- Implementerat: Solo, Duo och Team är spelbara. Duo väljer DUBI, Team väljer TEO
-  och TOTO, och valda bottar visas ombord samt hjälper i hotellet/labyrinten.
-- Implementerat: separat tredjepersonsvy över ett stort hav med vågor, öar, havskarta,
-  neonbåt och växling mellan PERSONSTYRNING och BÅTSTYRNING med knapp eller B.
-- Implementerat: rätt brygga leder till Ö-HOTELLET. Där finns fyra hotellrum men
-  exakt en nyckel; fel dörr behåller nyckeln och rätt dörr leder vidare till labyrinten.
-- DUBI/TEO/TOTO hjälper genom att peka ut rätt hotellrum när nyckeln hittas.
-- Officiella Playwright-klienten har verifierat start-rum → båt → hotell → nyckel →
-  rätt dörr → alla tre labyrintbanor → seger utan konsol- eller sidfel.
-- Riktade tester är godkända för Duo och Team, fel och rätt hotelldörr, styrväxling,
-  hållen input vid scenbyte samt iPhone 393×852 och iPad 1024×1366.
-- Havs-, hotell-, nyckel-, labyrint-, seger- och mobilbilder är visuellt granskade.
-- Inga kända fel eller lösa TODO:er återstår för båt- och hotellresan.
-
-## Självständiga hjälpbottar
-
-- Ny önskan: bottarna ska hjälpa till, inte gå efter spelaren.
-- Implementerat: spelarens steg flyttar aldrig bottarna. DUBI, TEO och TOTO får i
-  stället egna rutter och går självständigt till en hjälpstation.
-- Hotellet: första botten letar upp och markerar nyckeln. I Team kontrollerar den
-  andra botten rätt hotellrum; i Duo byter DUBI uppdrag till rätt rum efter nyckeln.
-- Labyrinten: första botten markerar rätt EXIT. I Team kontrollerar den andra botten
-  en falsk EXIT och varnar tydligt att dörren är fel.
-- Hjälpuppdrag, mål, återstående rutt och `followsPlayer: false` redovisas i
-  `render_game_to_text`. Visuellt visas rollerna med större etiketter, lysande
-  hjälpstationer och en beständig hjälprad i hotell och labyrint.
-- Fokuserad E2E är grön: Duo går nyckel → rätt rum → rätt EXIT; Team delar på
-  nyckel/rätt rum och rätt/fel EXIT. Fyra spelarsteg i varje scen flyttar inte en
-  färdig hjälpare från stationen, och alla helpers rapporterar `followsPlayer: false`.
-- Officiella Playwright-klienten verifierar Team ombord med aktiv navigation. Separat
-  iPad-test 1024×1366 verifierar touchmål på minst 44 px, ingen scroll och läsbara
-  hjälpetiketter. Inga konsol- eller sidfel hittades.
-- Inga kända fel eller lösa TODO:er återstår för de självständiga hjälpbottarna.
-
-## PLAY-dörr och monsterlek
-
-- Ny önskan: startrummet ska ha fyra dörrar. PLAY leder till en lek där spelaren
-  och nio bottar står runt ett bord medan en röd pil väljer ett monster.
-- Vinstregler: spelarna vinner när de hittar nyckeln och öppnar rätt dörr.
-  Monstret vinner först när alla andra deltagare har blivit tagna.
-- Påbörjat: fjärde PLAY-dörren, tio stabila deltagar-id:n, arena med en nyckel
-  och fyra dörrar samt separata tidsvärden för roulette och bot-AI.
-- Påbörjat: starttexten beskriver PLAY. Touchkontrollerna döljs under rouletten
-  och SÖK-knappen döljs under jakten för att undvika blinkande UI på iPad.
-- Klart: PLAY går direkt till en bordsscen med spelaren och nio namngivna bottar.
-  Den röda pilen snurrar, stannar exakt på en deltagare och avslöjar monstret.
-- Klart: både spelaren och en bot kan bli monster. Övriga bottar arbetar
-  självständigt med nyckel, dörrkontroll, upplåsning och flykt; ingen följer spelaren.
-- Klart: en gemensam nyckel, fyra dörrar, fel-dörrrespons, rätt upplåsning,
-  överlevarseger och monsterseger först efter alla nio fångster.
-- Klart: eget PLAY-HUD, monsterlook, synlig nyckel, uppdragsnamn, fångsträknare,
-  resultatpaneler, full `render_game_to_text.play` och deterministiska testhooks.
-- Mobilpolering: `KVAR 9 / 9` flyttades från kontrollknapparna, tio spelare visas
-  som en kompakt badge på PLAY-dörren, iPadens startmenyflimmer är avstängt och
-  cacheversionen är `20260725-14` så iPad hämtar den nya koden.
-- Slutlig E2E är grön för fyra lobbydörrar, exakt tio deltagare, rörlig/stannad pil,
-  båda monsterrollerna, alla nio fångster, låst/fel/rätt dörr, båda vinnarna och replay.
-- iPad 1024×768 är visuellt granskad: touchmål minst 44 px, ingen scroll,
-  styrkors synligt under jakt, SÖK dold och inga konsol- eller sidfel.
-- Separat mobilgranskning är grön på iPad 1024×1366 och iPhone 393×852:
-  roulette döljer touchlagret, jaktklassen förblir stabil utan blinkande loop,
-  dokumentet är exakt viewport-stort och inga request-, konsol- eller sidfel uppstår.
-- Regression: Solo, Duo och Team går fortfarande till båten med 0, 1 respektive
-  2 självständiga hjälpbottar och utan webbläsarfel.
-- Inga kända fel eller lösa TODO:er återstår för PLAY-läget.
+- [x] Meny och responsiv kontrollayout
+- [x] 3D-fabrik med sju våningar
+- [x] Rörelse, hopp, spring, interaktion, hiss och trappor
+- [x] Tre monster med vandring, syn, jakt och fångst
+- [x] Monstertrappor mellan våningar och exakta gång-/sprintfarter
+- [x] ÅTTABEN som exklusiv hoppare och vägg-/takklättrare
+- [x] Alla fem uppdragen i rätt ordning
+- [x] Vinst, förlust och omstart
+- [x] render_game_to_text och advanceTime
+- [x] Playwright-test på desktop, iPad och iPhone
+- [x] Publicering och kontroll av live-version
